@@ -32,7 +32,7 @@ struct MatrixData
 {
 	float4x4 mv;
 	float4x4 mvp;
-	float3x3 normal;
+	float4x4 normal;
 };
 
 [[vk::push_constant]]
@@ -42,10 +42,11 @@ VSOutput VSMain(VSInput input)
 {
 	VSOutput res;
 	res.position = mul(gMatrices.mvp, float4(input.position, 1.0));
-	res.posView = float3(mul(gMatrices.mv, float4(input.position, 1.0)).xyz);
+	res.posView = mul(gMatrices.mv, float4(input.position, 1.0)).xyz;
 	res.color = input.color;
 	res.uv = input.uv;
-	res.normal = mul(gMatrices.normal, input.normal);
+	// res.normal = normalize(mul(gMatrices.mv, float4(input.normal, 0.0)).xyz);
+	res.normal = normalize(mul((float3x3)gMatrices.normal, input.normal)); // TODO: Convert in glm code
 	return res;
 }
 
@@ -56,5 +57,27 @@ SamplerState gSampler : register(s0);
 
 float4 FSMain(VSOutput input) : SV_Target0
 {
-	return gTexture.Sample(gSampler, input.uv);
+	float3 lightPos = float3(0.0, 10.0, 0.0);
+	float alpha = 16;
+
+	float4 I = float4(1.0, 1.0, 1.0, 1.0);
+	float4 Ia = float4(0.01, 0.01, 0.01, 1.0);
+
+	float4 Kd = gTexture.Sample(gSampler, input.uv);
+
+	float4 Ks = float4(0.5, 0.5, 0.5, 1.0);
+
+	float3 N = normalize(input.normal);
+	float3 W = normalize(lightPos - input.posView);
+	float NoW = dot(N, W);
+	float4 diffuse = saturate(NoW) * Kd * I;
+
+	float3 V = -normalize(input.posView);
+	float3 H = normalize(W + V);
+	float NoH = dot(N, H);
+	float4 specular = I * Ks * pow(saturate(NoH), alpha);
+
+	float4 ambient = Kd * Ia;
+
+	return ambient + diffuse + specular;
 }

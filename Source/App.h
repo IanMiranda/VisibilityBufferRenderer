@@ -94,7 +94,7 @@ namespace im
 		{
 			glm::mat4 mv;
 			glm::mat4 mvp;
-			glm::mat3 normal;
+			glm::mat4 normal;
 		};
 
 		GLFWwindow* mWindow;

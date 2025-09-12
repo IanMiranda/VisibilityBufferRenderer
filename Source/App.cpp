@@ -38,6 +38,8 @@ namespace im
 		InitIndexBuffer();
 		InitTexture();
 		InitDescriptorSets();
+
+		std::cerr << sizeof(MatrixData) << std::endl;
 	}
 
 	App::~App()
@@ -176,11 +178,11 @@ namespace im
 
 		VkViewport viewport{};
 		viewport.width = mSwapchainExtent.width;
-		viewport.height = mSwapchainExtent.height;
+		viewport.height = -(float)mSwapchainExtent.height;
 		viewport.minDepth = 0.0f;
 		viewport.maxDepth = 1.0f;
 		viewport.x = 0.0f;
-		viewport.y = 0.0f;
+		viewport.y = (float)mSwapchainExtent.height;
 
 		VkRect2D scissor{};
 		scissor.offset = { 0, 0 };
@@ -195,13 +197,13 @@ namespace im
 
 		MatrixData pushConsts{};
 		glm::mat4 model = glm::mat4(1.0f);
-		model = glm::rotate(model, glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+		model = glm::translate(model, glm::vec3(0.0f, -1.0f, 0.0f));
+		model = glm::scale(model, glm::vec3(0.1f));
 		glm::mat4 view = glm::lookAt(glm::vec3(2.0f * sinf(deltaTime), 0.0f, 2.0f * cosf(deltaTime)), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 		glm::mat4 proj = glm::perspective(glm::radians(75.0f), static_cast<float>(mSwapchainExtent.width) / mSwapchainExtent.height, 0.1f, 100.0f);
-		proj[1][1] *= -1;
 		pushConsts.mv = view * model;
 		pushConsts.mvp = proj * pushConsts.mv;
-		pushConsts.normal = glm::transpose(glm::inverse(glm::mat3(model)));
+		pushConsts.normal = glm::transpose(glm::inverse(view * model));
 
 		vkCmdPushConstants(mCommandBuffers[mFrameIndex], mPipeLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pushConsts), &pushConsts);
 		
@@ -386,7 +388,8 @@ namespace im
 			std::vector<const char*> deviceExtensions =
 			{
 				VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-				VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME
+				VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME,
+				VK_KHR_MAINTENANCE1_EXTENSION_NAME,
 			};
 
 			bool supportsExtensions = true;
@@ -409,7 +412,11 @@ namespace im
 			queueInfo.queueCount = 1;
 			queueInfo.queueFamilyIndex = graphicsIndex.value();
 
+			VkPhysicalDeviceScalarBlockLayoutFeatures scalarBlockFeatures{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES };
+			scalarBlockFeatures.scalarBlockLayout = VK_TRUE;
+
 			VkPhysicalDeviceSynchronization2Features syncFeatures{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES };
+			syncFeatures.pNext = &scalarBlockFeatures;
 			syncFeatures.synchronization2 = VK_TRUE;
 
 			VkPhysicalDeviceDynamicRenderingFeatures dynamicRenderFeatures{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES };
@@ -848,7 +855,7 @@ namespace im
 		std::vector<tinyobj::material_t> materials;
 		std::string warn;
 		std::string error;
-		if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &error, "Assets/Models/viking_room.obj"))
+		if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &error, "Assets/Models/teapot.obj"))
 		{
 			std::cerr << "Failed to load model: " << warn << error << '\n';
 		}
@@ -869,10 +876,10 @@ namespace im
 					attrib.texcoords[2 * index.texcoord_index + 1]);
 				v.color = glm::vec4(1.0f);
 				v.normal = glm::vec3(
-					attrib.vertices[3 * index.normal_index + 0],
-					attrib.vertices[3 * index.normal_index + 1],
-					attrib.vertices[3 * index.normal_index + 2]);
-
+					attrib.normals[3 * index.normal_index + 0],
+					attrib.normals[3 * index.normal_index + 1],
+					attrib.normals[3 * index.normal_index + 2]);
+				
 				if (uniqueVertices.count(v) == 0)
 				{
 					uniqueVertices[v] = static_cast<uint32_t>(mVertices.size());
@@ -942,7 +949,7 @@ namespace im
 
 		constexpr VkDeviceSize bytesPerPixel = 4;
 		int width, height, channels;
-		stbi_uc* data = stbi_load("Assets/Textures/viking_room.png", &width, &height, &channels, STBI_rgb_alpha);
+		stbi_uc* data = stbi_load("Assets/Textures/teapot-porcelain.jpg", &width, &height, &channels, STBI_rgb_alpha);
 		if (!data)
 		{
 			std::cerr << "Failed to load texture image!\n";
