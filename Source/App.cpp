@@ -196,12 +196,12 @@ namespace im
 		MatrixData pushConsts{};
 		glm::mat4 model = glm::mat4(1.0f);
 		model = glm::rotate(model, glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
-		pushConsts.model = model;
-		glm::mat4 view = glm::mat4(1.0f);
-		view = glm::lookAt(glm::vec3(2.0f * sinf(deltaTime), 0.0f, 2.0f * cosf(deltaTime)), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-		pushConsts.view = view;
-		pushConsts.projection = glm::perspective(glm::radians(75.0f), static_cast<float>(mSwapchainExtent.width) / mSwapchainExtent.height, 0.1f, 100.0f);
-		pushConsts.projection[1][1] *= -1;
+		glm::mat4 view = glm::lookAt(glm::vec3(2.0f * sinf(deltaTime), 0.0f, 2.0f * cosf(deltaTime)), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+		glm::mat4 proj = glm::perspective(glm::radians(75.0f), static_cast<float>(mSwapchainExtent.width) / mSwapchainExtent.height, 0.1f, 100.0f);
+		proj[1][1] *= -1;
+		pushConsts.mv = view * model;
+		pushConsts.mvp = proj * pushConsts.mv;
+		pushConsts.normal = glm::transpose(glm::inverse(glm::mat3(model)));
 
 		vkCmdPushConstants(mCommandBuffers[mFrameIndex], mPipeLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pushConsts), &pushConsts);
 		
@@ -536,7 +536,7 @@ namespace im
 		inputBindings[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 		inputBindings[0].stride = sizeof(Vertex);
 
-		std::array<VkVertexInputAttributeDescription, 3> inputAttribs;
+		std::array<VkVertexInputAttributeDescription, 4> inputAttribs;
 		inputAttribs[0].binding = 0;
 		inputAttribs[0].location = 0;
 		inputAttribs[0].format = VK_FORMAT_R32G32B32_SFLOAT;
@@ -549,6 +549,10 @@ namespace im
 		inputAttribs[2].location = 2;
 		inputAttribs[2].format = VK_FORMAT_R32G32_SFLOAT;
 		inputAttribs[2].offset = sizeof(float) * 7;
+		inputAttribs[3].binding = 0;
+		inputAttribs[3].location = 3;
+		inputAttribs[3].format = VK_FORMAT_R32G32B32_SFLOAT;
+		inputAttribs[3].offset = sizeof(float) * 9;
 
 		VkPipelineVertexInputStateCreateInfo vertexInput{ VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO };
 		vertexInput.vertexBindingDescriptionCount = inputBindings.size();
@@ -864,6 +868,10 @@ namespace im
 					attrib.texcoords[2 * index.texcoord_index + 0],
 					attrib.texcoords[2 * index.texcoord_index + 1]);
 				v.color = glm::vec4(1.0f);
+				v.normal = glm::vec3(
+					attrib.vertices[3 * index.normal_index + 0],
+					attrib.vertices[3 * index.normal_index + 1],
+					attrib.vertices[3 * index.normal_index + 2]);
 
 				if (uniqueVertices.count(v) == 0)
 				{

@@ -15,10 +15,11 @@ namespace im
 		glm::vec3 position;
 		glm::vec4 color;
 		glm::vec2 uv;
+		glm::vec3 normal;
 
 		bool operator==(const Vertex& other) const
 		{
-			return position == other.position && color == other.color && uv == other.uv;
+			return position == other.position && color == other.color && uv == other.uv && normal == other.normal;
 		}
 	};
 
@@ -91,9 +92,9 @@ namespace im
 
 		struct MatrixData
 		{
-			glm::mat4 model;
-			glm::mat4 view;
-			glm::mat4 projection;
+			glm::mat4 mv;
+			glm::mat4 mvp;
+			glm::mat3 normal;
 		};
 
 		GLFWwindow* mWindow;

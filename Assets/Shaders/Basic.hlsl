@@ -6,24 +6,33 @@ struct VSInput
 	float4 color	: COLOR;
 	[[vk::location(2)]]
 	float2 uv		: TEXCOORD;
+	[[vk::location(3)]]
+	float3 normal	: NORMAL;
 };
 
 struct VSOutput
 {
-	float4 position : SV_POSITION;
-	
+	float4 position	: SV_POSITION;
+
 	[[vk::location(0)]]
-	float4 color	: COLOR;
+	float3 posView	: POSITION;
 
 	[[vk::location(1)]]
+	float4 color	: COLOR;
+
+	[[vk::location(2)]]
 	float2 uv		: TEXCOORD;
+
+	[[vk::location(3)]]
+	float3 normal	: NORMAL;
+
 };
 
 struct MatrixData
 {
-	float4x4 model;
-	float4x4 view;
-	float4x4 projection;
+	float4x4 mv;
+	float4x4 mvp;
+	float3x3 normal;
 };
 
 [[vk::push_constant]]
@@ -32,11 +41,11 @@ MatrixData gMatrices;
 VSOutput VSMain(VSInput input)
 {
 	VSOutput res;
-	res.position = mul(gMatrices.model, float4(input.position, 1.0));
-	res.position = mul(gMatrices.view, res.position);
-	res.position = mul(gMatrices.projection, res.position);
+	res.position = mul(gMatrices.mvp, float4(input.position, 1.0));
+	res.posView = float3(mul(gMatrices.mv, float4(input.position, 1.0)).xyz);
 	res.color = input.color;
 	res.uv = input.uv;
+	res.normal = mul(gMatrices.normal, input.normal);
 	return res;
 }
 
