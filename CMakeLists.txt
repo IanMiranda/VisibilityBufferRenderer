@@ -6,11 +6,6 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED 17)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-add_executable(VulkanApp)
-
-add_subdirectory(Source)
-add_subdirectory(Vendor)
-
 find_package(Vulkan REQUIRED)
 
 include(FetchContent)
@@ -39,7 +34,53 @@ FetchContent_Declare(
     GIT_TAG a4e519b0a0f29c790464fcfeadfe25a7f9fa15ff
 )
 
-FetchContent_MakeAvailable(glfw3 glm VulkanMemoryAllocator tinyobjloader)
+FetchContent_Declare(
+    imgui
+    GIT_REPOSITORY https://github.com/ocornut/imgui
+    GIT_TAG a4cd45f44c4888cf064dfdfb49efc2844640899c
+)
+
+FetchContent_MakeAvailable(glfw3 glm VulkanMemoryAllocator tinyobjloader imgui)
+
+add_executable(VulkanApp)
+
+add_subdirectory(Source)
+add_subdirectory(Vendor)
+
+add_library(imgui)
+target_sources(imgui
+    PRIVATE
+        ${imgui_SOURCE_DIR}/imconfig.h
+        ${imgui_SOURCE_DIR}/imgui.h
+        ${imgui_SOURCE_DIR}/imgui.cpp
+        ${imgui_SOURCE_DIR}/imgui_demo.cpp
+        ${imgui_SOURCE_DIR}/imgui_draw.cpp
+        ${imgui_SOURCE_DIR}/imgui_internal.h
+        ${imgui_SOURCE_DIR}/imgui_tables.cpp
+        ${imgui_SOURCE_DIR}/imgui_widgets.cpp
+        ${imgui_SOURCE_DIR}/imstb_rectpack.h
+        ${imgui_SOURCE_DIR}/imstb_textedit.h
+        ${imgui_SOURCE_DIR}/imstb_truetype.h
+
+        ${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.h
+        ${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp
+        ${imgui_SOURCE_DIR}/backends/imgui_impl_vulkan.h
+        ${imgui_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp
+)
+
+target_include_directories(
+    imgui
+        PUBLIC
+            ${imgui_SOURCE_DIR}
+            ${Vulkan_INCLUDE_DIRS}
+            ${glfw3_SOURCE_DIR}/include
+)
+
+target_include_directories(
+    imgui
+        PUBLIC
+            ${imgui_SOURCE_DIR}
+)
 
 target_include_directories(
     VulkanApp
@@ -63,6 +104,7 @@ target_link_libraries(
             glm::glm
             GPUOpen::VulkanMemoryAllocator
             tinyobjloader
+            imgui
 )
 
 add_custom_target(CopyAssets

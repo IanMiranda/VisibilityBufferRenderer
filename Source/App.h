@@ -53,9 +53,11 @@ namespace im
 		void InitDepthBuffer();
 		void InitDescriptorPool();
 		void InitSyncPrimitives();
+		void InitImgui();
 		void InitModel();
 		void InitVertexBuffer();
 		void InitIndexBuffer();
+		void InitUniformBuffers();
 		void InitTexture();
 		void InitDescriptorSets();
 
@@ -87,6 +89,8 @@ namespace im
 
 		void GenerateMipmaps(VkImage image, VkFormat format, int width, int height, uint32_t levelCount);
 
+		VkPipelineRenderingCreateInfo GetRenderingInfo() const;
+
 	private:
 		static constexpr int MaxFramesInFlight = 2;
 
@@ -97,48 +101,60 @@ namespace im
 			glm::mat4 normal;
 		};
 
+		struct LightingData
+		{
+			glm::vec3 lightPosition;
+			float _pad0;
+		};
+
 		GLFWwindow* mWindow;
 
-		VkInstance mInstance;
-		VkDebugUtilsMessengerEXT mDebugMessenger;
-		VkSurfaceKHR mSurface;
-		VkPhysicalDevice mGpu;
-		VkDevice mDevice;
-		VmaAllocator mAllocator;
-		VkSwapchainKHR mSwapchain;
+		VkInstance mInstance{ VK_NULL_HANDLE };
+		VkDebugUtilsMessengerEXT mDebugMessenger{ VK_NULL_HANDLE };
+		VkSurfaceKHR mSurface{ VK_NULL_HANDLE };
+		VkPhysicalDevice mGpu{ VK_NULL_HANDLE };
+		VkDevice mDevice{ VK_NULL_HANDLE };
+		VmaAllocator mAllocator{ VK_NULL_HANDLE };
+		VkSwapchainKHR mSwapchain{ VK_NULL_HANDLE };
 		std::vector<VkImage> mSwapchainImages;
 		std::vector<VkImageView> mSwapchainImageViews;
-		VkDescriptorSetLayout mSetLayout;
-		VkPipelineLayout mPipeLayout;
-		VkPipeline mPipe;
-		VkCommandPool mCommandPool;
-		VkCommandPool mTransientPool;
-		VkDescriptorPool mDescPool;
-		VkDescriptorSet mDescSet;
+		VkDescriptorSetLayout mGlobalLayout{ VK_NULL_HANDLE };
+		VkDescriptorSetLayout mPerObjectLayout{ VK_NULL_HANDLE };
+		VkPipelineLayout mPipeLayout{ VK_NULL_HANDLE };
+		VkPipeline mPipe{ VK_NULL_HANDLE };
+		VkCommandPool mCommandPool{ VK_NULL_HANDLE };
+		VkCommandPool mTransientPool{ VK_NULL_HANDLE };
+		VkDescriptorPool mGlobalPool{ VK_NULL_HANDLE };
+		VkDescriptorPool mPerObjectPool{ VK_NULL_HANDLE };
+		std::vector<VkDescriptorSet> mGlobalSets;
+		VkDescriptorSet mPerObjectSet{ VK_NULL_HANDLE };
 		VkSampleCountFlagBits mMsaaSamples;
 
-		VkImage mMsaaImage;
-		VmaAllocation mMsaaAllocation;
-		VkImageView mMsaaView;
+		VkImage mMsaaImage{ VK_NULL_HANDLE };
+		VmaAllocation mMsaaAllocation{ VK_NULL_HANDLE };
+		VkImageView mMsaaView{ VK_NULL_HANDLE };
 		VkFormat mMsaaFormat;
 
-		VkImage mDepthImage;
-		VmaAllocation mDepthAllocation;
-		VkImageView mDepthView;
+		VkImage mDepthImage{ VK_NULL_HANDLE };
+		VmaAllocation mDepthAllocation{ VK_NULL_HANDLE };
+		VkImageView mDepthView{ VK_NULL_HANDLE };
 		VkFormat mDepthFormat;
 
+		std::vector<VkBuffer> mUniformBuffers;
+		std::vector<VmaAllocation> mUniformBufferAllocations;
+
 		std::vector<Vertex> mVertices;
-		VkBuffer mVertexBuffer;
-		VmaAllocation mVertexBufferAllocation;
+		VkBuffer mVertexBuffer{ VK_NULL_HANDLE };
+		VmaAllocation mVertexBufferAllocation{ VK_NULL_HANDLE };
 		std::vector<uint32_t> mIndices;
-		VkBuffer mIndexBuffer;
-		VmaAllocation mIndexBufferAllocation;
+		VkBuffer mIndexBuffer{ VK_NULL_HANDLE };
+		VmaAllocation mIndexBufferAllocation{ VK_NULL_HANDLE };
 
 		uint32_t mMipLevelCount;
-		VkImage mTexture;
-		VmaAllocation mTextureAllocation;
-		VkImageView mTextureView;
-		VkSampler mTextureSampler;
+		VkImage mTexture{ VK_NULL_HANDLE };
+		VmaAllocation mTextureAllocation{ VK_NULL_HANDLE };
+		VkImageView mTextureView{ VK_NULL_HANDLE };
+		VkSampler mTextureSampler{ VK_NULL_HANDLE };
 
 		std::vector<VkCommandBuffer> mCommandBuffers;
 		std::vector<VkSemaphore> mAcquireSemaphores;
@@ -148,8 +164,8 @@ namespace im
 		uint32_t mSemaphoreIndex{ 0 };
 		bool mFramebufferResized{ false };
 
-		VkQueue mGraphicsQueue;
-		VkQueue mPresentQueue;
+		VkQueue mGraphicsQueue{ VK_NULL_HANDLE };
+		VkQueue mPresentQueue{ VK_NULL_HANDLE };
 
 		uint32_t mGraphicsIndex;
 		uint32_t mPresentIndex;

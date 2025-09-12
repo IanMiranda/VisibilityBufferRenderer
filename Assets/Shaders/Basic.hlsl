@@ -51,13 +51,18 @@ VSOutput VSMain(VSInput input)
 }
 
 [[vk::combinedImageSampler]]
-Texture2D gTexture : register(t0);
+Texture2D gTexture : register(t0, space1);
 [[vk::combinedImageSampler]]
-SamplerState gSampler : register(s0);
+SamplerState gSampler : register(s0, space1);
+
+cbuffer LightingData : register(b0, space0)
+{
+	float3 lightPos;
+	float _pad0;
+}
 
 float4 FSMain(VSOutput input) : SV_Target0
 {
-	float3 lightPos = float3(0.0, 10.0, 0.0);
 	float alpha = 16;
 
 	float4 I = float4(1.0, 1.0, 1.0, 1.0);

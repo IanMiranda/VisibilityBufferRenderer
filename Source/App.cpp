@@ -10,6 +10,9 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <stb_image.h>
 #include <tiny_obj_loader.h>
+#include <imgui.h>
+#include <backends/imgui_impl_vulkan.h>
+#include <backends/imgui_impl_glfw.h>
 
 namespace im
 {
@@ -33,18 +36,21 @@ namespace im
 		InitDepthBuffer();
 		InitDescriptorPool();
 		InitSyncPrimitives();
+		InitImgui();
 		InitModel();
 		InitVertexBuffer();
 		InitIndexBuffer();
 		InitTexture();
+		InitUniformBuffers();
 		InitDescriptorSets();
-
-		std::cerr << sizeof(MatrixData) << std::endl;
 	}
 
 	App::~App()
 	{
 		VK_CHECK(vkDeviceWaitIdle(mDevice));
+
+		for (int i = 0; i < MaxFramesInFlight; ++i)
+			vmaDestroyBuffer(mAllocator, mUniformBuffers[i], mUniformBufferAllocations[i]);
 
 		vkDestroySampler(mDevice, mTextureSampler, nullptr);
 		vkDestroyImageView(mDevice, mTextureView, nullptr);
@@ -52,6 +58,10 @@ namespace im
 
 		vmaDestroyBuffer(mAllocator, mIndexBuffer, mIndexBufferAllocation);
 		vmaDestroyBuffer(mAllocator, mVertexBuffer, mVertexBufferAllocation);
+
+		ImGui_ImplVulkan_Shutdown();
+		ImGui_ImplGlfw_Shutdown();
+		ImGui::DestroyContext();
 
 		for (const auto& fence : mRenderFences)
 			vkDestroyFence(mDevice, fence, nullptr);
@@ -62,14 +72,16 @@ namespace im
 		for (const auto& sem : mAcquireSemaphores)
 			vkDestroySemaphore(mDevice, sem, nullptr);
 
-		vkDestroyDescriptorPool(mDevice, mDescPool, nullptr);
+		vkDestroyDescriptorPool(mDevice, mPerObjectPool, nullptr);
+		vkDestroyDescriptorPool(mDevice, mGlobalPool, nullptr);
 
 		vkDestroyCommandPool(mDevice, mTransientPool, nullptr);
 		vkDestroyCommandPool(mDevice, mCommandPool, nullptr);
 
 		vkDestroyPipeline(mDevice, mPipe, nullptr);
 		vkDestroyPipelineLayout(mDevice, mPipeLayout, nullptr);
-		vkDestroyDescriptorSetLayout(mDevice, mSetLayout, nullptr);
+		vkDestroyDescriptorSetLayout(mDevice, mPerObjectLayout, nullptr);
+		vkDestroyDescriptorSetLayout(mDevice, mGlobalLayout, nullptr);
 
 		CleanupSwapchain();
 
@@ -119,6 +131,11 @@ namespace im
 		}
 
 		VK_CHECK(vkResetFences(mDevice, 1, &mRenderFences[mFrameIndex]));
+
+
+		ImGui_ImplVulkan_NewFrame();
+		ImGui_ImplGlfw_NewFrame();
+		ImGui::NewFrame();
 
 		VkCommandBufferBeginInfo beginInfo{ VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
 		beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
@@ -174,7 +191,16 @@ namespace im
 
 		vkCmdBindPipeline(mCommandBuffers[mFrameIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, mPipe);
 
-		vkCmdBindDescriptorSets(mCommandBuffers[mFrameIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, mPipeLayout, 0, 1, &mDescSet, 0, nullptr);
+		LightingData lighting{};
+		lighting.lightPosition = glm::vec3(cosf(glfwGetTime()), 3.0f * sinf(2.0f * glfwGetTime()), 0.0f);
+
+		void* globalBufferData;
+		VK_CHECK(vmaMapMemory(mAllocator, mUniformBufferAllocations[mFrameIndex], &globalBufferData));
+		std::memcpy(globalBufferData, &lighting, sizeof(lighting));
+		vmaUnmapMemory(mAllocator, mUniformBufferAllocations[mFrameIndex]);
+
+		VkDescriptorSet descSets[] = { mGlobalSets[mFrameIndex], mPerObjectSet };
+		vkCmdBindDescriptorSets(mCommandBuffers[mFrameIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, mPipeLayout, 0, 2, descSets, 0, nullptr);
 
 		VkViewport viewport{};
 		viewport.width = mSwapchainExtent.width;
@@ -214,6 +240,11 @@ namespace im
 
 		vkCmdDrawIndexed(mCommandBuffers[mFrameIndex], mIndices.size(), 1, 0, 0, 0);
 
+		ImGui::ShowDemoWindow();
+
+		ImGui::Render();
+		ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), mCommandBuffers[mFrameIndex]);
+
 		vkCmdEndRendering(mCommandBuffers[mFrameIndex]);
 
 		TransitionSwapchainImage(
@@ -238,6 +269,9 @@ namespace im
 		submitInfo.pSignalSemaphores = &mRenderSemaphores[imageIndex];
 
 		VK_CHECK(vkQueueSubmit(mGraphicsQueue, 1, &submitInfo, mRenderFences[mFrameIndex]));
+
+		ImGui::UpdatePlatformWindows();
+		ImGui::RenderPlatformWindowsDefault();
 
 		VkPresentInfoKHR presentInfo{ VK_STRUCTURE_TYPE_PRESENT_INFO_KHR };
 		presentInfo.pImageIndices = &imageIndex;
@@ -309,7 +343,7 @@ namespace im
 		if constexpr (enableValidationLayers)
 		{
 			instanceLayers.emplace_back("VK_LAYER_KHRONOS_validation");
-			//instanceLayers.emplace_back("VK_LAYER_LUNARG_monitor");
+			instanceLayers.emplace_back("VK_LAYER_LUNARG_monitor");
 		}
 
 		auto debugInfo = GetDebugInfo();
@@ -605,23 +639,36 @@ namespace im
 		matrixRange.size = sizeof(MatrixData);
 		matrixRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
+		VkDescriptorSetLayoutBinding lightingBufferBinding{};
+		lightingBufferBinding.binding = 0;
+		lightingBufferBinding.descriptorCount = 1;
+		lightingBufferBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		lightingBufferBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
 		VkDescriptorSetLayoutBinding imageBinding{};
 		imageBinding.binding = 0;
 		imageBinding.descriptorCount = 1;
 		imageBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 		imageBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-		VkDescriptorSetLayoutCreateInfo setLayoutInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
-		setLayoutInfo.bindingCount = 1;
-		setLayoutInfo.pBindings = &imageBinding;
+		VkDescriptorSetLayoutCreateInfo globalLayoutInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
+		globalLayoutInfo.bindingCount = 1;
+		globalLayoutInfo.pBindings = &lightingBufferBinding;
 
-		VK_CHECK(vkCreateDescriptorSetLayout(mDevice, &setLayoutInfo, nullptr, &mSetLayout));
+		VkDescriptorSetLayoutCreateInfo perObjectLayoutInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
+		perObjectLayoutInfo.bindingCount = 1;
+		perObjectLayoutInfo.pBindings = &imageBinding;
+
+		VK_CHECK(vkCreateDescriptorSetLayout(mDevice, &globalLayoutInfo, nullptr, &mGlobalLayout));
+		VK_CHECK(vkCreateDescriptorSetLayout(mDevice, &perObjectLayoutInfo, nullptr, &mPerObjectLayout));
+
+		VkDescriptorSetLayout setLayouts[] = { mGlobalLayout, mPerObjectLayout };
 
 		VkPipelineLayoutCreateInfo layoutInfo{ VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
 		layoutInfo.pushConstantRangeCount = 1;
 		layoutInfo.pPushConstantRanges = &matrixRange;
-		layoutInfo.setLayoutCount = 1;
-		layoutInfo.pSetLayouts = &mSetLayout;
+		layoutInfo.setLayoutCount = 2;
+		layoutInfo.pSetLayouts = setLayouts;
 		
 		VK_CHECK(vkCreatePipelineLayout(mDevice, &layoutInfo, nullptr, &mPipeLayout));
 
@@ -636,10 +683,7 @@ namespace im
 			VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT
 		);
 
-		VkPipelineRenderingCreateInfo renderingInfo{ VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO };
-		renderingInfo.colorAttachmentCount = 1;
-		renderingInfo.pColorAttachmentFormats = &mSwapchainFormat;
-		renderingInfo.depthAttachmentFormat = mDepthFormat;
+		VkPipelineRenderingCreateInfo renderingInfo = GetRenderingInfo();
 
 		VkGraphicsPipelineCreateInfo pipelineInfo{ VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO };
 		pipelineInfo.pNext = &renderingInfo;
@@ -811,14 +855,18 @@ namespace im
 
 	void App::InitDescriptorPool()
 	{
-		VkDescriptorPoolSize sizes{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1 };
+		VkDescriptorPoolSize globalSizes[]{ { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, MaxFramesInFlight } };
+		VkDescriptorPoolSize perObjectSizes[]{ { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1 } };
 
 		VkDescriptorPoolCreateInfo poolInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO };
+		poolInfo.maxSets = MaxFramesInFlight;
+		poolInfo.poolSizeCount = 1;
+		poolInfo.pPoolSizes = globalSizes;
+		VK_CHECK(vkCreateDescriptorPool(mDevice, &poolInfo, nullptr, &mGlobalPool));
 		poolInfo.maxSets = 1;
 		poolInfo.poolSizeCount = 1;
-		poolInfo.pPoolSizes = &sizes;
-
-		VK_CHECK(vkCreateDescriptorPool(mDevice, &poolInfo, nullptr, &mDescPool));
+		poolInfo.pPoolSizes = perObjectSizes;
+		VK_CHECK(vkCreateDescriptorPool(mDevice, &poolInfo, nullptr, &mPerObjectPool));
 	}
 
 	void App::InitSyncPrimitives()
@@ -846,6 +894,36 @@ namespace im
 		{
 			VK_CHECK(vkCreateFence(mDevice, &fenceInfo, nullptr, &mRenderFences[i]));
 		}
+	}
+
+	void App::InitImgui()
+	{
+		IMGUI_CHECKVERSION();
+		ImGui::CreateContext();
+
+		ImGuiIO& io = ImGui::GetIO();
+		io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+		io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+		io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
+
+		ImGui_ImplGlfw_InitForVulkan(mWindow, true);
+
+		ImGui_ImplVulkan_InitInfo imguiVulkanInfo{};
+		imguiVulkanInfo.ApiVersion = VK_API_VERSION_1_4;
+		imguiVulkanInfo.CheckVkResultFn = [](VkResult err) { VK_CHECK(err); };
+		imguiVulkanInfo.DescriptorPoolSize = 128;
+		imguiVulkanInfo.Device = mDevice;
+		imguiVulkanInfo.ImageCount = mSwapchainImages.size();
+		imguiVulkanInfo.MinImageCount = MaxFramesInFlight;
+		imguiVulkanInfo.Instance = mInstance;
+		imguiVulkanInfo.MSAASamples = mMsaaSamples;
+		imguiVulkanInfo.PhysicalDevice = mGpu;
+		imguiVulkanInfo.UseDynamicRendering = true;
+		imguiVulkanInfo.PipelineRenderingCreateInfo = GetRenderingInfo();
+		imguiVulkanInfo.Queue = mGraphicsQueue;
+		imguiVulkanInfo.QueueFamily = mGraphicsIndex;
+
+		ImGui_ImplVulkan_Init(&imguiVulkanInfo);
 	}
 
 	void App::InitModel()
@@ -941,6 +1019,21 @@ namespace im
 		SubmitImmediateCommandBuffer(cmds);
 
 		vmaDestroyBuffer(mAllocator, stagingBuffer, stagingAllocation);
+	}
+
+	void App::InitUniformBuffers()
+	{
+		const auto size = sizeof(LightingData);
+
+		mUniformBuffers.resize(MaxFramesInFlight);
+		mUniformBufferAllocations.resize(MaxFramesInFlight);
+		for (int i = 0; i < MaxFramesInFlight; ++i)
+		{
+			std::tie(mUniformBuffers[i], mUniformBufferAllocations[i]) = CreateBuffer(
+				VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+				size,
+				VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
+		}
 	}
 
 	void App::InitTexture()
@@ -1066,12 +1159,18 @@ namespace im
 
 	void App::InitDescriptorSets()
 	{
+		mGlobalSets.resize(MaxFramesInFlight);
+		VkDescriptorSetLayout globalLayouts[]{ mGlobalLayout, mGlobalLayout };
 		VkDescriptorSetAllocateInfo allocInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO };
-		allocInfo.descriptorPool = mDescPool;
-		allocInfo.descriptorSetCount = 1;
-		allocInfo.pSetLayouts = &mSetLayout;
+		allocInfo.descriptorPool = mGlobalPool;
+		allocInfo.descriptorSetCount = MaxFramesInFlight;
+		allocInfo.pSetLayouts = globalLayouts;
+		VK_CHECK(vkAllocateDescriptorSets(mDevice, &allocInfo, mGlobalSets.data()));
 
-		VK_CHECK(vkAllocateDescriptorSets(mDevice, &allocInfo, &mDescSet));
+		allocInfo.descriptorPool = mPerObjectPool;
+		allocInfo.descriptorSetCount = 1;
+		allocInfo.pSetLayouts = &mPerObjectLayout;
+		VK_CHECK(vkAllocateDescriptorSets(mDevice, &allocInfo, &mPerObjectSet));
 
 		VkDescriptorImageInfo imageWrite{};
 		imageWrite.imageView = mTextureView;
@@ -1083,10 +1182,29 @@ namespace im
 		write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 		write.dstArrayElement = 0;
 		write.dstBinding = 0;
-		write.dstSet = mDescSet;
+		write.dstSet = mPerObjectSet;
 		write.pImageInfo = &imageWrite;
 
 		vkUpdateDescriptorSets(mDevice, 1, &write, 0, nullptr);
+
+		for (int i = 0; i < MaxFramesInFlight; ++i)
+		{
+			VkDescriptorBufferInfo buffer{};
+			buffer.buffer = mUniformBuffers[i];
+			buffer.offset = 0;
+			buffer.range = sizeof(LightingData);
+
+			VkWriteDescriptorSet bufferWrite{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
+			bufferWrite.descriptorCount = 1;
+			bufferWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+			bufferWrite.dstArrayElement = 0;
+			bufferWrite.dstBinding = 0;
+			bufferWrite.dstSet = mGlobalSets[i];
+			bufferWrite.pBufferInfo = &buffer;
+
+			vkUpdateDescriptorSets(mDevice, 1, &bufferWrite, 0, nullptr);
+		}
+
 	}
 
 	void App::CleanupSwapchain()
@@ -1154,7 +1272,7 @@ namespace im
 		assert(modeCount > 0 && "GPU has no present modes available");
 		std::vector<VkPresentModeKHR> modes(modeCount);
 		VK_CHECK(vkGetPhysicalDeviceSurfacePresentModesKHR(mGpu, mSurface, &modeCount, nullptr));
-		auto it = std::find(modes.begin(), modes.end(), VK_PRESENT_MODE_MAILBOX_KHR);
+		auto it = std::find(modes.begin(), modes.end(), VK_PRESENT_MODE_IMMEDIATE_KHR);
 		if (it != modes.end())
 			return *it;
 		else
@@ -1378,6 +1496,15 @@ namespace im
 		vkCmdPipelineBarrier2(cmds, &depInfo);
 
 		SubmitImmediateCommandBuffer(cmds);
+	}
+
+	VkPipelineRenderingCreateInfo App::GetRenderingInfo() const
+	{
+		VkPipelineRenderingCreateInfo renderingInfo{ VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO };
+		renderingInfo.colorAttachmentCount = 1;
+		renderingInfo.pColorAttachmentFormats = &mSwapchainFormat;
+		renderingInfo.depthAttachmentFormat = mDepthFormat;
+		return renderingInfo;
 	}
 
 	void App::FramebufferSizeCallback(GLFWwindow* window, int width, int height)
