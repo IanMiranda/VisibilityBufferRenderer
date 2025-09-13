@@ -107,11 +107,53 @@ namespace im
 
 	void App::Run()
 	{
+		float lastTime = glfwGetTime();
+
 		while (!glfwWindowShouldClose(mWindow))
 		{
 			glfwPollEvents();
+			const float currentTime = glfwGetTime();
+			const float deltaTime = currentTime - lastTime;
+
+			Update(deltaTime);
 			Render();
+
+			lastTime = currentTime;
 		}
+	}
+
+	void App::Update(float deltaTime)
+	{
+		//glm::mat4 view = glm::lookAt(glm::vec3(2.0f * sinf(deltaTime), 0.0f, 2.0f * cosf(deltaTime)), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+
+		if (glfwGetKey(mWindow, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+			glfwSetWindowShouldClose(mWindow, GLFW_TRUE);
+
+		const float moveFactor = 2.5f;
+
+		const auto front = mCamera.GetFront();
+		glm::vec3 up(0.0f, 1.0f, 0.0f);
+		glm::vec3 right = glm::normalize(glm::cross(front, up));
+
+		if (glfwGetKey(mWindow, GLFW_KEY_W) == GLFW_PRESS)
+		{
+			mCamera.SetPosition(mCamera.GetPosition() + front * deltaTime * moveFactor);
+		}
+		else if (glfwGetKey(mWindow, GLFW_KEY_S) == GLFW_PRESS)
+		{
+			mCamera.SetPosition(mCamera.GetPosition() + -front * deltaTime * moveFactor);
+		}
+
+		if (glfwGetKey(mWindow, GLFW_KEY_A) == GLFW_PRESS)
+		{
+			mCamera.SetPosition(mCamera.GetPosition() + -right * deltaTime * moveFactor);
+		}
+		else if (glfwGetKey(mWindow, GLFW_KEY_D) == GLFW_PRESS)
+		{
+			mCamera.SetPosition(mCamera.GetPosition() + right * deltaTime * moveFactor);
+		}
+
+		mCamera.Update();
 	}
 
 	void App::Render()
@@ -179,7 +221,6 @@ namespace im
 		depthAttachmentInfo.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 		depthAttachmentInfo.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 
-		
 		VkRenderingInfo renderingInfo{ VK_STRUCTURE_TYPE_RENDERING_INFO };
 		renderingInfo.colorAttachmentCount = 1;
 		renderingInfo.pColorAttachments = &colorAttachmentInfo;
@@ -217,15 +258,13 @@ namespace im
 		vkCmdSetViewport(mCommandBuffers[mFrameIndex], 0, 1, &viewport);
 		vkCmdSetScissor(mCommandBuffers[mFrameIndex], 0, 1, &scissor);
 
-		static auto startTime = std::chrono::high_resolution_clock::now();
-		auto currentTime = std::chrono::high_resolution_clock::now();
-		auto deltaTime = std::chrono::duration<float>(currentTime - startTime).count();
-
 		MatrixData pushConsts{};
 		glm::mat4 model = glm::mat4(1.0f);
 		model = glm::translate(model, glm::vec3(0.0f, -1.0f, 0.0f));
 		model = glm::scale(model, glm::vec3(0.1f));
-		glm::mat4 view = glm::lookAt(glm::vec3(2.0f * sinf(deltaTime), 0.0f, 2.0f * cosf(deltaTime)), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+
+		glm::mat4 view = mCamera.GetViewMatrix();
+		
 		glm::mat4 proj = glm::perspective(glm::radians(75.0f), static_cast<float>(mSwapchainExtent.width) / mSwapchainExtent.height, 0.1f, 100.0f);
 		pushConsts.mv = view * model;
 		pushConsts.mvp = proj * pushConsts.mv;
@@ -311,6 +350,8 @@ namespace im
 
 		glfwSetWindowUserPointer(mWindow, this);
 		glfwSetFramebufferSizeCallback(mWindow, FramebufferSizeCallback);
+		glfwSetCursorPosCallback(mWindow, MousePositionCallback);
+		glfwSetInputMode(mWindow, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 	}
 
 	void App::InitInstance()
@@ -1511,6 +1552,27 @@ namespace im
 	{
 		App* app = reinterpret_cast<App*>(glfwGetWindowUserPointer(window));
 		app->mFramebufferResized = true;
+	}
+
+	void App::MousePositionCallback(GLFWwindow* window, double xpos, double ypos)
+	{
+		static double lastX;
+		static double lastY;
+		App* app = reinterpret_cast<App*>(glfwGetWindowUserPointer(window));
+		if (app->mFirstTouch)
+		{
+			app->mFirstTouch = false;
+			lastX = xpos;
+			lastY = ypos;
+		}
+
+		constexpr float sensitivity = 0.2f;
+		float deltaX = xpos - lastX;
+		float deltaY = lastY - ypos;
+
+		app->mCamera.SetYaw(app->mCamera.GetYaw() + sensitivity * deltaX);
+		app->mCamera.SetPitch(app->mCamera.GetPitch() + sensitivity * deltaY);
+		glfwSetCursorPos(window, lastX, lastY);
 	}
 
 	bool App::InstanceExtensionSupported(const char* name)

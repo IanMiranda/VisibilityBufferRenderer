@@ -38,6 +38,7 @@ namespace im
 		void Run();
 
 	private:
+		void Update(float deltaTime);
 		void Render();
 
 	private:
@@ -175,8 +176,11 @@ namespace im
 
 		Camera mCamera;
 
+		bool mFirstTouch{ true };
+
 	private:
 		static void FramebufferSizeCallback(GLFWwindow* window, int width, int height);
+		static void MousePositionCallback(GLFWwindow* window, double xpos, double ypos);
 
 		static bool InstanceExtensionSupported(const char* name);
 		static bool DeviceExtensionSupported(VkPhysicalDevice gpu, const char* name);
