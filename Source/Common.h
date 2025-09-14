@@ -5,6 +5,7 @@
 #include <string>
 
 #include <GLFW/glfw3.h>
+#include <vk_mem_alloc.h>
 
 #define VK_CHECK(x) \
 	do \

@@ -60,6 +60,7 @@ namespace im
 		void InitIndexBuffer();
 		void InitUniformBuffers();
 		void InitTexture();
+		void InitCubemap();
 		void InitDescriptorSets();
 
 		void CleanupSwapchain();
@@ -106,6 +107,11 @@ namespace im
 		{
 			glm::vec3 lightPosition;
 			float _pad0;
+		};
+
+		struct CubemapData
+		{
+			glm::mat4 vpInverse;
 		};
 
 		GLFWwindow* mWindow;
@@ -156,6 +162,16 @@ namespace im
 		VmaAllocation mTextureAllocation{ VK_NULL_HANDLE };
 		VkImageView mTextureView{ VK_NULL_HANDLE };
 		VkSampler mTextureSampler{ VK_NULL_HANDLE };
+
+		VkDescriptorSetLayout mCubemapSetLayout{ VK_NULL_HANDLE };
+		VkPipelineLayout mCubemapPipeLayout{ VK_NULL_HANDLE };
+		VkPipeline mCubemapPipe{ VK_NULL_HANDLE };
+		VkDescriptorSet mCubemapSet{ VK_NULL_HANDLE };
+
+		VkImage mCubemap{ VK_NULL_HANDLE };
+		VmaAllocation mCubemapAllocation{ VK_NULL_HANDLE };
+		VkImageView mCubemapView{ VK_NULL_HANDLE };
+		VkSampler mCubemapSampler{ VK_NULL_HANDLE };
 
 		std::vector<VkCommandBuffer> mCommandBuffers;
 		std::vector<VkSemaphore> mAcquireSemaphores;

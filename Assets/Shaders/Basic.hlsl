@@ -79,8 +79,11 @@ float4 FSMain(VSOutput input) : SV_Target0
 
 	float3 V = -normalize(input.posView);
 	float3 H = normalize(W + V);
+	float3 R = normalize(reflect(W, N));
 	float NoH = dot(N, H);
+	float VoR = dot(V, R);
 	float4 specular = I * Ks * pow(saturate(NoH), alpha);
+	// float4 specular = I * Ks * pow(saturate(VoR), alpha);
 
 	float4 ambient = Kd * Ia;
 

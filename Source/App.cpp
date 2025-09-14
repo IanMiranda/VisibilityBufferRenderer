@@ -14,6 +14,8 @@
 #include <backends/imgui_impl_vulkan.h>
 #include <backends/imgui_impl_glfw.h>
 
+#include "Utils.h"
+
 namespace im
 {
 #ifndef NDEBUG
@@ -40,8 +42,9 @@ namespace im
 		InitModel();
 		InitVertexBuffer();
 		InitIndexBuffer();
-		InitTexture();
 		InitUniformBuffers();
+		InitTexture();
+		InitCubemap();
 		InitDescriptorSets();
 	}
 
@@ -49,12 +52,20 @@ namespace im
 	{
 		VK_CHECK(vkDeviceWaitIdle(mDevice));
 
-		for (int i = 0; i < MaxFramesInFlight; ++i)
-			vmaDestroyBuffer(mAllocator, mUniformBuffers[i], mUniformBufferAllocations[i]);
+		vkDestroyPipeline(mDevice, mCubemapPipe, nullptr);
+		vkDestroyPipelineLayout(mDevice, mCubemapPipeLayout, nullptr);
+		vkDestroyDescriptorSetLayout(mDevice, mCubemapSetLayout, nullptr);
+
+		vkDestroySampler(mDevice, mCubemapSampler, nullptr);
+		vkDestroyImageView(mDevice, mCubemapView, nullptr);
+		vmaDestroyImage(mAllocator, mCubemap, mCubemapAllocation);
 
 		vkDestroySampler(mDevice, mTextureSampler, nullptr);
 		vkDestroyImageView(mDevice, mTextureView, nullptr);
 		vmaDestroyImage(mAllocator, mTexture, mTextureAllocation);
+
+		for (int i = 0; i < MaxFramesInFlight; ++i)
+			vmaDestroyBuffer(mAllocator, mUniformBuffers[i], mUniformBufferAllocations[i]);
 
 		vmaDestroyBuffer(mAllocator, mIndexBuffer, mIndexBufferAllocation);
 		vmaDestroyBuffer(mAllocator, mVertexBuffer, mVertexBufferAllocation);
@@ -230,19 +241,6 @@ namespace im
 
 		vkCmdBeginRendering(mCommandBuffers[mFrameIndex], &renderingInfo);
 
-		vkCmdBindPipeline(mCommandBuffers[mFrameIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, mPipe);
-
-		LightingData lighting{};
-		lighting.lightPosition = glm::vec3(cosf(glfwGetTime()), 3.0f * sinf(2.0f * glfwGetTime()), 0.0f);
-
-		void* globalBufferData;
-		VK_CHECK(vmaMapMemory(mAllocator, mUniformBufferAllocations[mFrameIndex], &globalBufferData));
-		std::memcpy(globalBufferData, &lighting, sizeof(lighting));
-		vmaUnmapMemory(mAllocator, mUniformBufferAllocations[mFrameIndex]);
-
-		VkDescriptorSet descSets[] = { mGlobalSets[mFrameIndex], mPerObjectSet };
-		vkCmdBindDescriptorSets(mCommandBuffers[mFrameIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, mPipeLayout, 0, 2, descSets, 0, nullptr);
-
 		VkViewport viewport{};
 		viewport.width = mSwapchainExtent.width;
 		viewport.height = -(float)mSwapchainExtent.height;
@@ -258,14 +256,36 @@ namespace im
 		vkCmdSetViewport(mCommandBuffers[mFrameIndex], 0, 1, &viewport);
 		vkCmdSetScissor(mCommandBuffers[mFrameIndex], 0, 1, &scissor);
 
+		CubemapData cubemapData{};
+		glm::mat4 view = mCamera.GetViewMatrix();
+		glm::mat4 proj = glm::perspective(glm::radians(75.0f), static_cast<float>(mSwapchainExtent.width) / mSwapchainExtent.height, 0.1f, 100.0f);
+		cubemapData.vpInverse = glm::inverse(proj * glm::mat4(glm::mat3(view))); // Remove translations
+
+		// Cubemap pass
+		vkCmdBindPipeline(mCommandBuffers[mFrameIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, mCubemapPipe);
+		vkCmdPushConstants(mCommandBuffers[mFrameIndex], mCubemapPipeLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(cubemapData), &cubemapData);
+		vkCmdBindDescriptorSets(mCommandBuffers[mFrameIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, mCubemapPipeLayout, 0, 1, &mCubemapSet, 0, nullptr);
+		vkCmdDraw(mCommandBuffers[mFrameIndex], 3, 1, 0, 0);
+
+		// Forward pass
+		vkCmdBindPipeline(mCommandBuffers[mFrameIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, mPipe);
+
+		LightingData lighting{};
+		lighting.lightPosition = glm::vec3(cosf(glfwGetTime()), 3.0f * sinf(2.0f * glfwGetTime()), 0.0f);
+
+		void* globalBufferData;
+		VK_CHECK(vmaMapMemory(mAllocator, mUniformBufferAllocations[mFrameIndex], &globalBufferData));
+		std::memcpy(globalBufferData, &lighting, sizeof(lighting));
+		vmaUnmapMemory(mAllocator, mUniformBufferAllocations[mFrameIndex]);
+
+		VkDescriptorSet descSets[] = { mGlobalSets[mFrameIndex], mPerObjectSet };
+		vkCmdBindDescriptorSets(mCommandBuffers[mFrameIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, mPipeLayout, 0, 2, descSets, 0, nullptr);
+
 		MatrixData pushConsts{};
 		glm::mat4 model = glm::mat4(1.0f);
 		model = glm::translate(model, glm::vec3(0.0f, -1.0f, 0.0f));
 		model = glm::scale(model, glm::vec3(0.1f));
 
-		glm::mat4 view = mCamera.GetViewMatrix();
-		
-		glm::mat4 proj = glm::perspective(glm::radians(75.0f), static_cast<float>(mSwapchainExtent.width) / mSwapchainExtent.height, 0.1f, 100.0f);
 		pushConsts.mv = view * model;
 		pushConsts.mvp = proj * pushConsts.mv;
 		pushConsts.normal = glm::transpose(glm::inverse(view * model));
@@ -619,22 +639,10 @@ namespace im
 		inputBindings[0].stride = sizeof(Vertex);
 
 		std::array<VkVertexInputAttributeDescription, 4> inputAttribs;
-		inputAttribs[0].binding = 0;
-		inputAttribs[0].location = 0;
-		inputAttribs[0].format = VK_FORMAT_R32G32B32_SFLOAT;
-		inputAttribs[0].offset = 0;
-		inputAttribs[1].binding = 0;
-		inputAttribs[1].location = 1;
-		inputAttribs[1].format = VK_FORMAT_R32G32B32A32_SFLOAT;
-		inputAttribs[1].offset = sizeof(float) * 3;
-		inputAttribs[2].binding = 0;
-		inputAttribs[2].location = 2;
-		inputAttribs[2].format = VK_FORMAT_R32G32_SFLOAT;
-		inputAttribs[2].offset = sizeof(float) * 7;
-		inputAttribs[3].binding = 0;
-		inputAttribs[3].location = 3;
-		inputAttribs[3].format = VK_FORMAT_R32G32B32_SFLOAT;
-		inputAttribs[3].offset = sizeof(float) * 9;
+		inputAttribs[0] = utils::InputAttribute(0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0);
+		inputAttribs[1] = utils::InputAttribute(0, 1, VK_FORMAT_R32G32B32A32_SFLOAT, sizeof(float) * 3);
+		inputAttribs[2] = utils::InputAttribute(0, 2, VK_FORMAT_R32G32_SFLOAT, sizeof(float) * 7);
+		inputAttribs[3] = utils::InputAttribute(0, 3, VK_FORMAT_R32G32B32_SFLOAT, sizeof(float) * 9);
 
 		VkPipelineVertexInputStateCreateInfo vertexInput{ VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO };
 		vertexInput.vertexBindingDescriptionCount = inputBindings.size();
@@ -896,12 +904,12 @@ namespace im
 
 	void App::InitDescriptorPool()
 	{
-		VkDescriptorPoolSize globalSizes[]{ { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, MaxFramesInFlight } };
+		VkDescriptorPoolSize globalSizes[]{ { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, MaxFramesInFlight }, { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1 } };
 		VkDescriptorPoolSize perObjectSizes[]{ { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1 } };
 
 		VkDescriptorPoolCreateInfo poolInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO };
-		poolInfo.maxSets = MaxFramesInFlight;
-		poolInfo.poolSizeCount = 1;
+		poolInfo.maxSets = MaxFramesInFlight + 1;
+		poolInfo.poolSizeCount = 2;
 		poolInfo.pPoolSizes = globalSizes;
 		VK_CHECK(vkCreateDescriptorPool(mDevice, &poolInfo, nullptr, &mGlobalPool));
 		poolInfo.maxSets = 1;
@@ -1198,6 +1206,273 @@ namespace im
 		VK_CHECK(vkCreateSampler(mDevice, &samplerInfo, nullptr, &mTextureSampler));
 	}
 
+	void App::InitCubemap()
+	{
+		stbi_set_flip_vertically_on_load(false); // Reversing UV coords using vp^-1, so images will be loaded in correct orientation
+
+		constexpr VkDeviceSize bytesPerPixel = 4;
+		constexpr size_t cubemapFaces = 6;
+		int width, height, channels;
+
+		const std::array<std::filesystem::path, cubemapFaces> skyboxPaths
+		{
+			"Assets/Textures/Skybox/right.jpg",
+			"Assets/Textures/Skybox/left.jpg",
+			"Assets/Textures/Skybox/top.jpg",
+			"Assets/Textures/Skybox/bottom.jpg",
+			"Assets/Textures/Skybox/front.jpg",
+			"Assets/Textures/Skybox/back.jpg",
+		};
+
+		std::array<stbi_uc*, cubemapFaces> cubemapData;
+		for (size_t i = 0; i < cubemapFaces; ++i)
+		{
+			stbi_uc* data = stbi_load(skyboxPaths[i].string().c_str(), &width, &height, &channels, STBI_rgb_alpha);
+			if (!data)
+			{
+				std::cerr << "Failed to load cubemap!\n";
+			}
+
+			cubemapData[i] = data;
+		}
+
+		const VkDeviceSize faceSize = width * height * bytesPerPixel;
+		const VkDeviceSize size = faceSize * 6;
+
+		auto [staging, stagingAllocation] = CreateBuffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, size, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
+		stbi_uc* mappedData;
+		VK_CHECK(vmaMapMemory(mAllocator, stagingAllocation, reinterpret_cast<void**>(&mappedData)));
+		for (size_t i = 0; i < cubemapFaces; ++i)
+		{
+			std::memcpy(mappedData, cubemapData[i], faceSize);
+			mappedData += faceSize;
+		}
+		vmaUnmapMemory(mAllocator, stagingAllocation);
+
+		for (const auto& data : cubemapData)
+			stbi_image_free(data);
+
+		VkImageCreateInfo cubemapInfo{ VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
+		cubemapInfo.arrayLayers = 6;
+		cubemapInfo.flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+		cubemapInfo.extent = { static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1 };
+		cubemapInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
+		cubemapInfo.imageType = VK_IMAGE_TYPE_2D;
+		cubemapInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		cubemapInfo.mipLevels = 1;
+		cubemapInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+		cubemapInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		cubemapInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+		cubemapInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+
+		VmaAllocationCreateInfo allocInfo{};
+		allocInfo.usage = VMA_MEMORY_USAGE_AUTO;
+
+		VK_CHECK(vmaCreateImage(mAllocator, &cubemapInfo, &allocInfo, &mCubemap, &mCubemapAllocation, nullptr));
+
+		auto cmds = CreateImmediateCommandBuffer();
+
+		{
+			VkImageMemoryBarrier2 imageBarrier{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2 };
+			imageBarrier.image = mCubemap;
+			imageBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			imageBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+			imageBarrier.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
+			imageBarrier.srcAccessMask = VK_ACCESS_2_NONE;
+			imageBarrier.dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+			imageBarrier.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+			imageBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			imageBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			imageBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			imageBarrier.subresourceRange.baseArrayLayer = 0;
+			imageBarrier.subresourceRange.layerCount = 6;
+			imageBarrier.subresourceRange.baseMipLevel = 0;
+			imageBarrier.subresourceRange.levelCount = 1;
+
+			VkDependencyInfo depInfo{ VK_STRUCTURE_TYPE_DEPENDENCY_INFO };
+			depInfo.imageMemoryBarrierCount = 1;
+			depInfo.pImageMemoryBarriers = &imageBarrier;
+
+			vkCmdPipelineBarrier2(cmds, &depInfo);
+		}
+
+		VkBufferImageCopy buffer2Image{};
+		buffer2Image.imageExtent = cubemapInfo.extent;
+		buffer2Image.imageOffset = { 0, 0, 0 };
+		buffer2Image.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		buffer2Image.imageSubresource.baseArrayLayer = 0;
+		buffer2Image.imageSubresource.layerCount = 6;
+		buffer2Image.imageSubresource.mipLevel = 0;
+		buffer2Image.bufferImageHeight = 0;
+		buffer2Image.bufferOffset = 0;
+		buffer2Image.bufferRowLength = 0;
+		vkCmdCopyBufferToImage(cmds, staging, mCubemap, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &buffer2Image);
+
+		{
+			VkImageMemoryBarrier2 imageBarrier{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2 };
+			imageBarrier.image = mCubemap;
+			imageBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+			imageBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			imageBarrier.srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+			imageBarrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+			imageBarrier.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+			imageBarrier.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT_KHR;
+			imageBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			imageBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			imageBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			imageBarrier.subresourceRange.baseArrayLayer = 0;
+			imageBarrier.subresourceRange.layerCount = 6;
+			imageBarrier.subresourceRange.baseMipLevel = 0;
+			imageBarrier.subresourceRange.levelCount = 1;
+
+			VkDependencyInfo depInfo{ VK_STRUCTURE_TYPE_DEPENDENCY_INFO };
+			depInfo.imageMemoryBarrierCount = 1;
+			depInfo.pImageMemoryBarriers = &imageBarrier;
+
+			vkCmdPipelineBarrier2(cmds, &depInfo);
+		}
+
+		SubmitImmediateCommandBuffer(cmds);
+
+		vmaDestroyBuffer(mAllocator, staging, stagingAllocation);
+
+		VkImageViewCreateInfo viewInfo{ VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
+		viewInfo.components.r = VK_COMPONENT_SWIZZLE_R;
+		viewInfo.components.g = VK_COMPONENT_SWIZZLE_G;
+		viewInfo.components.b = VK_COMPONENT_SWIZZLE_B;
+		viewInfo.components.a = VK_COMPONENT_SWIZZLE_A;
+		viewInfo.format = cubemapInfo.format;
+		viewInfo.image = mCubemap;
+		viewInfo.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
+		viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		viewInfo.subresourceRange.baseArrayLayer = 0;
+		viewInfo.subresourceRange.layerCount = 6;
+		viewInfo.subresourceRange.baseMipLevel = 0;
+		viewInfo.subresourceRange.levelCount = 1;
+
+		VK_CHECK(vkCreateImageView(mDevice, &viewInfo, nullptr, &mCubemapView));
+
+		VkSamplerCreateInfo samplerInfo{ VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
+		samplerInfo.minFilter = VK_FILTER_LINEAR;
+		samplerInfo.magFilter = VK_FILTER_LINEAR;
+		samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+		samplerInfo.minLod = 0.0f;
+		samplerInfo.maxLod = VK_LOD_CLAMP_NONE;
+		samplerInfo.mipLodBias = 0.0f;
+		samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		samplerInfo.maxAnisotropy = 1.0f;
+		samplerInfo.anisotropyEnable = VK_FALSE;
+		samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+		samplerInfo.compareEnable = VK_FALSE;
+		samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+		samplerInfo.unnormalizedCoordinates = VK_FALSE;
+
+		VK_CHECK(vkCreateSampler(mDevice, &samplerInfo, nullptr, &mCubemapSampler));
+
+		auto shaderSource = ReadFile("Assets/Shaders/Cubemap.spv");
+		VkShaderModule shader = CreateShader(shaderSource);
+
+		std::array<VkPipelineShaderStageCreateInfo, 2> stages =
+		{
+			MakeShaderStage(shader, VK_SHADER_STAGE_VERTEX_BIT, "VSMain"),
+			MakeShaderStage(shader, VK_SHADER_STAGE_FRAGMENT_BIT, "FSMain")
+		};
+
+		std::array<VkDynamicState, 2> dynamicStates =
+		{
+			VK_DYNAMIC_STATE_VIEWPORT,
+			VK_DYNAMIC_STATE_SCISSOR
+		};
+
+		VkPipelineDynamicStateCreateInfo dynamicState{ VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO };
+		dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
+		dynamicState.pDynamicStates = dynamicStates.data();
+
+		VkPipelineVertexInputStateCreateInfo vertexInput{ VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO };
+		vertexInput.vertexBindingDescriptionCount = 0;
+		vertexInput.vertexAttributeDescriptionCount = 0;
+
+		VkPipelineInputAssemblyStateCreateInfo inputAssembly{ VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO };
+		inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+		inputAssembly.primitiveRestartEnable = VK_FALSE;
+
+		VkPipelineViewportStateCreateInfo viewport{ VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO };
+		viewport.viewportCount = 1;
+		viewport.scissorCount = 1;
+
+		VkPipelineRasterizationStateCreateInfo rasterizer{ VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO };
+		rasterizer.cullMode = VK_CULL_MODE_NONE;
+		rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+		rasterizer.lineWidth = 1.0f;
+		rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+		rasterizer.depthBiasEnable = VK_FALSE;
+
+		VkPipelineMultisampleStateCreateInfo multisample{ VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO };
+		multisample.sampleShadingEnable = VK_FALSE;
+		multisample.rasterizationSamples = mMsaaSamples;
+
+		VkPipelineColorBlendAttachmentState colorAttachment{};
+		colorAttachment.blendEnable = VK_FALSE;
+		colorAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+
+		VkPipelineColorBlendStateCreateInfo colorBlend{ VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO };
+		colorBlend.attachmentCount = 1;
+		colorBlend.pAttachments = &colorAttachment;
+		colorBlend.logicOpEnable = VK_FALSE;
+
+		VkPipelineDepthStencilStateCreateInfo depthStencil{ VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO };
+		depthStencil.depthTestEnable = VK_TRUE;
+		depthStencil.depthWriteEnable = VK_FALSE;
+		depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
+
+		VkDescriptorSetLayoutBinding cubemapBinding{};
+		cubemapBinding.binding = 0;
+		cubemapBinding.descriptorCount = 1;
+		cubemapBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		cubemapBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+		VkDescriptorSetLayoutCreateInfo cubemapLayoutInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
+		cubemapLayoutInfo.bindingCount = 1;
+		cubemapLayoutInfo.pBindings = &cubemapBinding;
+
+		VK_CHECK(vkCreateDescriptorSetLayout(mDevice, &cubemapLayoutInfo, nullptr, &mCubemapSetLayout));
+
+		VkPushConstantRange pcRange{};
+		pcRange.offset = 0;
+		pcRange.size = sizeof(CubemapData);
+		pcRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+		VkPipelineLayoutCreateInfo layoutInfo{ VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
+		layoutInfo.setLayoutCount = 1;
+		layoutInfo.pSetLayouts = &mCubemapSetLayout;
+		layoutInfo.pushConstantRangeCount = 1;
+		layoutInfo.pPushConstantRanges = &pcRange;
+
+		VK_CHECK(vkCreatePipelineLayout(mDevice, &layoutInfo, nullptr, &mCubemapPipeLayout));
+
+		VkPipelineRenderingCreateInfo renderingInfo = GetRenderingInfo();
+
+		VkGraphicsPipelineCreateInfo pipelineInfo{ VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO };
+		pipelineInfo.pNext = &renderingInfo;
+		pipelineInfo.stageCount = stages.size();
+		pipelineInfo.pStages = stages.data();
+		pipelineInfo.pVertexInputState = &vertexInput;
+		pipelineInfo.pInputAssemblyState = &inputAssembly;
+		pipelineInfo.pViewportState = &viewport;
+		pipelineInfo.pRasterizationState = &rasterizer;
+		pipelineInfo.pMultisampleState = &multisample;
+		pipelineInfo.pColorBlendState = &colorBlend;
+		pipelineInfo.pDynamicState = &dynamicState;
+		pipelineInfo.pDepthStencilState = &depthStencil;
+		pipelineInfo.layout = mCubemapPipeLayout;
+
+		VK_CHECK(vkCreateGraphicsPipelines(mDevice, nullptr, 1, &pipelineInfo, nullptr, &mCubemapPipe));
+
+		vkDestroyShaderModule(mDevice, shader, nullptr);
+	}
+
 	void App::InitDescriptorSets()
 	{
 		mGlobalSets.resize(MaxFramesInFlight);
@@ -1213,6 +1488,11 @@ namespace im
 		allocInfo.pSetLayouts = &mPerObjectLayout;
 		VK_CHECK(vkAllocateDescriptorSets(mDevice, &allocInfo, &mPerObjectSet));
 
+		allocInfo.descriptorPool = mGlobalPool;
+		allocInfo.descriptorSetCount = 1;
+		allocInfo.pSetLayouts = &mCubemapSetLayout;
+		VK_CHECK(vkAllocateDescriptorSets(mDevice, &allocInfo, &mCubemapSet));
+
 		VkDescriptorImageInfo imageWrite{};
 		imageWrite.imageView = mTextureView;
 		imageWrite.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -1225,7 +1505,12 @@ namespace im
 		write.dstBinding = 0;
 		write.dstSet = mPerObjectSet;
 		write.pImageInfo = &imageWrite;
+		vkUpdateDescriptorSets(mDevice, 1, &write, 0, nullptr);
 
+		imageWrite.imageView = mCubemapView;
+		imageWrite.sampler = mCubemapSampler;
+
+		write.dstSet = mCubemapSet;
 		vkUpdateDescriptorSets(mDevice, 1, &write, 0, nullptr);
 
 		for (int i = 0; i < MaxFramesInFlight; ++i)

@@ -8,4 +8,7 @@ target_sources(
 
             Camera.h
             Camera.cpp
+
+            Utils.h
+            Utils.cpp
 )
