@@ -7,6 +7,10 @@
 
 #include "Common.h"
 #include "Camera.h"
+#include "Device.h"
+#include "Buffer.h"
+#include "Texture2D.h"
+#include "TextureCube.h"
 
 namespace im
 {
@@ -43,18 +47,13 @@ namespace im
 
 	private:
 		void InitWindow();
-		void InitInstance();
-		void InitSurface();
-		void InitDevice();
-		void InitSwapchain();
-		void InitPipeline();
 		void InitCommandPool();
-		void InitCommandBuffers();
-		void InitMsaaTarget();
 		void InitDepthBuffer();
+		void InitPipeline();
+		void InitCommandBuffers();
 		void InitDescriptorPool();
 		void InitSyncPrimitives();
-		void InitImgui();
+		void InitImGui();
 		void InitModel();
 		void InitVertexBuffer();
 		void InitIndexBuffer();
@@ -66,16 +65,10 @@ namespace im
 		void CleanupSwapchain();
 		void RecreateSwapchain();
 
-		VkSurfaceFormatKHR ChooseSurfaceFormat();
-		VkPresentModeKHR ChoosePresentMode();
-		VkExtent2D ChooseSurfaceExtent();
-
 		VkShaderModule CreateShader(const std::vector<char>& source);
 
-		std::pair<VkBuffer, VmaAllocation> CreateBuffer(VkBufferUsageFlags usage, VkDeviceSize size, VmaAllocationCreateFlags vmaFlags);
-
 		void TransitionSwapchainImage(
-			uint32_t imageIndex,
+			VkImage image,
 			VkImageLayout oldLayout,
 			VkImageLayout newLayout,
 			VkAccessFlags2 srcAccess,
@@ -83,15 +76,9 @@ namespace im
 			VkPipelineStageFlags2 srcStage,
 			VkPipelineStageFlags2 dstStage);
 
-		VkFormat GetSupportedFormat(const std::initializer_list<VkFormat>& formats, VkImageTiling tiling, VkFormatFeatureFlags flags);
-
 		VkCommandBuffer CreateImmediateCommandBuffer();
 		void CopyBuffer(VkCommandBuffer commandBuffer, VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
 		void SubmitImmediateCommandBuffer(VkCommandBuffer commandBuffer);
-
-		void GenerateMipmaps(VkImage image, VkFormat format, int width, int height, uint32_t levelCount);
-
-		VkPipelineRenderingCreateInfo GetRenderingInfo() const;
 
 	private:
 		static constexpr int MaxFramesInFlight = 2;
@@ -117,15 +104,7 @@ namespace im
 
 		GLFWwindow* mWindow;
 
-		VkInstance mInstance{ VK_NULL_HANDLE };
-		VkDebugUtilsMessengerEXT mDebugMessenger{ VK_NULL_HANDLE };
-		VkSurfaceKHR mSurface{ VK_NULL_HANDLE };
-		VkPhysicalDevice mGpu{ VK_NULL_HANDLE };
-		VkDevice mDevice{ VK_NULL_HANDLE };
-		VmaAllocator mAllocator{ VK_NULL_HANDLE };
-		VkSwapchainKHR mSwapchain{ VK_NULL_HANDLE };
-		std::vector<VkImage> mSwapchainImages;
-		std::vector<VkImageView> mSwapchainImageViews;
+		std::unique_ptr<Device> mDevice;
 		VkDescriptorSetLayout mGlobalLayout{ VK_NULL_HANDLE };
 		VkDescriptorSetLayout mPerObjectLayout{ VK_NULL_HANDLE };
 		VkPipelineLayout mPipeLayout{ VK_NULL_HANDLE };
@@ -136,32 +115,17 @@ namespace im
 		VkDescriptorPool mPerObjectPool{ VK_NULL_HANDLE };
 		std::vector<VkDescriptorSet> mGlobalSets;
 		VkDescriptorSet mPerObjectSet{ VK_NULL_HANDLE };
-		VkSampleCountFlagBits mMsaaSamples;
 
-		VkImage mMsaaImage{ VK_NULL_HANDLE };
-		VmaAllocation mMsaaAllocation{ VK_NULL_HANDLE };
-		VkImageView mMsaaView{ VK_NULL_HANDLE };
-		VkFormat mMsaaFormat;
+		std::unique_ptr<Texture2D> mDepthImage;
 
-		VkImage mDepthImage{ VK_NULL_HANDLE };
-		VmaAllocation mDepthAllocation{ VK_NULL_HANDLE };
-		VkImageView mDepthView{ VK_NULL_HANDLE };
-		VkFormat mDepthFormat;
-
-		std::vector<VkBuffer> mUniformBuffers;
-		std::vector<VmaAllocation> mUniformBufferAllocations;
+		std::vector<std::unique_ptr<Buffer>> mUniformBuffers;
 
 		std::vector<Vertex> mVertices;
-		VkBuffer mVertexBuffer{ VK_NULL_HANDLE };
-		VmaAllocation mVertexBufferAllocation{ VK_NULL_HANDLE };
+		std::unique_ptr<Buffer> mVertexBuffer;
 		std::vector<uint32_t> mIndices;
-		VkBuffer mIndexBuffer{ VK_NULL_HANDLE };
-		VmaAllocation mIndexBufferAllocation{ VK_NULL_HANDLE };
+		std::unique_ptr<Buffer> mIndexBuffer;
 
-		uint32_t mMipLevelCount;
-		VkImage mTexture{ VK_NULL_HANDLE };
-		VmaAllocation mTextureAllocation{ VK_NULL_HANDLE };
-		VkImageView mTextureView{ VK_NULL_HANDLE };
+		std::unique_ptr<Texture2D> mTexture;
 		VkSampler mTextureSampler{ VK_NULL_HANDLE };
 
 		VkDescriptorSetLayout mCubemapSetLayout{ VK_NULL_HANDLE };
@@ -169,9 +133,7 @@ namespace im
 		VkPipeline mCubemapPipe{ VK_NULL_HANDLE };
 		VkDescriptorSet mCubemapSet{ VK_NULL_HANDLE };
 
-		VkImage mCubemap{ VK_NULL_HANDLE };
-		VmaAllocation mCubemapAllocation{ VK_NULL_HANDLE };
-		VkImageView mCubemapView{ VK_NULL_HANDLE };
+		std::unique_ptr<TextureCube> mCubemap;
 		VkSampler mCubemapSampler{ VK_NULL_HANDLE };
 
 		std::vector<VkCommandBuffer> mCommandBuffers;
@@ -182,15 +144,6 @@ namespace im
 		uint32_t mSemaphoreIndex{ 0 };
 		bool mFramebufferResized{ false };
 
-		VkQueue mGraphicsQueue{ VK_NULL_HANDLE };
-		VkQueue mPresentQueue{ VK_NULL_HANDLE };
-
-		uint32_t mGraphicsIndex;
-		uint32_t mPresentIndex;
-
-		VkFormat mSwapchainFormat;
-		VkExtent2D mSwapchainExtent;
-
 		Camera mCamera;
 
 		bool mFirstTouch{ true };
@@ -199,22 +152,7 @@ namespace im
 		static void FramebufferSizeCallback(GLFWwindow* window, int width, int height);
 		static void MousePositionCallback(GLFWwindow* window, double xpos, double ypos);
 
-		static bool InstanceExtensionSupported(const char* name);
-		static bool DeviceExtensionSupported(VkPhysicalDevice gpu, const char* name);
-
-		static VkDebugUtilsMessengerCreateInfoEXT GetDebugInfo();
-
-		static std::vector<char> ReadFile(const std::filesystem::path& path);
-
 		static VkPipelineShaderStageCreateInfo MakeShaderStage(VkShaderModule shader, VkShaderStageFlagBits stage, const char* entrypoint);
-
-		static bool HasStencilComponent(VkFormat format);
-
-		static VKAPI_ATTR VkBool32 VKAPI_CALL DebugMessengerCallback(
-			VkDebugUtilsMessageSeverityFlagBitsEXT severity,
-			VkDebugUtilsMessageTypeFlagsEXT type,
-			const VkDebugUtilsMessengerCallbackDataEXT* data,
-			void* userData);
 	};
 }
 

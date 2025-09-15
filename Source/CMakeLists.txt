@@ -11,4 +11,19 @@ target_sources(
 
             Utils.h
             Utils.cpp
+
+            Device.h
+            Device.cpp
+
+            Swapchain.h
+            Swapchain.cpp
+
+            Buffer.h
+            Buffer.cpp
+
+            Texture2D.h
+            Texture2D.cpp
+
+            TextureCube.h
+            TextureCube.cpp
 )
