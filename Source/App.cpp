@@ -270,17 +270,6 @@ namespace im
 		// Forward pass
 		vkCmdBindPipeline(mCommandBuffers[mFrameIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, mPipe);
 
-		LightingData lighting{};
-		lighting.lightPosition = glm::vec3(cosf(glfwGetTime()), 3.0f * sinf(2.0f * glfwGetTime()), 0.0f);
-
-		void* globalBufferData;
-		VK_CHECK(vmaMapMemory(mAllocator, mUniformBufferAllocations[mFrameIndex], &globalBufferData));
-		std::memcpy(globalBufferData, &lighting, sizeof(lighting));
-		vmaUnmapMemory(mAllocator, mUniformBufferAllocations[mFrameIndex]);
-
-		VkDescriptorSet descSets[] = { mGlobalSets[mFrameIndex], mPerObjectSet };
-		vkCmdBindDescriptorSets(mCommandBuffers[mFrameIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, mPipeLayout, 0, 2, descSets, 0, nullptr);
-
 		MatrixData pushConsts{};
 		glm::mat4 model = glm::mat4(1.0f);
 		model = glm::translate(model, glm::vec3(0.0f, -1.0f, 0.0f));
@@ -289,6 +278,18 @@ namespace im
 		pushConsts.mv = view * model;
 		pushConsts.mvp = proj * pushConsts.mv;
 		pushConsts.normal = glm::transpose(glm::inverse(view * model));
+
+		LightingData lighting{};
+		lighting.vInverse = glm::inverse(view);
+		lighting.lightPosition = view * glm::vec4(0.0f, 1.0f, 5.0f, 1.0f);
+
+		void* globalBufferData;
+		VK_CHECK(vmaMapMemory(mAllocator, mUniformBufferAllocations[mFrameIndex], &globalBufferData));
+		std::memcpy(globalBufferData, &lighting, sizeof(lighting));
+		vmaUnmapMemory(mAllocator, mUniformBufferAllocations[mFrameIndex]);
+
+		VkDescriptorSet descSets[] = { mGlobalSets[mFrameIndex], mPerObjectSet };
+		vkCmdBindDescriptorSets(mCommandBuffers[mFrameIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, mPipeLayout, 0, 2, descSets, 0, nullptr);
 
 		vkCmdPushConstants(mCommandBuffers[mFrameIndex], mPipeLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pushConsts), &pushConsts);
 		
@@ -694,15 +695,22 @@ namespace im
 		lightingBufferBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		lightingBufferBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
+		VkDescriptorSetLayoutBinding cubemapBinding{};
+		cubemapBinding.binding = 1;
+		cubemapBinding.descriptorCount = 1;
+		cubemapBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		cubemapBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
 		VkDescriptorSetLayoutBinding imageBinding{};
 		imageBinding.binding = 0;
 		imageBinding.descriptorCount = 1;
 		imageBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 		imageBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
+		VkDescriptorSetLayoutBinding globalBindings[]{ lightingBufferBinding, cubemapBinding };
 		VkDescriptorSetLayoutCreateInfo globalLayoutInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
-		globalLayoutInfo.bindingCount = 1;
-		globalLayoutInfo.pBindings = &lightingBufferBinding;
+		globalLayoutInfo.bindingCount = 2;
+		globalLayoutInfo.pBindings = globalBindings;
 
 		VkDescriptorSetLayoutCreateInfo perObjectLayoutInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
 		perObjectLayoutInfo.bindingCount = 1;
@@ -904,7 +912,7 @@ namespace im
 
 	void App::InitDescriptorPool()
 	{
-		VkDescriptorPoolSize globalSizes[]{ { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, MaxFramesInFlight }, { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1 } };
+		VkDescriptorPoolSize globalSizes[]{ { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, MaxFramesInFlight }, { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, MaxFramesInFlight + 1 } };
 		VkDescriptorPoolSize perObjectSizes[]{ { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1 } };
 
 		VkDescriptorPoolCreateInfo poolInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO };
@@ -1528,7 +1536,11 @@ namespace im
 			bufferWrite.dstSet = mGlobalSets[i];
 			bufferWrite.pBufferInfo = &buffer;
 
-			vkUpdateDescriptorSets(mDevice, 1, &bufferWrite, 0, nullptr);
+			write.dstBinding = 1;
+			write.dstSet = mGlobalSets[i];
+
+			VkWriteDescriptorSet writes[]{ bufferWrite, write };
+			vkUpdateDescriptorSets(mDevice, 2, writes, 0, nullptr);
 		}
 
 	}

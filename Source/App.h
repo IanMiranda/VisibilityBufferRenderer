@@ -105,6 +105,7 @@ namespace im
 
 		struct LightingData
 		{
+			glm::mat4 vInverse;
 			glm::vec3 lightPosition;
 			float _pad0;
 		};

@@ -57,9 +57,16 @@ SamplerState gSampler : register(s0, space1);
 
 cbuffer LightingData : register(b0, space0)
 {
+	float4x4 vInverse;
 	float3 lightPos;
 	float _pad0;
 }
+
+[[vk::combinedImageSampler]]
+TextureCube gCubemap : register(t1, space0);
+
+[[vk::combinedImageSampler]]
+SamplerState gCubemapSampler: register(s1, space0);
 
 float4 FSMain(VSOutput input) : SV_Target0
 {
@@ -68,9 +75,9 @@ float4 FSMain(VSOutput input) : SV_Target0
 	float4 I = float4(1.0, 1.0, 1.0, 1.0);
 	float4 Ia = float4(0.01, 0.01, 0.01, 1.0);
 
-	float4 Kd = gTexture.Sample(gSampler, input.uv);
+	float4 Kd = gTexture.Sample(gSampler, input.uv) * 0.1;
 
-	float4 Ks = float4(0.5, 0.5, 0.5, 1.0);
+	float4 Ks = float4(0.9, 0.9, 0.9, 1.0);
 
 	float3 N = normalize(input.normal);
 	float3 W = normalize(lightPos - input.posView);
@@ -87,5 +94,12 @@ float4 FSMain(VSOutput input) : SV_Target0
 
 	float4 ambient = Kd * Ia;
 
-	return ambient + diffuse + specular;
+	// Environment reflections
+	float3 Wr = normalize(reflect(-V, N));
+	float4 Kr = Ks;
+	float4 cosTheta = saturate(dot(Wr, W));
+	float4 envReflection = float4((Kr * (cosTheta > 0.99)).xyz, 1.0);
+	float4 envColor = Kr * gCubemap.Sample(gCubemapSampler, mul(vInverse, float4(Wr, 1.0)).xyz);
+
+	return ambient + diffuse + specular + envColor;
 }
