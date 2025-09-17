@@ -36,6 +36,7 @@ namespace im
 		InitUniformBuffers();
 		InitTexture();
 		InitCubemap();
+		InitShadowResources();
 		InitDescriptorSets();
 	}
 
@@ -46,9 +47,15 @@ namespace im
 
 		mDevice->WaitIdle();
 
+		vkDestroyPipeline(dev, mShadowPipe, nullptr);
+		vkDestroyPipelineLayout(dev, mShadowPipeLayout, nullptr);
+
 		vkDestroyPipeline(dev, mCubemapPipe, nullptr);
 		vkDestroyPipelineLayout(dev, mCubemapPipeLayout, nullptr);
 		vkDestroyDescriptorSetLayout(dev, mCubemapSetLayout, nullptr);
+
+		vkDestroySampler(dev, mShadowMapSampler, nullptr);
+		mShadowMap.reset();
 
 		vkDestroySampler(dev, mCubemapSampler, nullptr);
 		mCubemap.reset();
@@ -56,9 +63,12 @@ namespace im
 		vkDestroySampler(dev, mTextureSampler, nullptr);
 		mTexture.reset();
 
+		mPlaneIBO.reset();
+		mPlaneVBO.reset();
+
 		mUniformBuffers.clear();
-		mIndexBuffer.reset();
-		mVertexBuffer.reset();
+		mMeshIBO.reset();
+		mMeshVBO.reset();
 
 		ImGui_ImplVulkan_Shutdown();
 		ImGui_ImplGlfw_Shutdown();
@@ -110,33 +120,31 @@ namespace im
 
 	void App::Update(float deltaTime)
 	{
-		//glm::mat4 view = glm::lookAt(glm::vec3(2.0f * sinf(deltaTime), 0.0f, 2.0f * cosf(deltaTime)), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-
 		if (glfwGetKey(mWindow, GLFW_KEY_ESCAPE) == GLFW_PRESS)
 			glfwSetWindowShouldClose(mWindow, GLFW_TRUE);
 
 		const float moveFactor = 2.5f;
 
-		const auto front = mCamera.GetFront();
+		const auto front = mCamera.front;
 		glm::vec3 up(0.0f, 1.0f, 0.0f);
 		glm::vec3 right = glm::normalize(glm::cross(front, up));
 
 		if (glfwGetKey(mWindow, GLFW_KEY_W) == GLFW_PRESS)
 		{
-			mCamera.SetPosition(mCamera.GetPosition() + front * deltaTime * moveFactor);
+			mCamera.position += front * deltaTime * moveFactor;
 		}
 		else if (glfwGetKey(mWindow, GLFW_KEY_S) == GLFW_PRESS)
 		{
-			mCamera.SetPosition(mCamera.GetPosition() + -front * deltaTime * moveFactor);
+			mCamera.position += -front * deltaTime * moveFactor;
 		}
 
 		if (glfwGetKey(mWindow, GLFW_KEY_A) == GLFW_PRESS)
 		{
-			mCamera.SetPosition(mCamera.GetPosition() + -right * deltaTime * moveFactor);
+			mCamera.position += -right * deltaTime * moveFactor;
 		}
 		else if (glfwGetKey(mWindow, GLFW_KEY_D) == GLFW_PRESS)
 		{
-			mCamera.SetPosition(mCamera.GetPosition() + right * deltaTime * moveFactor);
+			mCamera.position += right * deltaTime * moveFactor;
 		}
 
 		mCamera.Update();
@@ -172,6 +180,20 @@ namespace im
 		
 		VK_CHECK(vkBeginCommandBuffer(mCommandBuffers[mFrameIndex], &beginInfo));
 
+		glm::vec3 lightDir = glm::vec3(2.0f * sin(glfwGetTime()), 2.0f, -2.0f * cos(glfwGetTime()));
+
+		glm::mat4 lightView = glm::lookAt(
+			lightDir,
+			glm::vec3(0.0f, 0.0f, 0.0f),
+			glm::vec3(0.0f, 1.0f, 0.0f));
+
+
+		// Transform and project to "light space"
+		constexpr float shadowProjDim = 10.0f;
+		glm::mat4 lightProj = glm::ortho(-shadowProjDim, shadowProjDim, -shadowProjDim, shadowProjDim, 0.1f, shadowProjDim); // No perspective skew for dir light
+
+		DrawShadowMap(mCommandBuffers[mFrameIndex], lightView, lightProj);
+
 		TransitionSwapchainImage(
 			swapchain.GetImages()[imageIndex],
 			VK_IMAGE_LAYOUT_UNDEFINED,
@@ -181,54 +203,39 @@ namespace im
 			VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
 			VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
 
-		VkClearValue clearColor{};
-		clearColor.color = { 0.0f, 0.0f, 0.0f, 1.0f };
+		auto [viewport, scissor] = utils::ViewportAndScissor(swapExtent);
+		vkCmdSetViewport(mCommandBuffers[mFrameIndex], 0, 1, &viewport);
+		vkCmdSetScissor(mCommandBuffers[mFrameIndex], 0, 1, &scissor);
 
-		VkRect2D area{};
-		area.offset = { 0, 0 };
-		area.extent = swapExtent;
+		VkClearValue color{};
+		color.color = { 0.0f, 0.0f, 0.0f, 1.0f };
 
-		VkRenderingAttachmentInfo colorAttachmentInfo{ VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO };
-		colorAttachmentInfo.clearValue = clearColor;
-		colorAttachmentInfo.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-		colorAttachmentInfo.imageView = swapchain.GetViews()[imageIndex];
-		colorAttachmentInfo.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-		colorAttachmentInfo.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+		VkClearValue depth{};
+		depth.depthStencil.depth = 1.0f;
+		depth.depthStencil.stencil = 0;
 
-		VkClearValue clearDepth{};
-		clearDepth.depthStencil.depth = 1.0f;
-		clearDepth.depthStencil.stencil = 0;
-
-		VkRenderingAttachmentInfo depthAttachmentInfo{ VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO };
-		depthAttachmentInfo.clearValue = clearDepth;
-		depthAttachmentInfo.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-		depthAttachmentInfo.imageView = mDepthImage->GetView();
-		depthAttachmentInfo.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-		depthAttachmentInfo.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		VkRenderingAttachmentInfo colorAttach{ VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO };
+		colorAttach.clearValue = color;
+		colorAttach.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		colorAttach.imageView = swapchain.GetViews()[imageIndex];
+		colorAttach.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+		colorAttach.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+		
+		VkRenderingAttachmentInfo depthAttach{ VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO };
+		depthAttach.clearValue = depth;
+		depthAttach.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+		depthAttach.imageView = mDepthImage->GetView();
+		depthAttach.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+		depthAttach.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 
 		VkRenderingInfo renderingInfo{ VK_STRUCTURE_TYPE_RENDERING_INFO };
 		renderingInfo.colorAttachmentCount = 1;
-		renderingInfo.pColorAttachments = &colorAttachmentInfo;
-		renderingInfo.pDepthAttachment = &depthAttachmentInfo;
-		renderingInfo.renderArea = area;
+		renderingInfo.pColorAttachments = &colorAttach;
+		renderingInfo.pDepthAttachment = &depthAttach;
+		renderingInfo.renderArea = scissor;
 		renderingInfo.layerCount = 1;
 
 		vkCmdBeginRendering(mCommandBuffers[mFrameIndex], &renderingInfo);
-
-		VkViewport viewport{};
-		viewport.width = swapExtent.width;
-		viewport.height = -static_cast<float>(swapExtent.height);
-		viewport.minDepth = 0.0f;
-		viewport.maxDepth = 1.0f;
-		viewport.x = 0.0f;
-		viewport.y = static_cast<float>(swapExtent.height);
-
-		VkRect2D scissor{};
-		scissor.offset = { 0, 0 };
-		scissor.extent = swapExtent;
-
-		vkCmdSetViewport(mCommandBuffers[mFrameIndex], 0, 1, &viewport);
-		vkCmdSetScissor(mCommandBuffers[mFrameIndex], 0, 1, &scissor);
 
 		CubemapData cubemapData{};
 		glm::mat4 view = mCamera.GetViewMatrix();
@@ -242,7 +249,18 @@ namespace im
 		vkCmdDraw(mCommandBuffers[mFrameIndex], 3, 1, 0, 0);
 
 		// Forward pass
+		LightingData lighting{};
+		lighting.vInverse = glm::inverse(view);
+		lighting.lightDir = view * glm::vec4(lightDir, 0.0f);
+
+		void* globalBufferData = mUniformBuffers[mFrameIndex]->Map();
+		std::memcpy(globalBufferData, &lighting, sizeof(lighting));
+		mUniformBuffers[mFrameIndex]->Unmap();
+
 		vkCmdBindPipeline(mCommandBuffers[mFrameIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, mPipe);
+
+		VkDescriptorSet descSets[] = { mGlobalSets[mFrameIndex], mPerObjectSet };
+		vkCmdBindDescriptorSets(mCommandBuffers[mFrameIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, mPipeLayout, 0, 2, descSets, 0, nullptr);
 
 		MatrixData pushConsts{};
 		glm::mat4 model = glm::mat4(1.0f);
@@ -251,28 +269,32 @@ namespace im
 
 		pushConsts.mv = view * model;
 		pushConsts.mvp = proj * pushConsts.mv;
-		pushConsts.normal = glm::transpose(glm::inverse(view * model));
-
-		LightingData lighting{};
-		lighting.vInverse = glm::inverse(view);
-		lighting.lightPosition = view * glm::vec4(0.0f, 1.0f, 5.0f, 1.0f);
-
-		void* globalBufferData = mUniformBuffers[mFrameIndex]->Map();
-		std::memcpy(globalBufferData, &lighting, sizeof(lighting));
-		mUniformBuffers[mFrameIndex]->Unmap();
-
-		VkDescriptorSet descSets[] = { mGlobalSets[mFrameIndex], mPerObjectSet };
-		vkCmdBindDescriptorSets(mCommandBuffers[mFrameIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, mPipeLayout, 0, 2, descSets, 0, nullptr);
-
+		pushConsts.normal = glm::transpose(glm::inverse(pushConsts.mv));
+		pushConsts.mvpLight = lightProj * lightView * model;
 		vkCmdPushConstants(mCommandBuffers[mFrameIndex], mPipeLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pushConsts), &pushConsts);
 		
+		// Mesh
 		VkDeviceSize offsets[] = { 0 };
-		VkBuffer vertexBuffer = mVertexBuffer->Get();
+		VkBuffer vertexBuffer = mMeshVBO->Get();
 		vkCmdBindVertexBuffers(mCommandBuffers[mFrameIndex], 0, 1, &vertexBuffer, offsets);
-
-		vkCmdBindIndexBuffer(mCommandBuffers[mFrameIndex], mIndexBuffer->Get(), 0, VK_INDEX_TYPE_UINT32);
-
+		vkCmdBindIndexBuffer(mCommandBuffers[mFrameIndex], mMeshIBO->Get(), 0, VK_INDEX_TYPE_UINT32);
 		vkCmdDrawIndexed(mCommandBuffers[mFrameIndex], mIndices.size(), 1, 0, 0, 0);
+
+		// Plane
+		model = glm::mat4(1.0f);
+		model = glm::translate(model, glm::vec3(0.0f, -1.0f, 0.0f));
+		model = glm::scale(model, glm::vec3(5.0f));
+
+		pushConsts.mv = view * model;
+		pushConsts.mvp = proj * pushConsts.mv;
+		pushConsts.normal = glm::transpose(glm::inverse(pushConsts.mv));
+		pushConsts.mvpLight = lightProj * lightView * model;
+		vkCmdPushConstants(mCommandBuffers[mFrameIndex], mPipeLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pushConsts), &pushConsts);
+
+		vertexBuffer = mPlaneVBO->Get();
+		vkCmdBindVertexBuffers(mCommandBuffers[mFrameIndex], 0, 1, &vertexBuffer, offsets);
+		vkCmdBindIndexBuffer(mCommandBuffers[mFrameIndex], mPlaneIBO->Get(), 0, VK_INDEX_TYPE_UINT16);
+		vkCmdDrawIndexed(mCommandBuffers[mFrameIndex], 6, 1, 0, 0, 0);
 
 		ImGui::ShowDemoWindow();
 
@@ -320,6 +342,83 @@ namespace im
 
 		mSemaphoreIndex = (mSemaphoreIndex + 1) % mAcquireSemaphores.size();
 		mFrameIndex = (mFrameIndex + 1) % MaxFramesInFlight;
+	}
+
+	void App::DrawShadowMap(VkCommandBuffer commandBuffer, const glm::mat4& lightView, const glm::mat4& lightProj)
+	{
+		// First pass: shadow map generation
+		mShadowMap->Barrier(commandBuffer,
+			VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+			VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_READ_BIT, // WAR hazard - only need execution dep
+			VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+			VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT);
+
+		const VkExtent2D shadowMapExtent = mShadowMap->GetExtent();
+		const VkRect2D shadowRenderArea = { { 0, 0 }, shadowMapExtent };
+
+		VkClearValue depthClear{};
+		depthClear.depthStencil.depth = 1.0f;
+		depthClear.depthStencil.stencil = 0;
+
+		VkRenderingAttachmentInfo shadowAttachment{ VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO };
+		shadowAttachment.clearValue = depthClear;
+		shadowAttachment.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+		shadowAttachment.imageView = mShadowMap->GetView();
+		shadowAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+		shadowAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+
+		VkRenderingInfo renderingInfo{ VK_STRUCTURE_TYPE_RENDERING_INFO };
+		renderingInfo.pDepthAttachment = &shadowAttachment;
+		renderingInfo.renderArea = shadowRenderArea;
+		renderingInfo.layerCount = 1;
+
+		vkCmdBeginRendering(commandBuffer, &renderingInfo);
+
+		{
+			const auto [viewport, scissor] = utils::ViewportAndScissor(shadowMapExtent);
+			vkCmdSetViewport(commandBuffer, 0, 1, & viewport);
+			vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+
+			vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mShadowPipe);
+
+			MatrixData pushConsts{};
+			glm::mat4 model = glm::mat4(1.0f);
+			model = glm::translate(model, glm::vec3(0.0f, -1.0f, 0.0f));
+			model = glm::scale(model, glm::vec3(0.1f));
+			pushConsts.mvp = lightProj * lightView * model;
+
+			vkCmdPushConstants(commandBuffer, mShadowPipeLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pushConsts), &pushConsts);
+
+			// Mesh
+			VkDeviceSize offsets[] = { 0 };
+			VkBuffer vertexBuffer = mMeshVBO->Get();
+			vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer, offsets);
+			vkCmdBindIndexBuffer(commandBuffer, mMeshIBO->Get(), 0, VK_INDEX_TYPE_UINT32);
+			vkCmdDrawIndexed(commandBuffer, mIndices.size(), 1, 0, 0, 0);
+
+			// Plane
+			model = glm::mat4(1.0f);
+			model = glm::translate(model, glm::vec3(0.0f, -1.0f, 0.0f));
+			model = glm::scale(model, glm::vec3(5.0f));
+
+			pushConsts.mvp = lightProj * lightView * model;
+			vkCmdPushConstants(commandBuffer, mShadowPipeLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pushConsts), &pushConsts);
+
+			vertexBuffer = mPlaneVBO->Get();
+			vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer, offsets);
+			vkCmdBindIndexBuffer(commandBuffer, mPlaneIBO->Get(), 0, VK_INDEX_TYPE_UINT16);
+			vkCmdDrawIndexed(commandBuffer, 6, 1, 0, 0, 0);
+		}
+
+		vkCmdEndRendering(commandBuffer);
+
+		mShadowMap->Barrier(mCommandBuffers[mFrameIndex],
+			VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+			VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL,
+			VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+			VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+			VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+			VK_ACCESS_2_SHADER_READ_BIT);
 	}
 
 	void App::InitWindow()
@@ -428,7 +527,7 @@ namespace im
 		viewport.scissorCount = 1;
 
 		VkPipelineRasterizationStateCreateInfo rasterizer{ VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO };
-		rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+		rasterizer.cullMode = VK_CULL_MODE_NONE;
 		rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
 		rasterizer.lineWidth = 1.0f;
 		rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
@@ -469,15 +568,21 @@ namespace im
 		cubemapBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 		cubemapBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
+		VkDescriptorSetLayoutBinding shadowMapBinding{};
+		shadowMapBinding.binding = 2;
+		shadowMapBinding.descriptorCount = 1;
+		shadowMapBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		shadowMapBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
 		VkDescriptorSetLayoutBinding imageBinding{};
 		imageBinding.binding = 0;
 		imageBinding.descriptorCount = 1;
 		imageBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 		imageBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-		VkDescriptorSetLayoutBinding globalBindings[]{ lightingBufferBinding, cubemapBinding };
+		VkDescriptorSetLayoutBinding globalBindings[]{ lightingBufferBinding, cubemapBinding, shadowMapBinding };
 		VkDescriptorSetLayoutCreateInfo globalLayoutInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
-		globalLayoutInfo.bindingCount = 2;
+		globalLayoutInfo.bindingCount = 3;
 		globalLayoutInfo.pBindings = globalBindings;
 
 		VkDescriptorSetLayoutCreateInfo perObjectLayoutInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
@@ -539,11 +644,11 @@ namespace im
 	{
 		const auto dev = mDevice->Get();
 
-		VkDescriptorPoolSize globalSizes[]{ { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, MaxFramesInFlight }, { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, MaxFramesInFlight + 1 } };
+		VkDescriptorPoolSize globalSizes[]{ { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, MaxFramesInFlight }, { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2 * MaxFramesInFlight + 1 } };
 		VkDescriptorPoolSize perObjectSizes[]{ { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1 } };
 
 		VkDescriptorPoolCreateInfo poolInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO };
-		poolInfo.maxSets = MaxFramesInFlight + 1;
+		poolInfo.maxSets = 2 * MaxFramesInFlight + 1;
 		poolInfo.poolSizeCount = 2;
 		poolInfo.pPoolSizes = globalSizes;
 		VK_CHECK(vkCreateDescriptorPool(dev, &poolInfo, nullptr, &mGlobalPool));
@@ -663,27 +768,50 @@ namespace im
 
 	void App::InitVertexBuffer()
 	{
-		const auto size = mVertices.size() * sizeof(mVertices[0]);
-		
-		Buffer staging(*mDevice, size, mVertices.data());
-
-		mVertexBuffer = std::make_unique<Buffer>(*mDevice, size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, 0);
-
 		auto cmds = CreateImmediateCommandBuffer();
-		CopyBuffer(cmds, staging.Get(), mVertexBuffer->Get(), size);
+		
+		const VkDeviceSize meshSize = mVertices.size() * sizeof(mVertices[0]);
+		
+		const std::vector<Vertex> planeVertices
+		{
+			{ { -0.5f, 0.0f, 0.5f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 0.0f, 1.0f }, { 0.0f, 1.0f, 0.0f } },
+			{ { 0.5f, 0.0f, 0.5f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 1.0f, 1.0f }, { 0.0f, 1.0f, 0.0f } },
+			{ { 0.5f, 0.0f, -0.5f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 1.0f, 0.0f }, { 0.0f, 1.0f, 0.0f } },
+			{ { -0.5f, 0.0f, -0.5f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f } },
+		};
+
+		Buffer stagingMesh(*mDevice, meshSize, mVertices.data());
+		mMeshVBO = std::make_unique<Buffer>(*mDevice, meshSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, 0);
+		CopyBuffer(cmds, stagingMesh.Get(), mMeshVBO->Get(), meshSize);
+
+		const VkDeviceSize planeSize = planeVertices.size() * sizeof(planeVertices[0]);
+		Buffer stagingPlane(*mDevice, meshSize, planeVertices.data());
+		mPlaneVBO = std::make_unique<Buffer>(*mDevice, planeSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, 0);
+		CopyBuffer(cmds, stagingPlane.Get(), mPlaneVBO->Get(), planeSize);
+		
 		SubmitImmediateCommandBuffer(cmds);
 	}
 
 	void App::InitIndexBuffer()
 	{
-		const auto size = mIndices.size() * sizeof(mIndices[0]);
-
-		Buffer staging(*mDevice, size, mIndices.data());
-
-		mIndexBuffer = std::make_unique<Buffer>(*mDevice, size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, 0);
+		const VkDeviceSize meshSize = mIndices.size() * sizeof(mIndices[0]);
+		const std::vector<uint16_t> planeIndices
+		{
+			0, 1, 2,
+			2, 3, 0
+		};
+		const VkDeviceSize planeSize = planeIndices.size() * sizeof(planeIndices[0]);
 
 		auto cmds = CreateImmediateCommandBuffer();
-		CopyBuffer(cmds, staging.Get(), mIndexBuffer->Get(), size);
+
+		Buffer stagingMesh(*mDevice, meshSize, mIndices.data());
+		mMeshIBO = std::make_unique<Buffer>(*mDevice, meshSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, 0);
+		CopyBuffer(cmds, stagingMesh.Get(), mMeshIBO->Get(), meshSize);
+
+		Buffer stagingPlane(*mDevice, planeSize, planeIndices.data());
+		mPlaneIBO = std::make_unique<Buffer>(*mDevice, planeSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, 0);
+		CopyBuffer(cmds, stagingPlane.Get(), mPlaneIBO->Get(), planeSize);
+
 		SubmitImmediateCommandBuffer(cmds);
 	}
 
@@ -948,6 +1076,137 @@ namespace im
 		vkDestroyShaderModule(dev, shader, nullptr);
 	}
 
+	void App::InitShadowResources()
+	{
+		stbi_set_flip_vertically_on_load(false); // Reversing UV coords using vp^-1, so images will be loaded in correct orientation
+
+		const auto dev = mDevice->Get();
+		const auto allocator = mDevice->GetAllocator();
+		
+		constexpr VkDeviceSize bytesPerPixel = 4;
+		constexpr size_t cubemapFaces = 6;
+		constexpr uint32_t shadowWidth = 1024;
+		constexpr uint32_t shadowHeight = 1024;
+
+		const VkDeviceSize faceSize = shadowWidth * shadowHeight * bytesPerPixel;
+		const VkDeviceSize size = faceSize * 6;
+
+		mShadowMap = std::make_unique<Texture2D>(*mDevice, mDepthImage->GetFormat(),
+			VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, shadowWidth, shadowHeight, false);
+
+		VkSamplerCreateInfo samplerInfo{ VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
+		samplerInfo.minFilter = VK_FILTER_LINEAR;
+		samplerInfo.magFilter = VK_FILTER_LINEAR;
+		samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+		samplerInfo.minLod = 0.0f;
+		samplerInfo.maxLod = VK_LOD_CLAMP_NONE;
+		samplerInfo.mipLodBias = 0.0f;
+		samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		samplerInfo.maxAnisotropy = 1.0f;
+		samplerInfo.anisotropyEnable = VK_FALSE;
+		samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+		samplerInfo.compareEnable = VK_TRUE;
+		samplerInfo.compareOp = VK_COMPARE_OP_LESS;
+		samplerInfo.unnormalizedCoordinates = VK_FALSE;
+
+		VK_CHECK(vkCreateSampler(dev, &samplerInfo, nullptr, &mShadowMapSampler));
+
+		const auto shaderSource = utils::ReadFile("Assets/Shaders/ShadowDepthPass.spv");
+		VkShaderModule shader = CreateShader(shaderSource);
+
+		std::array<VkPipelineShaderStageCreateInfo, 1> stages =
+		{
+			MakeShaderStage(shader, VK_SHADER_STAGE_VERTEX_BIT, "VSMain"),
+		};
+
+		std::array<VkDynamicState, 2> dynamicStates =
+		{
+			VK_DYNAMIC_STATE_VIEWPORT,
+			VK_DYNAMIC_STATE_SCISSOR
+		};
+
+		VkPipelineDynamicStateCreateInfo dynamicState{ VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO };
+		dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
+		dynamicState.pDynamicStates = dynamicStates.data();
+
+		std::array<VkVertexInputBindingDescription, 1> inputBindings;
+		inputBindings[0].binding = 0;
+		inputBindings[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+		inputBindings[0].stride = sizeof(Vertex);
+
+		std::array<VkVertexInputAttributeDescription, 1> inputAttribs;
+		inputAttribs[0] = utils::InputAttribute(0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0);
+
+		VkPipelineVertexInputStateCreateInfo vertexInput{ VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO };
+		vertexInput.vertexBindingDescriptionCount = inputBindings.size();
+		vertexInput.pVertexBindingDescriptions = inputBindings.data();
+		vertexInput.vertexAttributeDescriptionCount = inputAttribs.size();
+		vertexInput.pVertexAttributeDescriptions = inputAttribs.data();
+
+		VkPipelineInputAssemblyStateCreateInfo inputAssembly{ VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO };
+		inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+		inputAssembly.primitiveRestartEnable = VK_FALSE;
+
+		VkPipelineViewportStateCreateInfo viewport{ VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO };
+		viewport.viewportCount = 1;
+		viewport.scissorCount = 1;
+
+		VkPipelineRasterizationStateCreateInfo rasterizer{ VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO };
+		rasterizer.cullMode = VK_CULL_MODE_NONE;
+		rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+		rasterizer.lineWidth = 1.0f;
+		rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+		rasterizer.depthBiasEnable = VK_FALSE;
+
+		VkPipelineMultisampleStateCreateInfo multisample{ VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO };
+		multisample.sampleShadingEnable = VK_FALSE;
+		multisample.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+		VkPipelineColorBlendStateCreateInfo colorBlend{ VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO };
+		colorBlend.attachmentCount = 0;
+		colorBlend.logicOpEnable = VK_FALSE;
+
+		VkPipelineDepthStencilStateCreateInfo depthStencil{ VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO };
+		depthStencil.depthTestEnable = VK_TRUE;
+		depthStencil.depthWriteEnable = VK_TRUE;
+		depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
+
+		VkPushConstantRange matrixRange{};
+		matrixRange.offset = 0;
+		matrixRange.size = sizeof(MatrixData);
+		matrixRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+		VkPipelineLayoutCreateInfo layoutInfo{ VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
+		layoutInfo.pushConstantRangeCount = 1;
+		layoutInfo.pPushConstantRanges = &matrixRange;
+
+		VK_CHECK(vkCreatePipelineLayout(dev, &layoutInfo, nullptr, &mShadowPipeLayout));
+
+		const auto format = mDevice->GetSwapchain().GetFormat();
+		VkPipelineRenderingCreateInfo renderingInfo{ VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO };
+		renderingInfo.depthAttachmentFormat = mShadowMap->GetFormat();
+
+		VkGraphicsPipelineCreateInfo pipelineInfo{ VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO };
+		pipelineInfo.pNext = &renderingInfo;
+		pipelineInfo.stageCount = stages.size();
+		pipelineInfo.pStages = stages.data();
+		pipelineInfo.pVertexInputState = &vertexInput;
+		pipelineInfo.pInputAssemblyState = &inputAssembly;
+		pipelineInfo.pViewportState = &viewport;
+		pipelineInfo.pRasterizationState = &rasterizer;
+		pipelineInfo.pMultisampleState = &multisample;
+		pipelineInfo.pColorBlendState = &colorBlend;
+		pipelineInfo.pDynamicState = &dynamicState;
+		pipelineInfo.pDepthStencilState = &depthStencil;
+		pipelineInfo.layout = mShadowPipeLayout;
+
+		VK_CHECK(vkCreateGraphicsPipelines(dev, nullptr, 1, &pipelineInfo, nullptr, &mShadowPipe));
+
+		vkDestroyShaderModule(dev, shader, nullptr);
+	}
+
 	void App::InitDescriptorSets()
 	{
 		const auto dev = mDevice->Get();
@@ -1005,11 +1264,25 @@ namespace im
 			bufferWrite.dstSet = mGlobalSets[i];
 			bufferWrite.pBufferInfo = &buffer;
 
+			// Cubemap
 			write.dstBinding = 1;
 			write.dstSet = mGlobalSets[i];
 
-			VkWriteDescriptorSet writes[]{ bufferWrite, write };
-			vkUpdateDescriptorSets(dev, 2, writes, 0, nullptr);
+			VkDescriptorImageInfo depthMap{};
+			depthMap.imageView = mShadowMap->GetView();
+			depthMap.imageLayout = VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL;
+			depthMap.sampler = mShadowMapSampler;
+
+			VkWriteDescriptorSet depthMapWrite{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
+			depthMapWrite.descriptorCount = 1;
+			depthMapWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+			depthMapWrite.dstArrayElement = 0;
+			depthMapWrite.dstBinding = 2;
+			depthMapWrite.dstSet = mGlobalSets[i];
+			depthMapWrite.pImageInfo = &depthMap;
+
+			VkWriteDescriptorSet writes[]{ bufferWrite, write, depthMapWrite };
+			vkUpdateDescriptorSets(dev, 3, writes, 0, nullptr);
 		}
 	}
 
@@ -1128,12 +1401,13 @@ namespace im
 
 	void App::MousePositionCallback(GLFWwindow* window, double xpos, double ypos)
 	{
+		static bool firstTouch = true;
 		static double lastX;
 		static double lastY;
 		App* app = reinterpret_cast<App*>(glfwGetWindowUserPointer(window));
-		if (app->mFirstTouch)
+		if (firstTouch)
 		{
-			app->mFirstTouch = false;
+			firstTouch = false;
 			lastX = xpos;
 			lastY = ypos;
 		}
@@ -1142,8 +1416,8 @@ namespace im
 		float deltaX = xpos - lastX;
 		float deltaY = lastY - ypos;
 
-		app->mCamera.SetYaw(app->mCamera.GetYaw() + sensitivity * deltaX);
-		app->mCamera.SetPitch(app->mCamera.GetPitch() + sensitivity * deltaY);
+		app->mCamera.yaw += sensitivity * deltaX;
+		app->mCamera.pitch += sensitivity * deltaY;
 		glfwSetCursorPos(window, lastX, lastY);
 	}
 

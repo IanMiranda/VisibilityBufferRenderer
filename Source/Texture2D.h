@@ -15,9 +15,12 @@ namespace im
 		Texture2D(const Texture2D& other) = delete;
 		Texture2D& operator=(const Texture2D& other) = delete;
 
-		VkImage Get() const { return mImage; }
-		VkImageView GetView() const { return mView; }
-		VkFormat GetFormat() const { return mFormat; }
+		VkImage Get() const				{ return mImage; }
+		VkImageView GetView() const		{ return mView; }
+		VkFormat GetFormat() const		{ return mFormat; }
+		uint32_t GetWidth() const		{ return mWidth; }
+		uint32_t GetHeight() const		{ return mHeight; }
+		VkExtent2D GetExtent() const	{ return { mWidth, mHeight }; }
 
 		VkBufferImageCopy CopyFromBuffer() const;
 

@@ -15,7 +15,7 @@ struct VSOutput
 	float4 position	: SV_POSITION;
 
 	[[vk::location(0)]]
-	float3 posView	: POSITION;
+	float3 posView	: POSITION0;
 
 	[[vk::location(1)]]
 	float4 color	: COLOR;
@@ -26,6 +26,9 @@ struct VSOutput
 	[[vk::location(3)]]
 	float3 normal	: NORMAL;
 
+	[[vk::location(4)]]
+	float4 posLight : POSITION1;
+
 };
 
 struct MatrixData
@@ -33,6 +36,7 @@ struct MatrixData
 	float4x4 mv;
 	float4x4 mvp;
 	float4x4 normal;
+	float4x4 mvpLight;
 };
 
 [[vk::push_constant]]
@@ -43,6 +47,8 @@ VSOutput VSMain(VSInput input)
 	VSOutput res;
 	res.position = mul(gMatrices.mvp, float4(input.position, 1.0));
 	res.posView = mul(gMatrices.mv, float4(input.position, 1.0)).xyz;
+	res.posLight = mul(gMatrices.mvpLight, float4(input.position, 1.0));
+	res.posLight.y *= -1.0f;
 	res.color = input.color;
 	res.uv = input.uv;
 	// res.normal = normalize(mul(gMatrices.mv, float4(input.normal, 0.0)).xyz);
@@ -58,7 +64,7 @@ SamplerState gSampler : register(s0, space1);
 cbuffer LightingData : register(b0, space0)
 {
 	float4x4 vInverse;
-	float3 lightPos;
+	float3 lightDir;
 	float _pad0;
 }
 
@@ -67,6 +73,12 @@ TextureCube gCubemap : register(t1, space0);
 
 [[vk::combinedImageSampler]]
 SamplerState gCubemapSampler: register(s1, space0);
+
+[[vk::combinedImageSampler]]
+Texture2D gDepthMap : register(t2, space0);
+
+[[vk::combinedImageSampler]]
+SamplerComparisonState gDepthSampler : register(s2, space0);
 
 float4 FSMain(VSOutput input) : SV_Target0
 {
@@ -80,8 +92,12 @@ float4 FSMain(VSOutput input) : SV_Target0
 	float4 Ks = float4(0.9, 0.9, 0.9, 1.0);
 
 	float3 N = normalize(input.normal);
-	float3 W = normalize(lightPos - input.posView);
+	float3 W = normalize(lightDir); // normalize(lightPos - input.posView);
 	float NoW = dot(N, W);
+
+	// Attenuation
+	// float dist = distance(lightPos, input.posView);
+	// I *= (1.0 / (dist * dist + 0.01));
 	float4 diffuse = saturate(NoW) * Kd * I;
 
 	float3 V = -normalize(input.posView);
@@ -101,5 +117,9 @@ float4 FSMain(VSOutput input) : SV_Target0
 	float4 envReflection = float4((Kr * (cosTheta > 0.99)).xyz, 1.0);
 	float4 envColor = Kr * gCubemap.Sample(gCubemapSampler, mul(vInverse, float4(Wr, 1.0)).xyz);
 
-	return ambient + diffuse + specular + envColor;
+	float3 shadowCoord = input.posLight.xyz / input.posLight.w;
+	shadowCoord = float3(shadowCoord.xy * 0.5 + 0.5, shadowCoord.z);
+	float bias = 0.01;
+	float recordedDepth = gDepthMap.SampleCmp(gDepthSampler, shadowCoord.xy, shadowCoord.z - bias);
+	return ambient + (diffuse + specular + envColor) * recordedDepth;
 }

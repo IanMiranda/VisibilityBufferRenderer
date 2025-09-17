@@ -26,4 +26,7 @@ target_sources(
 
             TextureCube.h
             TextureCube.cpp
+
+            ShadowPass.h
+            ShadowPass.cpp
 )

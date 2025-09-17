@@ -46,6 +46,9 @@ namespace im
 		void Render();
 
 	private:
+		void DrawShadowMap(VkCommandBuffer commandBuffer, const glm::mat4& lightView, const glm::mat4& lightProj);
+
+	private:
 		void InitWindow();
 		void InitCommandPool();
 		void InitDepthBuffer();
@@ -60,6 +63,7 @@ namespace im
 		void InitUniformBuffers();
 		void InitTexture();
 		void InitCubemap();
+		void InitShadowResources();
 		void InitDescriptorSets();
 
 		void CleanupSwapchain();
@@ -88,12 +92,13 @@ namespace im
 			glm::mat4 mv;
 			glm::mat4 mvp;
 			glm::mat4 normal;
+			glm::mat4 mvpLight;
 		};
 
 		struct LightingData
 		{
 			glm::mat4 vInverse;
-			glm::vec3 lightPosition;
+			glm::vec3 lightDir;
 			float _pad0;
 		};
 
@@ -121,9 +126,12 @@ namespace im
 		std::vector<std::unique_ptr<Buffer>> mUniformBuffers;
 
 		std::vector<Vertex> mVertices;
-		std::unique_ptr<Buffer> mVertexBuffer;
+		std::unique_ptr<Buffer> mMeshVBO;
 		std::vector<uint32_t> mIndices;
-		std::unique_ptr<Buffer> mIndexBuffer;
+		std::unique_ptr<Buffer> mMeshIBO;
+
+		std::unique_ptr<Buffer> mPlaneVBO;
+		std::unique_ptr<Buffer> mPlaneIBO;
 
 		std::unique_ptr<Texture2D> mTexture;
 		VkSampler mTextureSampler{ VK_NULL_HANDLE };
@@ -136,6 +144,11 @@ namespace im
 		std::unique_ptr<TextureCube> mCubemap;
 		VkSampler mCubemapSampler{ VK_NULL_HANDLE };
 
+		std::unique_ptr<Texture2D> mShadowMap;
+		VkSampler mShadowMapSampler{ VK_NULL_HANDLE };
+		VkPipelineLayout mShadowPipeLayout{ VK_NULL_HANDLE };
+		VkPipeline mShadowPipe{ VK_NULL_HANDLE };
+
 		std::vector<VkCommandBuffer> mCommandBuffers;
 		std::vector<VkSemaphore> mAcquireSemaphores;
 		std::vector<VkSemaphore> mRenderSemaphores;
@@ -145,8 +158,6 @@ namespace im
 		bool mFramebufferResized{ false };
 
 		Camera mCamera;
-
-		bool mFirstTouch{ true };
 
 	private:
 		static void FramebufferSizeCallback(GLFWwindow* window, int width, int height);
