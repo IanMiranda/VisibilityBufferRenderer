@@ -16,6 +16,7 @@ namespace im
 		InitInstance();
 		InitSurface();
 		InitDevice();
+		InitPipelineCache();
 
 		mSwapchain = std::make_unique<Swapchain>(*this);
 	}
@@ -26,6 +27,7 @@ namespace im
 
 		mSwapchain.reset();
 
+		vkDestroyPipelineCache(mDevice, mPipelineCache, nullptr);
 		vmaDestroyAllocator(mAllocator);
 		vkDestroyDevice(mDevice, nullptr);
 		vkDestroySurfaceKHR(mInstance, mSurface, nullptr);
@@ -199,11 +201,16 @@ namespace im
 			queueInfo.queueCount = 1;
 			queueInfo.queueFamilyIndex = graphicsIndex.value();
 
-			VkPhysicalDeviceScalarBlockLayoutFeatures scalarBlockFeatures{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES };
-			scalarBlockFeatures.scalarBlockLayout = VK_TRUE;
+			VkPhysicalDeviceVulkan12Features vulkan12Features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES };
+			vulkan12Features.descriptorIndexing								= VK_TRUE;
+			vulkan12Features.descriptorBindingPartiallyBound				= VK_TRUE;
+			vulkan12Features.descriptorBindingSampledImageUpdateAfterBind	= VK_TRUE;
+			vulkan12Features.descriptorBindingUpdateUnusedWhilePending		= VK_TRUE;
+			vulkan12Features.descriptorBindingVariableDescriptorCount		= VK_TRUE;
+			vulkan12Features.shaderSampledImageArrayNonUniformIndexing		= VK_TRUE;
 
 			VkPhysicalDeviceSynchronization2Features syncFeatures{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES };
-			syncFeatures.pNext = &scalarBlockFeatures;
+			syncFeatures.pNext = &vulkan12Features;
 			syncFeatures.synchronization2 = VK_TRUE;
 
 			VkPhysicalDeviceDynamicRenderingFeatures dynamicRenderFeatures{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES };
@@ -238,6 +245,13 @@ namespace im
 		}
 
 		std::cerr << "Failed to find a suitable GPU!\n";
+	}
+
+	void Device::InitPipelineCache()
+	{
+		VkPipelineCacheCreateInfo cacheInfo{ VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO };
+		
+		VK_CHECK(vkCreatePipelineCache(mDevice, &cacheInfo, nullptr, &mPipelineCache));
 	}
 
 	bool Device::InstanceExtensionSupported(const char* name)

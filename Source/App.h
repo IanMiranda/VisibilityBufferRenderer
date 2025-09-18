@@ -11,6 +11,7 @@
 #include "Buffer.h"
 #include "Texture2D.h"
 #include "TextureCube.h"
+#include "BindlessSet.h"
 
 namespace im
 {
@@ -110,14 +111,20 @@ namespace im
 		GLFWwindow* mWindow;
 
 		std::unique_ptr<Device> mDevice;
-		VkDescriptorSetLayout mGlobalLayout{ VK_NULL_HANDLE };
-		VkDescriptorSetLayout mPerObjectLayout{ VK_NULL_HANDLE };
-		VkPipelineLayout mPipeLayout{ VK_NULL_HANDLE };
-		VkPipeline mPipe{ VK_NULL_HANDLE };
+		std::unique_ptr<BindlessSet> mBindlessSet;
+
 		VkCommandPool mCommandPool{ VK_NULL_HANDLE };
 		VkCommandPool mTransientPool{ VK_NULL_HANDLE };
+
+		VkDescriptorSetLayout mGlobalLayout{ VK_NULL_HANDLE };
+		VkDescriptorSetLayout mPerObjectLayout{ VK_NULL_HANDLE };
+		
+		VkPipelineLayout mPipeLayout{ VK_NULL_HANDLE };
+		VkPipeline mPipe{ VK_NULL_HANDLE };
+		
 		VkDescriptorPool mGlobalPool{ VK_NULL_HANDLE };
 		VkDescriptorPool mPerObjectPool{ VK_NULL_HANDLE };
+
 		std::vector<VkDescriptorSet> mGlobalSets;
 		VkDescriptorSet mPerObjectSet{ VK_NULL_HANDLE };
 
@@ -136,13 +143,12 @@ namespace im
 		std::unique_ptr<Texture2D> mTexture;
 		VkSampler mTextureSampler{ VK_NULL_HANDLE };
 
-		VkDescriptorSetLayout mCubemapSetLayout{ VK_NULL_HANDLE };
-		VkPipelineLayout mCubemapPipeLayout{ VK_NULL_HANDLE };
-		VkPipeline mCubemapPipe{ VK_NULL_HANDLE };
-		VkDescriptorSet mCubemapSet{ VK_NULL_HANDLE };
-
-		std::unique_ptr<TextureCube> mCubemap;
-		VkSampler mCubemapSampler{ VK_NULL_HANDLE };
+		std::unique_ptr<TextureCube> mEnvMap;
+		VkSampler mEnvMapSampler{ VK_NULL_HANDLE };
+		VkDescriptorSetLayout mEnvMapSetLayout{ VK_NULL_HANDLE };
+		VkPipelineLayout mEnvMapPipeLayout{ VK_NULL_HANDLE };
+		VkPipeline mEnvMapPipe{ VK_NULL_HANDLE };
+		VkDescriptorSet mEnvMapSet{ VK_NULL_HANDLE };
 
 		std::unique_ptr<Texture2D> mShadowMap;
 		VkSampler mShadowMapSampler{ VK_NULL_HANDLE };

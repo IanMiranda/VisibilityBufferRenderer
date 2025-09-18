@@ -17,11 +17,14 @@
 
 namespace im
 {
+	static constexpr uint32_t gMaxTextures = 1024;
+
 	App::App()
 	{
 		InitWindow();
 
 		mDevice = std::make_unique<Device>(mWindow);
+		mBindlessSet = std::make_unique<BindlessSet>(*mDevice, gMaxTextures);
 
 		InitCommandPool();
 		InitDepthBuffer();
@@ -50,15 +53,15 @@ namespace im
 		vkDestroyPipeline(dev, mShadowPipe, nullptr);
 		vkDestroyPipelineLayout(dev, mShadowPipeLayout, nullptr);
 
-		vkDestroyPipeline(dev, mCubemapPipe, nullptr);
-		vkDestroyPipelineLayout(dev, mCubemapPipeLayout, nullptr);
-		vkDestroyDescriptorSetLayout(dev, mCubemapSetLayout, nullptr);
+		vkDestroyPipeline(dev, mEnvMapPipe, nullptr);
+		vkDestroyPipelineLayout(dev, mEnvMapPipeLayout, nullptr);
+		vkDestroyDescriptorSetLayout(dev, mEnvMapSetLayout, nullptr);
 
 		vkDestroySampler(dev, mShadowMapSampler, nullptr);
 		mShadowMap.reset();
 
-		vkDestroySampler(dev, mCubemapSampler, nullptr);
-		mCubemap.reset();
+		vkDestroySampler(dev, mEnvMapSampler, nullptr);
+		mEnvMap.reset();
 
 		vkDestroySampler(dev, mTextureSampler, nullptr);
 		mTexture.reset();
@@ -96,6 +99,7 @@ namespace im
 		vkDestroyCommandPool(dev, mTransientPool, nullptr);
 		vkDestroyCommandPool(dev, mCommandPool, nullptr);
 
+		mBindlessSet.reset();
 		mDevice.reset();
 
 		glfwTerminate();
@@ -243,9 +247,9 @@ namespace im
 		cubemapData.vpInverse = glm::inverse(proj * glm::mat4(glm::mat3(view))); // Remove translations
 
 		// Cubemap pass
-		vkCmdBindPipeline(mCommandBuffers[mFrameIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, mCubemapPipe);
-		vkCmdPushConstants(mCommandBuffers[mFrameIndex], mCubemapPipeLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(cubemapData), &cubemapData);
-		vkCmdBindDescriptorSets(mCommandBuffers[mFrameIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, mCubemapPipeLayout, 0, 1, &mCubemapSet, 0, nullptr);
+		vkCmdBindPipeline(mCommandBuffers[mFrameIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, mEnvMapPipe);
+		vkCmdPushConstants(mCommandBuffers[mFrameIndex], mEnvMapPipeLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(cubemapData), &cubemapData);
+		vkCmdBindDescriptorSets(mCommandBuffers[mFrameIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, mEnvMapPipeLayout, 0, 1, &mEnvMapSet, 0, nullptr);
 		vkCmdDraw(mCommandBuffers[mFrameIndex], 3, 1, 0, 0);
 
 		// Forward pass
@@ -622,7 +626,7 @@ namespace im
 		pipelineInfo.pDepthStencilState = &depthStencil;
 		pipelineInfo.layout = mPipeLayout;
 
-		VK_CHECK(vkCreateGraphicsPipelines(dev, nullptr, 1, &pipelineInfo, nullptr, &mPipe));
+		VK_CHECK(vkCreateGraphicsPipelines(dev, mDevice->GetPipelineCache(), 1, &pipelineInfo, nullptr, &mPipe));
 
 		vkDestroyShaderModule(dev, shader, nullptr);
 	}
@@ -931,20 +935,20 @@ namespace im
 		for (const auto& data : cubemapData)
 			stbi_image_free(data);
 
-		mCubemap = std::make_unique<TextureCube>(*mDevice, VK_FORMAT_R8G8B8A8_SRGB,
+		mEnvMap = std::make_unique<TextureCube>(*mDevice, VK_FORMAT_R8G8B8A8_SRGB,
 			VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, width, height);
 
 		auto cmds = CreateImmediateCommandBuffer();
 
-		mCubemap->Barrier(cmds,
+		mEnvMap->Barrier(cmds,
 			VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 			VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE,
 			VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT);
 
-		VkBufferImageCopy buffer2Image = mCubemap->CopyFromBuffer();
-		vkCmdCopyBufferToImage(cmds, staging.Get(), mCubemap->Get(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &buffer2Image);
+		VkBufferImageCopy buffer2Image = mEnvMap->CopyFromBuffer();
+		vkCmdCopyBufferToImage(cmds, staging.Get(), mEnvMap->Get(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &buffer2Image);
 
-		mCubemap->Barrier(cmds,
+		mEnvMap->Barrier(cmds,
 			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
 			VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
 			VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_READ_BIT_KHR);
@@ -968,7 +972,7 @@ namespace im
 		samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
 		samplerInfo.unnormalizedCoordinates = VK_FALSE;
 
-		VK_CHECK(vkCreateSampler(dev, &samplerInfo, nullptr, &mCubemapSampler));
+		VK_CHECK(vkCreateSampler(dev, &samplerInfo, nullptr, &mEnvMapSampler));
 
 		auto shaderSource = utils::ReadFile("Assets/Shaders/Cubemap.spv");
 		VkShaderModule shader = CreateShader(shaderSource);
@@ -1036,7 +1040,7 @@ namespace im
 		cubemapLayoutInfo.bindingCount = 1;
 		cubemapLayoutInfo.pBindings = &cubemapBinding;
 
-		VK_CHECK(vkCreateDescriptorSetLayout(dev, &cubemapLayoutInfo, nullptr, &mCubemapSetLayout));
+		VK_CHECK(vkCreateDescriptorSetLayout(dev, &cubemapLayoutInfo, nullptr, &mEnvMapSetLayout));
 
 		VkPushConstantRange pcRange{};
 		pcRange.offset = 0;
@@ -1045,11 +1049,11 @@ namespace im
 
 		VkPipelineLayoutCreateInfo layoutInfo{ VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
 		layoutInfo.setLayoutCount = 1;
-		layoutInfo.pSetLayouts = &mCubemapSetLayout;
+		layoutInfo.pSetLayouts = &mEnvMapSetLayout;
 		layoutInfo.pushConstantRangeCount = 1;
 		layoutInfo.pPushConstantRanges = &pcRange;
 
-		VK_CHECK(vkCreatePipelineLayout(dev, &layoutInfo, nullptr, &mCubemapPipeLayout));
+		VK_CHECK(vkCreatePipelineLayout(dev, &layoutInfo, nullptr, &mEnvMapPipeLayout));
 
 		const auto format = mDevice->GetSwapchain().GetFormat();
 		VkPipelineRenderingCreateInfo renderingInfo{ VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO };
@@ -1069,9 +1073,9 @@ namespace im
 		pipelineInfo.pColorBlendState = &colorBlend;
 		pipelineInfo.pDynamicState = &dynamicState;
 		pipelineInfo.pDepthStencilState = &depthStencil;
-		pipelineInfo.layout = mCubemapPipeLayout;
+		pipelineInfo.layout = mEnvMapPipeLayout;
 
-		VK_CHECK(vkCreateGraphicsPipelines(dev, nullptr, 1, &pipelineInfo, nullptr, &mCubemapPipe));
+		VK_CHECK(vkCreateGraphicsPipelines(dev, mDevice->GetPipelineCache(), 1, &pipelineInfo, nullptr, &mEnvMapPipe));
 
 		vkDestroyShaderModule(dev, shader, nullptr);
 	}
@@ -1085,8 +1089,8 @@ namespace im
 		
 		constexpr VkDeviceSize bytesPerPixel = 4;
 		constexpr size_t cubemapFaces = 6;
-		constexpr uint32_t shadowWidth = 1024;
-		constexpr uint32_t shadowHeight = 1024;
+		constexpr uint32_t shadowWidth = 2048;
+		constexpr uint32_t shadowHeight = 2048;
 
 		const VkDeviceSize faceSize = shadowWidth * shadowHeight * bytesPerPixel;
 		const VkDeviceSize size = faceSize * 6;
@@ -1202,7 +1206,7 @@ namespace im
 		pipelineInfo.pDepthStencilState = &depthStencil;
 		pipelineInfo.layout = mShadowPipeLayout;
 
-		VK_CHECK(vkCreateGraphicsPipelines(dev, nullptr, 1, &pipelineInfo, nullptr, &mShadowPipe));
+		VK_CHECK(vkCreateGraphicsPipelines(dev, mDevice->GetPipelineCache(), 1, &pipelineInfo, nullptr, &mShadowPipe));
 
 		vkDestroyShaderModule(dev, shader, nullptr);
 	}
@@ -1226,8 +1230,8 @@ namespace im
 
 		allocInfo.descriptorPool = mGlobalPool;
 		allocInfo.descriptorSetCount = 1;
-		allocInfo.pSetLayouts = &mCubemapSetLayout;
-		VK_CHECK(vkAllocateDescriptorSets(dev, &allocInfo, &mCubemapSet));
+		allocInfo.pSetLayouts = &mEnvMapSetLayout;
+		VK_CHECK(vkAllocateDescriptorSets(dev, &allocInfo, &mEnvMapSet));
 
 		VkDescriptorImageInfo imageWrite{};
 		imageWrite.imageView = mTexture->GetView();
@@ -1243,10 +1247,10 @@ namespace im
 		write.pImageInfo = &imageWrite;
 		vkUpdateDescriptorSets(dev, 1, &write, 0, nullptr);
 
-		imageWrite.imageView = mCubemap->GetView();
-		imageWrite.sampler = mCubemapSampler;
+		imageWrite.imageView = mEnvMap->GetView();
+		imageWrite.sampler = mEnvMapSampler;
 
-		write.dstSet = mCubemapSet;
+		write.dstSet = mEnvMapSet;
 		vkUpdateDescriptorSets(dev, 1, &write, 0, nullptr);
 
 		for (int i = 0; i < MaxFramesInFlight; ++i)

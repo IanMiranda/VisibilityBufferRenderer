@@ -29,4 +29,7 @@ target_sources(
 
             ShadowPass.h
             ShadowPass.cpp
+
+            BindlessSet.h
+            BindlessSet.cpp
 )

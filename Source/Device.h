@@ -20,6 +20,7 @@ namespace im
 		VkPhysicalDevice GetGpu() const { return mGpu; }
 		VkDevice Get() const { return mDevice; }
 		VmaAllocator GetAllocator() const { return mAllocator; }
+		VkPipelineCache GetPipelineCache() const { return mPipelineCache; }
 		Swapchain& GetSwapchain() { return *mSwapchain; }
 
 		uint32_t GetGraphicsIndex() const { return mGraphicsIndex; }
@@ -35,6 +36,7 @@ namespace im
 		void InitInstance();
 		void InitSurface();
 		void InitDevice();
+		void InitPipelineCache();
 
 	private:
 		static bool InstanceExtensionSupported(const char* name);
@@ -57,6 +59,7 @@ namespace im
 		VkPhysicalDevice mGpu{ VK_NULL_HANDLE };
 		VkDevice mDevice{ VK_NULL_HANDLE };
 		VmaAllocator mAllocator{ VK_NULL_HANDLE };
+		VkPipelineCache mPipelineCache{ VK_NULL_HANDLE };
 
 		VkQueue mGraphicsQueue{ VK_NULL_HANDLE };
 		VkQueue mPresentQueue{ VK_NULL_HANDLE };
