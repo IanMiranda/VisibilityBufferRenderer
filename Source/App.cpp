@@ -5,10 +5,12 @@
 #include <algorithm>
 #include <fstream>
 #include <unordered_map>
+#include <string_view>
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <stb_image.h>
-#include <tiny_obj_loader.h>
+#include <ktx.h>
+#include <tiny_gltf.h>
 #include <imgui.h>
 #include <backends/imgui_impl_vulkan.h>
 #include <backends/imgui_impl_glfw.h>
@@ -269,7 +271,7 @@ namespace im
 		MatrixData pushConsts{};
 		glm::mat4 model = glm::mat4(1.0f);
 		model = glm::translate(model, glm::vec3(0.0f, -1.0f, 0.0f));
-		model = glm::scale(model, glm::vec3(0.1f));
+		model = glm::scale(model, glm::vec3(0.01f));
 
 		pushConsts.mv = view * model;
 		pushConsts.mvp = proj * pushConsts.mv;
@@ -388,7 +390,7 @@ namespace im
 			MatrixData pushConsts{};
 			glm::mat4 model = glm::mat4(1.0f);
 			model = glm::translate(model, glm::vec3(0.0f, -1.0f, 0.0f));
-			model = glm::scale(model, glm::vec3(0.1f));
+			model = glm::scale(model, glm::vec3(0.01f));
 			pushConsts.mvp = lightProj * lightView * model;
 
 			vkCmdPushConstants(commandBuffer, mShadowPipeLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pushConsts), &pushConsts);
@@ -729,43 +731,109 @@ namespace im
 
 	void App::InitModel()
 	{
-		tinyobj::attrib_t attrib;
-		std::vector<tinyobj::shape_t> shapes;
-		std::vector<tinyobj::material_t> materials;
-		std::string warn;
-		std::string error;
-		if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &error, "Assets/Models/teapot.obj"))
+		tinygltf::Model model;
+		tinygltf::TinyGLTF loader;
+
+		std::string error, warn;
+
+		constexpr std::string_view modelPath = "Assets/Models/Duck.gltf";
+
+		bool res = loader.LoadASCIIFromFile(&model, &error, &warn, modelPath.data());
+		if (!warn.empty())
+			std::cerr << "GLTF warning: " << warn << '\n';
+
+		if (!error.empty())
+			std::cerr << "GLTF error: " << error << '\n';
+
+		if (!res)
 		{
-			std::cerr << "Failed to load model: " << warn << error << '\n';
+			std::cerr << "Failed to load model from path " << modelPath << "!\n";
+			return;
 		}
 
 		std::unordered_map<Vertex, uint32_t> uniqueVertices;
-
-		for (const auto& shape : shapes)
+		for (const auto& mesh : model.meshes)
 		{
-			for (const auto& index : shape.mesh.indices)
+			for (const auto& prim : mesh.primitives)
 			{
-				Vertex v{};
-				v.position = glm::vec3(
-					attrib.vertices[3 * index.vertex_index + 0],
-					attrib.vertices[3 * index.vertex_index + 1],
-					attrib.vertices[3 * index.vertex_index + 2]);
-				v.uv = glm::vec2(
-					attrib.texcoords[2 * index.texcoord_index + 0],
-					attrib.texcoords[2 * index.texcoord_index + 1]);
-				v.color = glm::vec4(1.0f);
-				v.normal = glm::vec3(
-					attrib.normals[3 * index.normal_index + 0],
-					attrib.normals[3 * index.normal_index + 1],
-					attrib.normals[3 * index.normal_index + 2]);
-				
-				if (uniqueVertices.count(v) == 0)
+				// Indices
+				const tinygltf::Accessor& indexAccessor = model.accessors[prim.indices];
+				const tinygltf::BufferView& indexBufferView = model.bufferViews[indexAccessor.bufferView];
+				const tinygltf::Buffer& indexBuffer = model.buffers[indexBufferView.buffer];
+
+				// Vertex positions
+				const tinygltf::Accessor& posAccessor = model.accessors[prim.attributes.at("POSITION")];
+				const tinygltf::BufferView& posBufferView = model.bufferViews[posAccessor.bufferView];
+				const tinygltf::Buffer& posBuffer = model.buffers[posBufferView.buffer];
+
+				bool hasTexCoord = prim.attributes.find("TEXCOORD_0") != prim.attributes.end();
+				const tinygltf::Accessor* texCoordAccessor = nullptr;
+				const tinygltf::BufferView* texCoordBufferView = nullptr;
+				const tinygltf::Buffer* texCoordBuffer = nullptr;
+
+				// Normals
+				const tinygltf::Accessor& normalAccessor = model.accessors[prim.attributes.at("NORMAL")];
+				const tinygltf::BufferView& normalBufferView = model.bufferViews[normalAccessor.bufferView];
+				const tinygltf::Buffer& normalBuffer = model.buffers[normalBufferView.buffer];
+
+				if (hasTexCoord)
 				{
-					uniqueVertices[v] = static_cast<uint32_t>(mVertices.size());
-					mVertices.push_back(v);
+					texCoordAccessor = &model.accessors[prim.attributes.at("TEXCOORD_0")];
+					texCoordBufferView = &model.bufferViews[texCoordAccessor->bufferView];
+					texCoordBuffer = &model.buffers[texCoordBufferView->buffer];
 				}
 
-				mIndices.push_back(uniqueVertices[v]);
+				for (size_t i = 0; i < posAccessor.count; ++i)
+				{
+					Vertex v{};
+					const float* pos = reinterpret_cast<const float*>(&posBuffer.data[posBufferView.byteOffset + posAccessor.byteOffset + i * 12]);
+					v.position = { pos[0], pos[1], pos[2] };
+
+					if (hasTexCoord)
+					{
+						const float* uv = reinterpret_cast<const float*>(&texCoordBuffer->data[texCoordBufferView->byteOffset + texCoordAccessor->byteOffset + i * 8]);
+						v.uv = { uv[0], 1.0f - uv[1] };
+					}
+
+					v.color = glm::vec4(1.0f);
+
+					const float* normal = reinterpret_cast<const float*>(&normalBuffer.data[normalBufferView.byteOffset + normalAccessor.byteOffset + i * 12]);
+					v.normal = { normal[0], normal[1], normal[2] };
+
+					if (uniqueVertices.find(v) == uniqueVertices.end())
+					{
+						uniqueVertices[v] = static_cast<uint32_t>(mVertices.size());
+						mVertices.push_back(v);
+					}
+				}
+
+				const uint8_t* indexData = &indexBuffer.data[indexBufferView.byteOffset + indexAccessor.byteOffset];
+				if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT)
+				{
+					const uint16_t* indices = reinterpret_cast<const uint16_t*>(indexData);
+					for (size_t i = 0; i < indexAccessor.count; ++i)
+					{
+						Vertex v = mVertices[indices[i]];
+						mIndices.emplace_back(uniqueVertices[v]);
+					}
+				}
+				else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT)
+				{
+					const uint32_t* indices = reinterpret_cast<const uint32_t*>(indexData);
+					for (size_t i = 0; i < indexAccessor.count; ++i)
+					{
+						Vertex v = mVertices[indices[i]];
+						mIndices.push_back(uniqueVertices[v]);
+					}
+				}
+				else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE)
+				{
+					for (size_t i = 0; i < indexAccessor.count; ++i)
+					{
+						Vertex v = mVertices[indexData[i]];
+						mIndices.emplace_back(uniqueVertices[v]);
+					}
+				}
 			}
 		}
 	}
@@ -839,18 +907,23 @@ namespace im
 		const auto allocator = mDevice->GetAllocator();
 		constexpr VkDeviceSize bytesPerPixel = 4;
 
-		int width, height, channels;
-		stbi_uc* data = stbi_load("Assets/Textures/teapot-porcelain.jpg", &width, &height, &channels, STBI_rgb_alpha);
-		if (!data)
+		// Load texture image
+		ktxTexture* texture;
+		KTX_error_code res = ktxTexture_CreateFromNamedFile("Assets/Textures/brickwall.ktx", KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &texture);
+		if (res != KTX_SUCCESS)
 		{
-			std::cerr << "Failed to load texture image!\n";
+			std::cerr << "Failed to load KTX texture!\n";
+			return;
 		}
-		
-		const VkDeviceSize size = width * height * bytesPerPixel;
+
+		uint32_t width = texture->baseWidth;
+		uint32_t height = texture->baseHeight;
+		ktx_size_t size = ktxTexture_GetImageSize(texture, 0);
+		ktx_uint8_t* data = ktxTexture_GetData(texture);
 
 		Buffer staging(*mDevice, size, data);
 
-		stbi_image_free(data);
+		ktxTexture_Destroy(texture);
 
 		mTexture = std::make_unique<Texture2D>(
 			*mDevice, VK_FORMAT_R8G8B8A8_SRGB,

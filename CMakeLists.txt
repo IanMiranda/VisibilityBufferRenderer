@@ -29,18 +29,24 @@ FetchContent_Declare(
 )
 
 FetchContent_Declare(
-    tinyobjloader
-    GIT_REPOSITORY https://github.com/tinyobjloader/tinyobjloader
-    GIT_TAG a4e519b0a0f29c790464fcfeadfe25a7f9fa15ff
-)
-
-FetchContent_Declare(
     imgui
     GIT_REPOSITORY https://github.com/ocornut/imgui
     GIT_TAG a4cd45f44c4888cf064dfdfb49efc2844640899c
 )
 
-FetchContent_MakeAvailable(glfw3 glm VulkanMemoryAllocator tinyobjloader imgui)
+FetchContent_Declare(
+    tinygltf
+    GIT_REPOSITORY https://github.com/syoyo/tinygltf
+    GIT_TAG 37250b3470b517fd6823ee82d6e0495695bb7924
+)
+
+FetchContent_Declare(
+    ktx
+    GIT_REPOSITORY https://github.com/KhronosGroup/KTX-Software
+    GIT_TAG beef80159525d9fb7abb8645ea85f4c4f6842e8f
+)
+
+FetchContent_MakeAvailable(glfw3 glm VulkanMemoryAllocator imgui TinyGLTF ktx)
 
 add_executable(VulkanApp)
 
@@ -86,6 +92,7 @@ target_include_directories(
     VulkanApp
         PRIVATE
             ${Vulkan_INCLUDE_DIRS}
+            ${tinygltf_SOURCE_DIR}
 )
 
 target_compile_definitions(
@@ -103,8 +110,9 @@ target_link_libraries(
             glfw
             glm::glm
             GPUOpen::VulkanMemoryAllocator
-            tinyobjloader
             imgui
+            tinygltf
+            ktx
 )
 
 add_custom_target(CopyAssets
