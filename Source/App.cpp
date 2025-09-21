@@ -512,11 +512,7 @@ namespace im
 		inputBindings[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 		inputBindings[0].stride = sizeof(Vertex);
 
-		std::array<VkVertexInputAttributeDescription, 4> inputAttribs;
-		inputAttribs[0] = utils::InputAttribute(0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0);
-		inputAttribs[1] = utils::InputAttribute(0, 1, VK_FORMAT_R32G32B32A32_SFLOAT, sizeof(float) * 3);
-		inputAttribs[2] = utils::InputAttribute(0, 2, VK_FORMAT_R32G32_SFLOAT, sizeof(float) * 7);
-		inputAttribs[3] = utils::InputAttribute(0, 3, VK_FORMAT_R32G32B32_SFLOAT, sizeof(float) * 9);
+		auto inputAttribs = Vertex::GetInputAttributes();
 
 		VkPipelineVertexInputStateCreateInfo vertexInput{ VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO };
 		vertexInput.vertexBindingDescriptionCount = inputBindings.size();
@@ -776,6 +772,10 @@ namespace im
 				const tinygltf::BufferView& normalBufferView = model.bufferViews[normalAccessor.bufferView];
 				const tinygltf::Buffer& normalBuffer = model.buffers[normalBufferView.buffer];
 
+				const tinygltf::Accessor& tangentAccessor = model.accessors[prim.attributes.at("TANGENT")];
+				const tinygltf::BufferView& tangentBufferView = model.bufferViews[tangentAccessor.bufferView];
+				const tinygltf::Buffer& tangentBuffer = model.buffers[tangentBufferView.buffer];
+
 				if (hasTexCoord)
 				{
 					texCoordAccessor = &model.accessors[prim.attributes.at("TEXCOORD_0")];
@@ -799,6 +799,10 @@ namespace im
 
 					const float* normal = reinterpret_cast<const float*>(&normalBuffer.data[normalBufferView.byteOffset + normalAccessor.byteOffset + i * 12]);
 					v.normal = { normal[0], normal[1], normal[2] };
+
+					const float* tangent = reinterpret_cast<const float*>(&tangentBuffer.data[tangentBufferView.byteOffset + tangentAccessor.byteOffset + i * 16]);
+					v.tangent = { tangent[0], tangent[1], tangent[2] };
+					v.bitangent = glm::cross(v.normal, v.tangent) * tangent[3]; // https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html
 
 					if (uniqueVertices.find(v) == uniqueVertices.end())
 					{

@@ -1,13 +1,17 @@
 struct VSInput
 {
 	[[vk::location(0)]]
-	float3 position : POSITION;
+	float3 position		: POSITION;
 	[[vk::location(1)]]
-	float4 color	: COLOR;
+	float4 color		: COLOR;
 	[[vk::location(2)]]
-	float2 uv		: TEXCOORD;
+	float2 uv			: TEXCOORD;
 	[[vk::location(3)]]
-	float3 normal	: NORMAL;
+	float3 normal		: NORMAL;
+	[[vk::location(4)]]
+	float3 tangent		: TANGENT;
+	[[vk::location(5)]]
+	float3 bitangent	: BITANGENT
 };
 
 struct VSOutput
@@ -29,6 +33,8 @@ struct VSOutput
 	[[vk::location(4)]]
 	float4 posLight : POSITION1;
 
+	[[vk::location(5)]]
+	float3x3 tbn	: TBN
 };
 
 struct MatrixData
@@ -44,6 +50,11 @@ MatrixData gMatrices;
 
 VSOutput VSMain(VSInput input)
 {
+	float3 T = normalize(mul(gMatrices.mv, float4(input.tangent, 0.0)));
+	float3 B = normalize(mul(gMatrices.mv, float4(input.bitangent, 0.0)));
+	float3 N = normalize(mul(gMatrices.mv, float4(input.normal, 0.0)));
+	float3x3 TBN = transpose(float3x3(T, B, N)); // T, B, N in cols
+
 	VSOutput res;
 	res.position = mul(gMatrices.mvp, float4(input.position, 1.0));
 	res.posView = mul(gMatrices.mv, float4(input.position, 1.0)).xyz;
@@ -60,6 +71,11 @@ VSOutput VSMain(VSInput input)
 Texture2D gTexture : register(t0, space1);
 [[vk::combinedImageSampler]]
 SamplerState gSampler : register(s0, space1);
+
+[[vk::combinedImageSampler]]
+Texture2D gNormalMap : register(t1, space1);
+[[vk::combinedImageSampler]]
+SamplerState gNormalMapSampler : register(s1, space1);
 
 cbuffer LightingData : register(b0, space0)
 {
@@ -91,7 +107,11 @@ float4 FSMain(VSOutput input) : SV_Target0
 
 	float4 Ks = float4(0.9, 0.9, 0.9, 1.0);
 
-	float3 N = normalize(input.normal);
+	//float3 N = normalize(input.normal);
+	float3 N = gNormalMap.Sample(gNormalMapSampler, input.uv).rgb;
+	N = N * 2.0 - 1.0;
+	N = normalize(input.tbn * N);
+	
 	float3 W = normalize(lightDir); // normalize(lightPos - input.posView);
 	float NoW = dot(N, W);
 
