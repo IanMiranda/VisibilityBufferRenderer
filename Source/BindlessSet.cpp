@@ -1,5 +1,7 @@
 #include "BindlessSet.h"
 
+#include <cassert>
+
 #include "Device.h"
 
 namespace im

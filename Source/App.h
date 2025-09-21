@@ -28,6 +28,13 @@ namespace im
 		}
 	};
 
+	struct Object
+	{
+		std::unique_ptr<Buffer> vertexBuffer;
+		std::unique_ptr<Buffer> indexBuffer;
+		glm::mat4 transform;
+	};
+
 	class App
 	{
 	public:
