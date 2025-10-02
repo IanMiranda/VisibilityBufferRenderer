@@ -58,4 +58,22 @@ namespace im
 	{
 		vmaUnmapMemory(mDevice.GetAllocator(), mAllocation);
 	}
+
+	void Buffer::CopyInto(VkCommandBuffer commandBuffer, Buffer& other)
+	{
+		VkBufferCopy copy{};
+		copy.size = mSize;
+		copy.srcOffset = 0;
+		copy.dstOffset = 0;
+		vkCmdCopyBuffer(commandBuffer, mBuffer, other.mBuffer, 1, &copy);
+	}
+
+	void Buffer::CopyInto(VkCommandBuffer commandBuffer, Buffer& other, VkDeviceSize size)
+	{
+		VkBufferCopy copy{};
+		copy.size = size;
+		copy.srcOffset = 0;
+		copy.dstOffset = 0;
+		vkCmdCopyBuffer(commandBuffer, mBuffer, other.mBuffer, 1, &copy);
+	}
 }

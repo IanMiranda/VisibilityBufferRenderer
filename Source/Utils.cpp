@@ -2,6 +2,10 @@
 
 #include <fstream>
 
+#include <tiny_gltf.h>
+
+#include "Buffer.h"
+
 namespace im::utils
 {
 	VkVertexInputAttributeDescription InputAttribute(uint32_t binding, uint32_t location, VkFormat format, uint32_t offset)
@@ -47,5 +51,189 @@ namespace im::utils
 		file.read(res.data(), size);
 
 		return res;
+	}
+
+	std::pair<std::vector<Vertex>, std::vector<uint32_t>> LoadModel(const std::filesystem::path& path)
+	{
+		tinygltf::Model model;
+		tinygltf::TinyGLTF loader;
+
+		std::string error, warn;
+
+		std::vector<Vertex> vertices;
+		std::vector<uint32_t> indices;
+
+		bool res = loader.LoadASCIIFromFile(&model, &error, &warn, path.string().c_str());
+		if (!warn.empty())
+		{
+			std::cerr << "GLTF warning: " << warn << '\n';
+		}
+
+		if (!error.empty())
+		{
+			std::cerr << "GLTF error: " << error << '\n';
+		}
+
+		if (!res)
+		{
+			std::cerr << "Failed to load model from path " << path << "!\n";
+			return {};
+		}
+
+		std::unordered_map<Vertex, uint32_t> uniqueVertices;
+		for (const auto& mesh : model.meshes)
+		{
+			for (const auto& prim : mesh.primitives)
+			{
+				// Indices
+				const tinygltf::Accessor& indexAccessor = model.accessors[prim.indices];
+				const tinygltf::BufferView& indexBufferView = model.bufferViews[indexAccessor.bufferView];
+				const tinygltf::Buffer& indexBuffer = model.buffers[indexBufferView.buffer];
+
+				// Vertex positions
+				const tinygltf::Accessor& posAccessor = model.accessors[prim.attributes.at("POSITION")];
+				const tinygltf::BufferView& posBufferView = model.bufferViews[posAccessor.bufferView];
+				const tinygltf::Buffer& posBuffer = model.buffers[posBufferView.buffer];
+
+				bool hasTexCoord = prim.attributes.find("TEXCOORD_0") != prim.attributes.end();
+				const tinygltf::Accessor* texCoordAccessor = nullptr;
+				const tinygltf::BufferView* texCoordBufferView = nullptr;
+				const tinygltf::Buffer* texCoordBuffer = nullptr;
+
+				// Normals
+				const tinygltf::Accessor& normalAccessor = model.accessors[prim.attributes.at("NORMAL")];
+				const tinygltf::BufferView& normalBufferView = model.bufferViews[normalAccessor.bufferView];
+				const tinygltf::Buffer& normalBuffer = model.buffers[normalBufferView.buffer];
+
+				/*const tinygltf::Accessor& tangentAccessor = model.accessors[prim.attributes.at("TANGENT")];
+				const tinygltf::BufferView& tangentBufferView = model.bufferViews[tangentAccessor.bufferView];
+				const tinygltf::Buffer& tangentBuffer = model.buffers[tangentBufferView.buffer];*/
+
+				if (hasTexCoord)
+				{
+					texCoordAccessor = &model.accessors[prim.attributes.at("TEXCOORD_0")];
+					texCoordBufferView = &model.bufferViews[texCoordAccessor->bufferView];
+					texCoordBuffer = &model.buffers[texCoordBufferView->buffer];
+				}
+
+				for (size_t i = 0; i < posAccessor.count; ++i)
+				{
+					Vertex v{};
+					const float* pos = reinterpret_cast<const float*>(&posBuffer.data[posBufferView.byteOffset + posAccessor.byteOffset + i * 12]);
+					v.position = { pos[0], pos[1], pos[2] };
+
+					if (hasTexCoord)
+					{
+						const float* uv = reinterpret_cast<const float*>(&texCoordBuffer->data[texCoordBufferView->byteOffset + texCoordAccessor->byteOffset + i * 8]);
+						v.uv = { uv[0], 1.0f - uv[1] };
+					}
+
+					v.color = glm::vec4(1.0f);
+
+					const float* normal = reinterpret_cast<const float*>(&normalBuffer.data[normalBufferView.byteOffset + normalAccessor.byteOffset + i * 12]);
+					v.normal = { normal[0], normal[1], normal[2] };
+
+					//const float* tangent = reinterpret_cast<const float*>(&tangentBuffer.data[tangentBufferView.byteOffset + tangentAccessor.byteOffset + i * 16]);
+					v.tangent = glm::vec3(1.0f, 0.0f, 0.0f); //{ tangent[0], tangent[1], tangent[2] };
+					v.bitangent = glm::vec3(0.0f, 1.0f, 0.0f); //glm::cross(v.normal, v.tangent) * tangent[3]; // https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html
+
+					if (uniqueVertices.find(v) == uniqueVertices.end())
+					{
+						uniqueVertices[v] = static_cast<uint32_t>(vertices.size());
+						vertices.push_back(v);
+					}
+				}
+
+				const uint8_t* indexData = &indexBuffer.data[indexBufferView.byteOffset + indexAccessor.byteOffset];
+				if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT)
+				{
+					const uint16_t* indexPtr = reinterpret_cast<const uint16_t*>(indexData);
+					for (size_t i = 0; i < indexAccessor.count; ++i)
+					{
+						Vertex v = vertices[indexPtr[i]];
+						indices.emplace_back(uniqueVertices[v]);
+					}
+				}
+				else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT)
+				{
+					const uint32_t* indexPtr = reinterpret_cast<const uint32_t*>(indexData);
+					for (size_t i = 0; i < indexAccessor.count; ++i)
+					{
+						Vertex v = vertices[indexPtr[i]];
+						indices.push_back(uniqueVertices[v]);
+					}
+				}
+				else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE)
+				{
+					for (size_t i = 0; i < indexAccessor.count; ++i)
+					{
+						Vertex v = vertices[indexData[i]];
+						indices.emplace_back(uniqueVertices[v]);
+					}
+				}
+			}
+		}
+
+		return { vertices, indices };
+	}
+
+	VkPipelineDynamicStateCreateInfo PipelineDynamicState(std::vector<VkDynamicState>& dynamicStates)
+	{
+		VkPipelineDynamicStateCreateInfo dynamicState{ VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO };
+		dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
+		dynamicState.pDynamicStates = dynamicStates.data();
+		return dynamicState;
+	}
+
+	VkPipelineVertexInputStateCreateInfo PipelineVertexInput(
+		std::vector<VkVertexInputBindingDescription>& bindings,
+		std::vector<VkVertexInputAttributeDescription>& attributes)
+	{
+		VkPipelineVertexInputStateCreateInfo vertexInput{ VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO };
+		vertexInput.vertexBindingDescriptionCount = bindings.size();
+		vertexInput.pVertexBindingDescriptions = bindings.data();
+		vertexInput.vertexAttributeDescriptionCount = attributes.size();
+		vertexInput.pVertexAttributeDescriptions = attributes.data();
+		return vertexInput;
+	}
+
+	VkPipelineInputAssemblyStateCreateInfo PipelineInputAssembly(VkPrimitiveTopology primitive)
+	{
+		VkPipelineInputAssemblyStateCreateInfo inputAssembly{ VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO };
+		inputAssembly.topology = primitive;
+		inputAssembly.primitiveRestartEnable = VK_FALSE;
+		return inputAssembly;
+	}
+
+	VkPipelineViewportStateCreateInfo PipelineViewport()
+	{
+		VkPipelineViewportStateCreateInfo viewport{ VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO };
+		viewport.viewportCount = 1;
+		viewport.scissorCount = 1;
+		return viewport;
+	}
+
+	VkPipelineShaderStageCreateInfo PipelineShaderStage(VkShaderModule shader, VkShaderStageFlagBits stage, const char* entrypoint)
+	{
+		VkPipelineShaderStageCreateInfo res{ VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO };
+		res.module = shader;
+		res.pName = entrypoint;
+		res.stage = stage;
+		return res;
+	}
+
+	VkRenderingAttachmentInfo RenderingDepthAttachment(VkImageView view, VkAttachmentLoadOp load, VkAttachmentStoreOp store)
+	{
+		VkClearValue depthClear{};
+		depthClear.depthStencil.depth = 1.0f;
+		depthClear.depthStencil.stencil = 0;
+
+		VkRenderingAttachmentInfo depthAttach{ VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO };
+		depthAttach.clearValue = depthClear;
+		depthAttach.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+		depthAttach.imageView = view;
+		depthAttach.loadOp = load;
+		depthAttach.storeOp = store;
+		return depthAttach;
 	}
 }

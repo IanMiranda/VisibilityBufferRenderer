@@ -4,18 +4,14 @@ struct VSInput
 	float3 position : POSITION;
 };
 
-struct MatrixData
+struct ShadowPassData
 {
-	float4x4 mv;
-	float4x4 mvp;
-	float4x4 normal;
-	float4x4 mvpLight;
+    float4x4 modelViewProjection;
 };
 
-[[vk::push_constant]]
-MatrixData gMatrices;
+[[vk::push_constant]] ShadowPassData gObjectData;
 
 float4 VSMain(VSInput input) : SV_POSITION
 {
-	return mul(gMatrices.mvp, float4(input.position, 1.0));
+	return mul(gObjectData.modelViewProjection, float4(input.position, 1.0));
 }

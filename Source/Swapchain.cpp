@@ -166,7 +166,7 @@ namespace im
 		else
 		{
 			VkExtent2D res{};
-			glfwGetFramebufferSize(mDevice.GetWindow(), reinterpret_cast<int*>(res.width), reinterpret_cast<int*>(res.height));
+			glfwGetFramebufferSize(mDevice.GetWindow(), reinterpret_cast<int*>(&res.width), reinterpret_cast<int*>(&res.height));
 			res.width = std::clamp(res.width, caps.minImageExtent.width, caps.maxImageExtent.width);
 			res.height = std::clamp(res.height, caps.minImageExtent.height, caps.maxImageExtent.height);
 			return res;

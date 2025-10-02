@@ -3,6 +3,7 @@
 #include <cassert>
 
 #include "Device.h"
+#include "Texture2D.h"
 
 namespace im
 {
@@ -74,14 +75,18 @@ namespace im
 		vkDestroyDescriptorPool(dev, mBindlessPool, nullptr);
 	}
 
-	void BindlessSet::RegisterTexture(VkDescriptorImageInfo imageInfo)
+	uint32_t BindlessSet::RegisterTexture(Texture2D& texture, VkSampler sampler)
 	{
 		// TODO: Watch out for mid-frame
-
 		assert(!mTexFreeList.empty() && "No more textures left!");
 
 		const uint32_t freeIndex = mTexFreeList.front();
 		mTexFreeList.pop_front();
+
+		VkDescriptorImageInfo imageInfo{};
+		imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		imageInfo.imageView = texture.GetView();
+		imageInfo.sampler = sampler;
 
 		VkWriteDescriptorSet write{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
 		write.descriptorCount = 1;
@@ -92,5 +97,6 @@ namespace im
 		write.pImageInfo = &imageInfo;
 
 		vkUpdateDescriptorSets(mDevice.Get(), 1, &write, 0, nullptr);
+		return freeIndex;
 	}
 }

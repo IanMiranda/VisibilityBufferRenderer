@@ -10,7 +10,6 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <stb_image.h>
 #include <ktx.h>
-#include <tiny_gltf.h>
 #include <imgui.h>
 #include <backends/imgui_impl_vulkan.h>
 #include <backends/imgui_impl_glfw.h>
@@ -32,17 +31,13 @@ namespace im
 		InitDepthBuffer();
 		InitPipeline();
 		InitCommandBuffers();
-		InitDescriptorPool();
 		InitSyncPrimitives();
 		InitImGui();
-		InitModel();
-		InitVertexBuffer();
-		InitIndexBuffer();
+		InitMeshes();
 		InitUniformBuffers();
-		InitTexture();
 		InitCubemap();
 		InitShadowResources();
-		InitDescriptorSets();
+		InitDescriptors();
 	}
 
 	App::~App()
@@ -52,12 +47,12 @@ namespace im
 
 		mDevice->WaitIdle();
 
-		vkDestroyPipeline(dev, mShadowPipe, nullptr);
-		vkDestroyPipelineLayout(dev, mShadowPipeLayout, nullptr);
+		mShadowPipe.reset();
+		mShadowPipeLayout.reset();
 
-		vkDestroyPipeline(dev, mEnvMapPipe, nullptr);
-		vkDestroyPipelineLayout(dev, mEnvMapPipeLayout, nullptr);
-		vkDestroyDescriptorSetLayout(dev, mEnvMapSetLayout, nullptr);
+		mEnvMapPipe.reset();
+		mEnvMapPipeLayout.reset();
+		mEnvMapSetLayout.reset();
 
 		vkDestroySampler(dev, mShadowMapSampler, nullptr);
 		mShadowMap.reset();
@@ -67,13 +62,10 @@ namespace im
 
 		vkDestroySampler(dev, mTextureSampler, nullptr);
 		mTexture.reset();
+		mNormalMap.reset();
 
-		mPlaneIBO.reset();
-		mPlaneVBO.reset();
-
+		mMeshes.clear();
 		mUniformBuffers.clear();
-		mMeshIBO.reset();
-		mMeshVBO.reset();
 
 		ImGui_ImplVulkan_Shutdown();
 		ImGui_ImplGlfw_Shutdown();
@@ -88,13 +80,11 @@ namespace im
 		for (const auto& sem : mAcquireSemaphores)
 			vkDestroySemaphore(dev, sem, nullptr);
 
-		vkDestroyDescriptorPool(dev, mPerObjectPool, nullptr);
 		vkDestroyDescriptorPool(dev, mGlobalPool, nullptr);
 
-		vkDestroyPipeline(dev, mPipe, nullptr);
-		vkDestroyPipelineLayout(dev, mPipeLayout, nullptr);
-		vkDestroyDescriptorSetLayout(dev, mPerObjectLayout, nullptr);
-		vkDestroyDescriptorSetLayout(dev, mGlobalLayout, nullptr);
+		mPipe.reset();
+		mPipeLayout.reset();
+		mGlobalLayout.reset();
 
 		CleanupSwapchain();
 
@@ -193,7 +183,6 @@ namespace im
 			glm::vec3(0.0f, 0.0f, 0.0f),
 			glm::vec3(0.0f, 1.0f, 0.0f));
 
-
 		// Transform and project to "light space"
 		constexpr float shadowProjDim = 10.0f;
 		glm::mat4 lightProj = glm::ortho(-shadowProjDim, shadowProjDim, -shadowProjDim, shadowProjDim, 0.1f, shadowProjDim); // No perspective skew for dir light
@@ -249,58 +238,43 @@ namespace im
 		cubemapData.vpInverse = glm::inverse(proj * glm::mat4(glm::mat3(view))); // Remove translations
 
 		// Cubemap pass
-		vkCmdBindPipeline(mCommandBuffers[mFrameIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, mEnvMapPipe);
-		vkCmdPushConstants(mCommandBuffers[mFrameIndex], mEnvMapPipeLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(cubemapData), &cubemapData);
-		vkCmdBindDescriptorSets(mCommandBuffers[mFrameIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, mEnvMapPipeLayout, 0, 1, &mEnvMapSet, 0, nullptr);
+		vkCmdBindPipeline(mCommandBuffers[mFrameIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, mEnvMapPipe->Get());
+		vkCmdPushConstants(mCommandBuffers[mFrameIndex], mEnvMapPipeLayout->Get(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(cubemapData), &cubemapData);
+		vkCmdBindDescriptorSets(mCommandBuffers[mFrameIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, mEnvMapPipeLayout->Get(), 0, 1, &mEnvMapSet, 0, nullptr);
 		vkCmdDraw(mCommandBuffers[mFrameIndex], 3, 1, 0, 0);
 
 		// Forward pass
-		LightingData lighting{};
-		lighting.vInverse = glm::inverse(view);
-		lighting.lightDir = view * glm::vec4(lightDir, 0.0f);
+		GlobalPassData passData{};
+		passData.view = view;
+		passData.viewProj = proj * view;
+		passData.viewProjLight = lightProj * lightView;
+		passData.viewInverse = glm::inverse(view);
+		passData.lightDir = view * glm::vec4(lightDir, 0.0f);
 
 		void* globalBufferData = mUniformBuffers[mFrameIndex]->Map();
-		std::memcpy(globalBufferData, &lighting, sizeof(lighting));
+		std::memcpy(globalBufferData, &passData, sizeof(passData));
 		mUniformBuffers[mFrameIndex]->Unmap();
 
-		vkCmdBindPipeline(mCommandBuffers[mFrameIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, mPipe);
+		VkDescriptorSet descSets[] = { mGlobalSets[mFrameIndex], mBindlessSet->Get() };
+		vkCmdBindPipeline(mCommandBuffers[mFrameIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, mPipe->Get());
+		vkCmdBindDescriptorSets(mCommandBuffers[mFrameIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, mPipeLayout->Get(), 0, 2, descSets, 0, nullptr);
 
-		VkDescriptorSet descSets[] = { mGlobalSets[mFrameIndex], mPerObjectSet };
-		vkCmdBindDescriptorSets(mCommandBuffers[mFrameIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, mPipeLayout, 0, 2, descSets, 0, nullptr);
+		ObjectData pushConsts{};
+		for (const auto& mesh : mMeshes)
+		{
+			pushConsts.model = mesh.transform;
+			pushConsts.textureHandle = mesh.textureHandle;
+			pushConsts.normalMapHandle = mesh.normalMapHandle;
+			vkCmdPushConstants(mCommandBuffers[mFrameIndex],
+				mPipeLayout->Get(),
+				VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pushConsts), & pushConsts);
 
-		MatrixData pushConsts{};
-		glm::mat4 model = glm::mat4(1.0f);
-		model = glm::translate(model, glm::vec3(0.0f, -1.0f, 0.0f));
-		model = glm::scale(model, glm::vec3(0.01f));
-
-		pushConsts.mv = view * model;
-		pushConsts.mvp = proj * pushConsts.mv;
-		pushConsts.normal = glm::transpose(glm::inverse(pushConsts.mv));
-		pushConsts.mvpLight = lightProj * lightView * model;
-		vkCmdPushConstants(mCommandBuffers[mFrameIndex], mPipeLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pushConsts), &pushConsts);
-		
-		// Mesh
-		VkDeviceSize offsets[] = { 0 };
-		VkBuffer vertexBuffer = mMeshVBO->Get();
-		vkCmdBindVertexBuffers(mCommandBuffers[mFrameIndex], 0, 1, &vertexBuffer, offsets);
-		vkCmdBindIndexBuffer(mCommandBuffers[mFrameIndex], mMeshIBO->Get(), 0, VK_INDEX_TYPE_UINT32);
-		vkCmdDrawIndexed(mCommandBuffers[mFrameIndex], mIndices.size(), 1, 0, 0, 0);
-
-		// Plane
-		model = glm::mat4(1.0f);
-		model = glm::translate(model, glm::vec3(0.0f, -1.0f, 0.0f));
-		model = glm::scale(model, glm::vec3(5.0f));
-
-		pushConsts.mv = view * model;
-		pushConsts.mvp = proj * pushConsts.mv;
-		pushConsts.normal = glm::transpose(glm::inverse(pushConsts.mv));
-		pushConsts.mvpLight = lightProj * lightView * model;
-		vkCmdPushConstants(mCommandBuffers[mFrameIndex], mPipeLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pushConsts), &pushConsts);
-
-		vertexBuffer = mPlaneVBO->Get();
-		vkCmdBindVertexBuffers(mCommandBuffers[mFrameIndex], 0, 1, &vertexBuffer, offsets);
-		vkCmdBindIndexBuffer(mCommandBuffers[mFrameIndex], mPlaneIBO->Get(), 0, VK_INDEX_TYPE_UINT16);
-		vkCmdDrawIndexed(mCommandBuffers[mFrameIndex], 6, 1, 0, 0, 0);
+			VkDeviceSize offsets[] = { 0 };
+			VkBuffer vertexBuffer = mesh.vertexBuffer->Get();
+			vkCmdBindVertexBuffers(mCommandBuffers[mFrameIndex], 0, 1, &vertexBuffer, offsets);
+			vkCmdBindIndexBuffer(mCommandBuffers[mFrameIndex], mesh.indexBuffer->Get(), 0, VK_INDEX_TYPE_UINT32);
+			vkCmdDrawIndexed(mCommandBuffers[mFrameIndex], mesh.indexCount, 1, 0, 0, 0);
+		}
 
 		ImGui::ShowDemoWindow();
 
@@ -362,16 +336,10 @@ namespace im
 		const VkExtent2D shadowMapExtent = mShadowMap->GetExtent();
 		const VkRect2D shadowRenderArea = { { 0, 0 }, shadowMapExtent };
 
-		VkClearValue depthClear{};
-		depthClear.depthStencil.depth = 1.0f;
-		depthClear.depthStencil.stencil = 0;
-
-		VkRenderingAttachmentInfo shadowAttachment{ VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO };
-		shadowAttachment.clearValue = depthClear;
-		shadowAttachment.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-		shadowAttachment.imageView = mShadowMap->GetView();
-		shadowAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-		shadowAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+		const auto shadowAttachment = utils::RenderingDepthAttachment(
+			mShadowMap->GetView(),
+			VK_ATTACHMENT_LOAD_OP_CLEAR,
+			VK_ATTACHMENT_STORE_OP_STORE);
 
 		VkRenderingInfo renderingInfo{ VK_STRUCTURE_TYPE_RENDERING_INFO };
 		renderingInfo.pDepthAttachment = &shadowAttachment;
@@ -380,40 +348,26 @@ namespace im
 
 		vkCmdBeginRendering(commandBuffer, &renderingInfo);
 
+		const auto [viewport, scissor] = utils::ViewportAndScissor(shadowMapExtent);
+		vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+		vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+
 		{
-			const auto [viewport, scissor] = utils::ViewportAndScissor(shadowMapExtent);
-			vkCmdSetViewport(commandBuffer, 0, 1, & viewport);
-			vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+			vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mShadowPipe->Get());
 
-			vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mShadowPipe);
+			ShadowPassData pushConsts{};
+			glm::mat4 viewProj = lightProj * lightView;
+			for (const auto& mesh : mMeshes)
+			{
+				pushConsts.mvp = viewProj * mesh.transform;
+				vkCmdPushConstants(commandBuffer, mShadowPipeLayout->Get(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pushConsts), &pushConsts);
 
-			MatrixData pushConsts{};
-			glm::mat4 model = glm::mat4(1.0f);
-			model = glm::translate(model, glm::vec3(0.0f, -1.0f, 0.0f));
-			model = glm::scale(model, glm::vec3(0.01f));
-			pushConsts.mvp = lightProj * lightView * model;
-
-			vkCmdPushConstants(commandBuffer, mShadowPipeLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pushConsts), &pushConsts);
-
-			// Mesh
-			VkDeviceSize offsets[] = { 0 };
-			VkBuffer vertexBuffer = mMeshVBO->Get();
-			vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer, offsets);
-			vkCmdBindIndexBuffer(commandBuffer, mMeshIBO->Get(), 0, VK_INDEX_TYPE_UINT32);
-			vkCmdDrawIndexed(commandBuffer, mIndices.size(), 1, 0, 0, 0);
-
-			// Plane
-			model = glm::mat4(1.0f);
-			model = glm::translate(model, glm::vec3(0.0f, -1.0f, 0.0f));
-			model = glm::scale(model, glm::vec3(5.0f));
-
-			pushConsts.mvp = lightProj * lightView * model;
-			vkCmdPushConstants(commandBuffer, mShadowPipeLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pushConsts), &pushConsts);
-
-			vertexBuffer = mPlaneVBO->Get();
-			vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer, offsets);
-			vkCmdBindIndexBuffer(commandBuffer, mPlaneIBO->Get(), 0, VK_INDEX_TYPE_UINT16);
-			vkCmdDrawIndexed(commandBuffer, 6, 1, 0, 0, 0);
+				VkDeviceSize offsets[] = { 0 };
+				VkBuffer vertexBuffer = mesh.vertexBuffer->Get();
+				vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer, offsets);
+				vkCmdBindIndexBuffer(commandBuffer, mesh.indexBuffer->Get(), 0, VK_INDEX_TYPE_UINT32);
+				vkCmdDrawIndexed(commandBuffer, mesh.indexCount, 1, 0, 0, 0);
+			}
 		}
 
 		vkCmdEndRendering(commandBuffer);
@@ -491,140 +445,38 @@ namespace im
 		const auto shaderSource = utils::ReadFile("Assets/Shaders/Basic.spv");
 		VkShaderModule shader = CreateShader(shaderSource);
 
-		std::array<VkPipelineShaderStageCreateInfo, 2> stages =
-		{
-			MakeShaderStage(shader, VK_SHADER_STAGE_VERTEX_BIT, "VSMain"),
-			MakeShaderStage(shader, VK_SHADER_STAGE_FRAGMENT_BIT, "FSMain")
-		};
+		VkPushConstantRange pcRange{};
+		pcRange.offset = 0;
+		pcRange.size = sizeof(ObjectData);
+		pcRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
 
-		std::array<VkDynamicState, 2> dynamicStates =
-		{
-			VK_DYNAMIC_STATE_VIEWPORT,
-			VK_DYNAMIC_STATE_SCISSOR
-		};
+		mGlobalLayout = std::make_unique<DescriptorSetLayout>(*mDevice);
+		mGlobalLayout->
+			AddBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)	// Lighting
+			.AddBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)						// Cubemap
+			.AddBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)						// Shadow Map
+			.Commit();
 
-		VkPipelineDynamicStateCreateInfo dynamicState{ VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO };
-		dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
-		dynamicState.pDynamicStates = dynamicStates.data();
-
-		std::array<VkVertexInputBindingDescription, 1> inputBindings;
-		inputBindings[0].binding = 0;
-		inputBindings[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-		inputBindings[0].stride = sizeof(Vertex);
-
-		auto inputAttribs = Vertex::GetInputAttributes();
-
-		VkPipelineVertexInputStateCreateInfo vertexInput{ VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO };
-		vertexInput.vertexBindingDescriptionCount = inputBindings.size();
-		vertexInput.pVertexBindingDescriptions = inputBindings.data();
-		vertexInput.vertexAttributeDescriptionCount = inputAttribs.size();
-		vertexInput.pVertexAttributeDescriptions = inputAttribs.data();
-
-		VkPipelineInputAssemblyStateCreateInfo inputAssembly{ VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO };
-		inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-		inputAssembly.primitiveRestartEnable = VK_FALSE;
-
-		VkPipelineViewportStateCreateInfo viewport{ VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO };
-		viewport.viewportCount = 1;
-		viewport.scissorCount = 1;
-
-		VkPipelineRasterizationStateCreateInfo rasterizer{ VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO };
-		rasterizer.cullMode = VK_CULL_MODE_NONE;
-		rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
-		rasterizer.lineWidth = 1.0f;
-		rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-		rasterizer.depthBiasEnable = VK_FALSE;
-
-		VkPipelineMultisampleStateCreateInfo multisample{ VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO };
-		multisample.sampleShadingEnable = VK_FALSE;
-		multisample.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-
-		VkPipelineColorBlendAttachmentState colorAttachment{};
-		colorAttachment.blendEnable = VK_FALSE;
-		colorAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-
-		VkPipelineColorBlendStateCreateInfo colorBlend{ VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO };
-		colorBlend.attachmentCount = 1;
-		colorBlend.pAttachments = &colorAttachment;
-		colorBlend.logicOpEnable = VK_FALSE;
-
-		VkPipelineDepthStencilStateCreateInfo depthStencil{ VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO };
-		depthStencil.depthTestEnable = VK_TRUE;
-		depthStencil.depthWriteEnable = VK_TRUE;
-		depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
-
-		VkPushConstantRange matrixRange{};
-		matrixRange.offset = 0;
-		matrixRange.size = sizeof(MatrixData);
-		matrixRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-
-		VkDescriptorSetLayoutBinding lightingBufferBinding{};
-		lightingBufferBinding.binding = 0;
-		lightingBufferBinding.descriptorCount = 1;
-		lightingBufferBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		lightingBufferBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-		VkDescriptorSetLayoutBinding cubemapBinding{};
-		cubemapBinding.binding = 1;
-		cubemapBinding.descriptorCount = 1;
-		cubemapBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-		cubemapBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-		VkDescriptorSetLayoutBinding shadowMapBinding{};
-		shadowMapBinding.binding = 2;
-		shadowMapBinding.descriptorCount = 1;
-		shadowMapBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-		shadowMapBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-		VkDescriptorSetLayoutBinding imageBinding{};
-		imageBinding.binding = 0;
-		imageBinding.descriptorCount = 1;
-		imageBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-		imageBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-		VkDescriptorSetLayoutBinding globalBindings[]{ lightingBufferBinding, cubemapBinding, shadowMapBinding };
-		VkDescriptorSetLayoutCreateInfo globalLayoutInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
-		globalLayoutInfo.bindingCount = 3;
-		globalLayoutInfo.pBindings = globalBindings;
-
-		VkDescriptorSetLayoutCreateInfo perObjectLayoutInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
-		perObjectLayoutInfo.bindingCount = 1;
-		perObjectLayoutInfo.pBindings = &imageBinding;
-
-		VK_CHECK(vkCreateDescriptorSetLayout(dev, &globalLayoutInfo, nullptr, &mGlobalLayout));
-		VK_CHECK(vkCreateDescriptorSetLayout(dev, &perObjectLayoutInfo, nullptr, &mPerObjectLayout));
-
-		VkDescriptorSetLayout setLayouts[] = { mGlobalLayout, mPerObjectLayout };
-
-		VkPipelineLayoutCreateInfo layoutInfo{ VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
-		layoutInfo.pushConstantRangeCount = 1;
-		layoutInfo.pPushConstantRanges = &matrixRange;
-		layoutInfo.setLayoutCount = 2;
-		layoutInfo.pSetLayouts = setLayouts;
+		const std::vector<VkDescriptorSetLayout> setLayouts{ mGlobalLayout->Get(), mBindlessSet->GetSetLayout() };
+		const std::vector<VkPushConstantRange> pcRanges{ pcRange };
+		mPipeLayout = std::make_unique<PipelineLayout>(*mDevice, setLayouts, pcRanges);
 		
-		VK_CHECK(vkCreatePipelineLayout(dev, &layoutInfo, nullptr, &mPipeLayout));
+		VkVertexInputBindingDescription inputBinding{};
+		inputBinding.binding = 0;
+		inputBinding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+		inputBinding.stride = sizeof(Vertex);
 
-		const auto format = mDevice->GetSwapchain().GetFormat();
-		VkPipelineRenderingCreateInfo renderingInfo{ VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO };
-		renderingInfo.colorAttachmentCount = 1;
-		renderingInfo.pColorAttachmentFormats = &format;
-		renderingInfo.depthAttachmentFormat = mDepthImage->GetFormat();
-
-		VkGraphicsPipelineCreateInfo pipelineInfo{ VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO };
-		pipelineInfo.pNext = &renderingInfo;
-		pipelineInfo.stageCount = stages.size();
-		pipelineInfo.pStages = stages.data();
-		pipelineInfo.pVertexInputState = &vertexInput;
-		pipelineInfo.pInputAssemblyState = &inputAssembly;
-		pipelineInfo.pViewportState = &viewport;
-		pipelineInfo.pRasterizationState = &rasterizer;
-		pipelineInfo.pMultisampleState = &multisample;
-		pipelineInfo.pColorBlendState = &colorBlend;
-		pipelineInfo.pDynamicState = &dynamicState;
-		pipelineInfo.pDepthStencilState = &depthStencil;
-		pipelineInfo.layout = mPipeLayout;
-
-		VK_CHECK(vkCreateGraphicsPipelines(dev, mDevice->GetPipelineCache(), 1, &pipelineInfo, nullptr, &mPipe));
+		const auto attribs = Vertex::GetInputAttributes();
+		mPipe = std::make_unique<GraphicsPipeline>(*mDevice, *mPipeLayout);
+		mPipe->AddShader(shader, VK_SHADER_STAGE_VERTEX_BIT, "VSMain")
+			.AddShader(shader, VK_SHADER_STAGE_FRAGMENT_BIT, "FSMain")
+			.SetVertexInput({ inputBinding }, std::vector<VkVertexInputAttributeDescription>(attribs.begin(), attribs.end()))
+			.SetPrimitiveTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
+			.SetRasterizer(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE, VK_POLYGON_MODE_FILL)
+			.SetMsaaSamples(VK_SAMPLE_COUNT_1_BIT)
+			.AddColorAttachment(mDevice->GetSwapchain().GetFormat())
+			.SetDepthAttachment(mDepthImage->GetFormat(), true)
+			.Commit();
 
 		vkDestroyShaderModule(dev, shader, nullptr);
 	}
@@ -640,24 +492,6 @@ namespace im
 		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 		
 		VK_CHECK(vkAllocateCommandBuffers(mDevice->Get(), &allocInfo, mCommandBuffers.data()));
-	}
-
-	void App::InitDescriptorPool()
-	{
-		const auto dev = mDevice->Get();
-
-		VkDescriptorPoolSize globalSizes[]{ { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, MaxFramesInFlight }, { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2 * MaxFramesInFlight + 1 } };
-		VkDescriptorPoolSize perObjectSizes[]{ { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1 } };
-
-		VkDescriptorPoolCreateInfo poolInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO };
-		poolInfo.maxSets = 2 * MaxFramesInFlight + 1;
-		poolInfo.poolSizeCount = 2;
-		poolInfo.pPoolSizes = globalSizes;
-		VK_CHECK(vkCreateDescriptorPool(dev, &poolInfo, nullptr, &mGlobalPool));
-		poolInfo.maxSets = 1;
-		poolInfo.poolSizeCount = 1;
-		poolInfo.pPoolSizes = perObjectSizes;
-		VK_CHECK(vkCreateDescriptorPool(dev, &poolInfo, nullptr, &mPerObjectPool));
 	}
 
 	void App::InitSyncPrimitives()
@@ -725,228 +559,13 @@ namespace im
 		ImGui_ImplVulkan_Init(&imguiVulkanInfo);
 	}
 
-	void App::InitModel()
+	void App::InitMeshes()
 	{
-		tinygltf::Model model;
-		tinygltf::TinyGLTF loader;
-
-		std::string error, warn;
-
-		constexpr std::string_view modelPath = "Assets/Models/Duck.gltf";
-
-		bool res = loader.LoadASCIIFromFile(&model, &error, &warn, modelPath.data());
-		if (!warn.empty())
-			std::cerr << "GLTF warning: " << warn << '\n';
-
-		if (!error.empty())
-			std::cerr << "GLTF error: " << error << '\n';
-
-		if (!res)
-		{
-			std::cerr << "Failed to load model from path " << modelPath << "!\n";
-			return;
-		}
-
-		std::unordered_map<Vertex, uint32_t> uniqueVertices;
-		for (const auto& mesh : model.meshes)
-		{
-			for (const auto& prim : mesh.primitives)
-			{
-				// Indices
-				const tinygltf::Accessor& indexAccessor = model.accessors[prim.indices];
-				const tinygltf::BufferView& indexBufferView = model.bufferViews[indexAccessor.bufferView];
-				const tinygltf::Buffer& indexBuffer = model.buffers[indexBufferView.buffer];
-
-				// Vertex positions
-				const tinygltf::Accessor& posAccessor = model.accessors[prim.attributes.at("POSITION")];
-				const tinygltf::BufferView& posBufferView = model.bufferViews[posAccessor.bufferView];
-				const tinygltf::Buffer& posBuffer = model.buffers[posBufferView.buffer];
-
-				bool hasTexCoord = prim.attributes.find("TEXCOORD_0") != prim.attributes.end();
-				const tinygltf::Accessor* texCoordAccessor = nullptr;
-				const tinygltf::BufferView* texCoordBufferView = nullptr;
-				const tinygltf::Buffer* texCoordBuffer = nullptr;
-
-				// Normals
-				const tinygltf::Accessor& normalAccessor = model.accessors[prim.attributes.at("NORMAL")];
-				const tinygltf::BufferView& normalBufferView = model.bufferViews[normalAccessor.bufferView];
-				const tinygltf::Buffer& normalBuffer = model.buffers[normalBufferView.buffer];
-
-				const tinygltf::Accessor& tangentAccessor = model.accessors[prim.attributes.at("TANGENT")];
-				const tinygltf::BufferView& tangentBufferView = model.bufferViews[tangentAccessor.bufferView];
-				const tinygltf::Buffer& tangentBuffer = model.buffers[tangentBufferView.buffer];
-
-				if (hasTexCoord)
-				{
-					texCoordAccessor = &model.accessors[prim.attributes.at("TEXCOORD_0")];
-					texCoordBufferView = &model.bufferViews[texCoordAccessor->bufferView];
-					texCoordBuffer = &model.buffers[texCoordBufferView->buffer];
-				}
-
-				for (size_t i = 0; i < posAccessor.count; ++i)
-				{
-					Vertex v{};
-					const float* pos = reinterpret_cast<const float*>(&posBuffer.data[posBufferView.byteOffset + posAccessor.byteOffset + i * 12]);
-					v.position = { pos[0], pos[1], pos[2] };
-
-					if (hasTexCoord)
-					{
-						const float* uv = reinterpret_cast<const float*>(&texCoordBuffer->data[texCoordBufferView->byteOffset + texCoordAccessor->byteOffset + i * 8]);
-						v.uv = { uv[0], 1.0f - uv[1] };
-					}
-
-					v.color = glm::vec4(1.0f);
-
-					const float* normal = reinterpret_cast<const float*>(&normalBuffer.data[normalBufferView.byteOffset + normalAccessor.byteOffset + i * 12]);
-					v.normal = { normal[0], normal[1], normal[2] };
-
-					const float* tangent = reinterpret_cast<const float*>(&tangentBuffer.data[tangentBufferView.byteOffset + tangentAccessor.byteOffset + i * 16]);
-					v.tangent = { tangent[0], tangent[1], tangent[2] };
-					v.bitangent = glm::cross(v.normal, v.tangent) * tangent[3]; // https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html
-
-					if (uniqueVertices.find(v) == uniqueVertices.end())
-					{
-						uniqueVertices[v] = static_cast<uint32_t>(mVertices.size());
-						mVertices.push_back(v);
-					}
-				}
-
-				const uint8_t* indexData = &indexBuffer.data[indexBufferView.byteOffset + indexAccessor.byteOffset];
-				if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT)
-				{
-					const uint16_t* indices = reinterpret_cast<const uint16_t*>(indexData);
-					for (size_t i = 0; i < indexAccessor.count; ++i)
-					{
-						Vertex v = mVertices[indices[i]];
-						mIndices.emplace_back(uniqueVertices[v]);
-					}
-				}
-				else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT)
-				{
-					const uint32_t* indices = reinterpret_cast<const uint32_t*>(indexData);
-					for (size_t i = 0; i < indexAccessor.count; ++i)
-					{
-						Vertex v = mVertices[indices[i]];
-						mIndices.push_back(uniqueVertices[v]);
-					}
-				}
-				else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE)
-				{
-					for (size_t i = 0; i < indexAccessor.count; ++i)
-					{
-						Vertex v = mVertices[indexData[i]];
-						mIndices.emplace_back(uniqueVertices[v]);
-					}
-				}
-			}
-		}
-	}
-
-	void App::InitVertexBuffer()
-	{
-		auto cmds = CreateImmediateCommandBuffer();
-		
-		const VkDeviceSize meshSize = mVertices.size() * sizeof(mVertices[0]);
-		
-		const std::vector<Vertex> planeVertices
-		{
-			{ { -0.5f, 0.0f, 0.5f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 0.0f, 1.0f }, { 0.0f, 1.0f, 0.0f } },
-			{ { 0.5f, 0.0f, 0.5f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 1.0f, 1.0f }, { 0.0f, 1.0f, 0.0f } },
-			{ { 0.5f, 0.0f, -0.5f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 1.0f, 0.0f }, { 0.0f, 1.0f, 0.0f } },
-			{ { -0.5f, 0.0f, -0.5f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f } },
-		};
-
-		Buffer stagingMesh(*mDevice, meshSize, mVertices.data());
-		mMeshVBO = std::make_unique<Buffer>(*mDevice, meshSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, 0);
-		CopyBuffer(cmds, stagingMesh.Get(), mMeshVBO->Get(), meshSize);
-
-		const VkDeviceSize planeSize = planeVertices.size() * sizeof(planeVertices[0]);
-		Buffer stagingPlane(*mDevice, meshSize, planeVertices.data());
-		mPlaneVBO = std::make_unique<Buffer>(*mDevice, planeSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, 0);
-		CopyBuffer(cmds, stagingPlane.Get(), mPlaneVBO->Get(), planeSize);
-		
-		SubmitImmediateCommandBuffer(cmds);
-	}
-
-	void App::InitIndexBuffer()
-	{
-		const VkDeviceSize meshSize = mIndices.size() * sizeof(mIndices[0]);
-		const std::vector<uint16_t> planeIndices
-		{
-			0, 1, 2,
-			2, 3, 0
-		};
-		const VkDeviceSize planeSize = planeIndices.size() * sizeof(planeIndices[0]);
-
-		auto cmds = CreateImmediateCommandBuffer();
-
-		Buffer stagingMesh(*mDevice, meshSize, mIndices.data());
-		mMeshIBO = std::make_unique<Buffer>(*mDevice, meshSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, 0);
-		CopyBuffer(cmds, stagingMesh.Get(), mMeshIBO->Get(), meshSize);
-
-		Buffer stagingPlane(*mDevice, planeSize, planeIndices.data());
-		mPlaneIBO = std::make_unique<Buffer>(*mDevice, planeSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, 0);
-		CopyBuffer(cmds, stagingPlane.Get(), mPlaneIBO->Get(), planeSize);
-
-		SubmitImmediateCommandBuffer(cmds);
-	}
-
-	void App::InitUniformBuffers()
-	{
-		const auto size = sizeof(LightingData);
-
-		mUniformBuffers.reserve(MaxFramesInFlight);
-		for (int i = 0; i < MaxFramesInFlight; ++i)
-		{
-			mUniformBuffers.emplace_back(
-				std::make_unique<Buffer>(*mDevice, size, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT));
-		}
-	}
-
-	void App::InitTexture()
-	{
-		stbi_set_flip_vertically_on_load(true);
+		// Load texture image
+		mTexture = CreateAndStageTexture("Assets/Textures/brickwall.jpg", VK_FORMAT_R8G8B8A8_SRGB, false);
+		mNormalMap = CreateAndStageTexture("Assets/Textures/brickwall_normal.jpg", VK_FORMAT_R8G8B8A8_UNORM, false);
 
 		const auto dev = mDevice->Get();
-		const auto allocator = mDevice->GetAllocator();
-		constexpr VkDeviceSize bytesPerPixel = 4;
-
-		// Load texture image
-		ktxTexture* texture;
-		KTX_error_code res = ktxTexture_CreateFromNamedFile("Assets/Textures/brickwall.ktx", KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &texture);
-		if (res != KTX_SUCCESS)
-		{
-			std::cerr << "Failed to load KTX texture!\n";
-			return;
-		}
-
-		uint32_t width = texture->baseWidth;
-		uint32_t height = texture->baseHeight;
-		ktx_size_t size = ktxTexture_GetImageSize(texture, 0);
-		ktx_uint8_t* data = ktxTexture_GetData(texture);
-
-		Buffer staging(*mDevice, size, data);
-
-		ktxTexture_Destroy(texture);
-
-		mTexture = std::make_unique<Texture2D>(
-			*mDevice, VK_FORMAT_R8G8B8A8_SRGB,
-			VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-			width, height, true);
-
-		auto cmds = CreateImmediateCommandBuffer();
-
-		mTexture->Barrier(cmds,
-			VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-			VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE,
-			VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT);
-
-		VkBufferImageCopy buffer2Image = mTexture->CopyFromBuffer();
-		vkCmdCopyBufferToImage(cmds, staging.Get(), mTexture->Get(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &buffer2Image);
-
-		mTexture->GenerateMipmaps(cmds, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_READ_BIT);
-		SubmitImmediateCommandBuffer(cmds);
-
 		VkSamplerCreateInfo samplerInfo{ VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
 		samplerInfo.minFilter = VK_FILTER_LINEAR;
 		samplerInfo.magFilter = VK_FILTER_LINEAR;
@@ -965,6 +584,86 @@ namespace im
 		samplerInfo.unnormalizedCoordinates = VK_FALSE;
 
 		VK_CHECK(vkCreateSampler(dev, &samplerInfo, nullptr, &mTextureSampler));
+
+		uint32_t texId = mBindlessSet->RegisterTexture(*mTexture, mTextureSampler);
+		uint32_t nmapId = mBindlessSet->RegisterTexture(*mNormalMap, mTextureSampler);
+
+		// Duck
+		{
+			Mesh duck;
+
+			auto [duckVertices, duckIndices] = utils::LoadModel("Assets/Models/Duck.gltf");
+
+			Buffer stagingDuckVerts(*mDevice, duckVertices.size() * sizeof(duckVertices[0]), duckVertices.data());
+			Buffer stagingDuckIdxs(*mDevice, duckIndices.size() * sizeof(duckIndices[0]), duckIndices.data());
+			duck.vertexBuffer = std::make_unique<Buffer>(
+				*mDevice, stagingDuckVerts.GetSize(),
+				VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, 0);
+			duck.indexBuffer = std::make_unique<Buffer>(
+				*mDevice, stagingDuckIdxs.GetSize(),
+				VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, 0);
+			duck.textureHandle = texId;
+			duck.normalMapHandle = nmapId;
+			duck.indexCount = duckIndices.size();
+
+			auto cmds = CreateImmediateCommandBuffer();
+			CopyBuffer(cmds, stagingDuckVerts.Get(), duck.vertexBuffer->Get(), stagingDuckVerts.GetSize());
+			CopyBuffer(cmds, stagingDuckIdxs.Get(), duck.indexBuffer->Get(), stagingDuckIdxs.GetSize());
+			SubmitImmediateCommandBuffer(cmds);
+
+			duck.transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -1.0f, 0.0f));
+			duck.transform = glm::scale(duck.transform, glm::vec3(0.01f));
+
+			mMeshes.emplace_back(std::move(duck));
+		}
+
+		{
+			Mesh plane;
+			const std::vector<Vertex> planeVertices
+			{
+				{ { -0.5f, 0.0f, 0.5f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 0.0f, 1.0f }, { 0.0f, 1.0f, 0.0f }, { 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 1.0f } },
+				{ { 0.5f, 0.0f, 0.5f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 1.0f, 1.0f }, { 0.0f, 1.0f, 0.0f }, { 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 1.0f } },
+				{ { 0.5f, 0.0f, -0.5f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 1.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, { 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 1.0f } },
+				{ { -0.5f, 0.0f, -0.5f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, { 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 1.0f } },
+			};
+
+			const std::vector<uint32_t> planeIndices
+			{
+				0, 1, 2,
+				2, 3, 0
+			};
+
+			plane.indexCount = planeIndices.size();
+			const VkDeviceSize planeVertSize = planeVertices.size() * sizeof(planeVertices[0]);
+			const VkDeviceSize planeIdxSize = planeIndices.size() * sizeof(planeIndices[0]);
+
+			Buffer stagingPlaneVerts(*mDevice, planeVertSize, planeVertices.data());
+			Buffer stagingPlaneIdxs(*mDevice, planeIdxSize, planeIndices.data());
+			plane.vertexBuffer = std::make_unique<Buffer>(*mDevice, planeVertSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, 0);
+			plane.indexBuffer = std::make_unique<Buffer>(*mDevice, planeIdxSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, 0);
+			auto cmds = CreateImmediateCommandBuffer();
+			CopyBuffer(cmds, stagingPlaneVerts.Get(), plane.vertexBuffer->Get(), planeVertSize);
+			CopyBuffer(cmds, stagingPlaneIdxs.Get(), plane.indexBuffer->Get(), planeIdxSize);
+			SubmitImmediateCommandBuffer(cmds);
+
+			plane.transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -1.0f, 0.0f));
+			plane.transform = glm::scale(plane.transform, glm::vec3(5.0f));
+			plane.textureHandle = texId;
+			plane.normalMapHandle = nmapId;
+
+			mMeshes.emplace_back(std::move(plane));
+		}
+	}
+
+	void App::InitUniformBuffers()
+	{
+		const auto size = sizeof(GlobalPassData);
+		mUniformBuffers.reserve(MaxFramesInFlight);
+		for (int i = 0; i < MaxFramesInFlight; ++i)
+		{
+			mUniformBuffers.emplace_back(
+				std::make_unique<Buffer>(*mDevice, size, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT));
+		}
 	}
 
 	void App::InitCubemap()
@@ -1050,109 +749,34 @@ namespace im
 		samplerInfo.unnormalizedCoordinates = VK_FALSE;
 
 		VK_CHECK(vkCreateSampler(dev, &samplerInfo, nullptr, &mEnvMapSampler));
-
+		
+		// Create environment pipeline
 		auto shaderSource = utils::ReadFile("Assets/Shaders/Cubemap.spv");
 		VkShaderModule shader = CreateShader(shaderSource);
 
-		std::array<VkPipelineShaderStageCreateInfo, 2> stages =
-		{
-			MakeShaderStage(shader, VK_SHADER_STAGE_VERTEX_BIT, "VSMain"),
-			MakeShaderStage(shader, VK_SHADER_STAGE_FRAGMENT_BIT, "FSMain")
-		};
-
-		std::array<VkDynamicState, 2> dynamicStates =
-		{
-			VK_DYNAMIC_STATE_VIEWPORT,
-			VK_DYNAMIC_STATE_SCISSOR
-		};
-
-		VkPipelineDynamicStateCreateInfo dynamicState{ VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO };
-		dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
-		dynamicState.pDynamicStates = dynamicStates.data();
-
-		VkPipelineVertexInputStateCreateInfo vertexInput{ VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO };
-		vertexInput.vertexBindingDescriptionCount = 0;
-		vertexInput.vertexAttributeDescriptionCount = 0;
-
-		VkPipelineInputAssemblyStateCreateInfo inputAssembly{ VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO };
-		inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-		inputAssembly.primitiveRestartEnable = VK_FALSE;
-
-		VkPipelineViewportStateCreateInfo viewport{ VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO };
-		viewport.viewportCount = 1;
-		viewport.scissorCount = 1;
-
-		VkPipelineRasterizationStateCreateInfo rasterizer{ VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO };
-		rasterizer.cullMode = VK_CULL_MODE_NONE;
-		rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
-		rasterizer.lineWidth = 1.0f;
-		rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-		rasterizer.depthBiasEnable = VK_FALSE;
-
-		VkPipelineMultisampleStateCreateInfo multisample{ VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO };
-		multisample.sampleShadingEnable = VK_FALSE;
-		multisample.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-
-		VkPipelineColorBlendAttachmentState colorAttachment{};
-		colorAttachment.blendEnable = VK_FALSE;
-		colorAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-
-		VkPipelineColorBlendStateCreateInfo colorBlend{ VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO };
-		colorBlend.attachmentCount = 1;
-		colorBlend.pAttachments = &colorAttachment;
-		colorBlend.logicOpEnable = VK_FALSE;
-
-		VkPipelineDepthStencilStateCreateInfo depthStencil{ VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO };
-		depthStencil.depthTestEnable = VK_TRUE;
-		depthStencil.depthWriteEnable = VK_FALSE;
-		depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
-
-		VkDescriptorSetLayoutBinding cubemapBinding{};
-		cubemapBinding.binding = 0;
-		cubemapBinding.descriptorCount = 1;
-		cubemapBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-		cubemapBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-		VkDescriptorSetLayoutCreateInfo cubemapLayoutInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
-		cubemapLayoutInfo.bindingCount = 1;
-		cubemapLayoutInfo.pBindings = &cubemapBinding;
-
-		VK_CHECK(vkCreateDescriptorSetLayout(dev, &cubemapLayoutInfo, nullptr, &mEnvMapSetLayout));
+		mEnvMapSetLayout = std::make_unique<DescriptorSetLayout>(*mDevice);
+		mEnvMapSetLayout->AddBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
+						.Commit();
 
 		VkPushConstantRange pcRange{};
 		pcRange.offset = 0;
 		pcRange.size = sizeof(CubemapData);
 		pcRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
-		VkPipelineLayoutCreateInfo layoutInfo{ VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
-		layoutInfo.setLayoutCount = 1;
-		layoutInfo.pSetLayouts = &mEnvMapSetLayout;
-		layoutInfo.pushConstantRangeCount = 1;
-		layoutInfo.pPushConstantRanges = &pcRange;
+		const std::vector<VkDescriptorSetLayout> setLayouts{ mEnvMapSetLayout->Get() };
+		const std::vector<VkPushConstantRange> pcRanges{ pcRange };
+		mEnvMapPipeLayout = std::make_unique<PipelineLayout>(*mDevice, setLayouts, pcRanges);
 
-		VK_CHECK(vkCreatePipelineLayout(dev, &layoutInfo, nullptr, &mEnvMapPipeLayout));
-
-		const auto format = mDevice->GetSwapchain().GetFormat();
-		VkPipelineRenderingCreateInfo renderingInfo{ VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO };
-		renderingInfo.colorAttachmentCount = 1;
-		renderingInfo.pColorAttachmentFormats = &format;
-		renderingInfo.depthAttachmentFormat = mDepthImage->GetFormat();
-
-		VkGraphicsPipelineCreateInfo pipelineInfo{ VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO };
-		pipelineInfo.pNext = &renderingInfo;
-		pipelineInfo.stageCount = stages.size();
-		pipelineInfo.pStages = stages.data();
-		pipelineInfo.pVertexInputState = &vertexInput;
-		pipelineInfo.pInputAssemblyState = &inputAssembly;
-		pipelineInfo.pViewportState = &viewport;
-		pipelineInfo.pRasterizationState = &rasterizer;
-		pipelineInfo.pMultisampleState = &multisample;
-		pipelineInfo.pColorBlendState = &colorBlend;
-		pipelineInfo.pDynamicState = &dynamicState;
-		pipelineInfo.pDepthStencilState = &depthStencil;
-		pipelineInfo.layout = mEnvMapPipeLayout;
-
-		VK_CHECK(vkCreateGraphicsPipelines(dev, mDevice->GetPipelineCache(), 1, &pipelineInfo, nullptr, &mEnvMapPipe));
+		mEnvMapPipe = std::make_unique<GraphicsPipeline>(*mDevice, *mEnvMapPipeLayout);
+		mEnvMapPipe->AddShader(shader, VK_SHADER_STAGE_VERTEX_BIT, "VSMain")
+			.AddShader(shader, VK_SHADER_STAGE_FRAGMENT_BIT, "FSMain")
+			.SetVertexInput({}, {})
+			.SetPrimitiveTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
+			.SetRasterizer(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE, VK_POLYGON_MODE_FILL)
+			.SetMsaaSamples(VK_SAMPLE_COUNT_1_BIT)
+			.AddColorAttachment(mDevice->GetSwapchain().GetFormat())
+			.SetDepthAttachment(mDepthImage->GetFormat(), false)
+			.Commit();
 
 		vkDestroyShaderModule(dev, shader, nullptr);
 	}
@@ -1163,7 +787,7 @@ namespace im
 
 		const auto dev = mDevice->Get();
 		const auto allocator = mDevice->GetAllocator();
-		
+
 		constexpr VkDeviceSize bytesPerPixel = 4;
 		constexpr size_t cubemapFaces = 6;
 		constexpr uint32_t shadowWidth = 2048;
@@ -1197,137 +821,73 @@ namespace im
 		const auto shaderSource = utils::ReadFile("Assets/Shaders/ShadowDepthPass.spv");
 		VkShaderModule shader = CreateShader(shaderSource);
 
-		std::array<VkPipelineShaderStageCreateInfo, 1> stages =
-		{
-			MakeShaderStage(shader, VK_SHADER_STAGE_VERTEX_BIT, "VSMain"),
-		};
-
-		std::array<VkDynamicState, 2> dynamicStates =
-		{
-			VK_DYNAMIC_STATE_VIEWPORT,
-			VK_DYNAMIC_STATE_SCISSOR
-		};
-
-		VkPipelineDynamicStateCreateInfo dynamicState{ VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO };
-		dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
-		dynamicState.pDynamicStates = dynamicStates.data();
-
-		std::array<VkVertexInputBindingDescription, 1> inputBindings;
-		inputBindings[0].binding = 0;
-		inputBindings[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-		inputBindings[0].stride = sizeof(Vertex);
-
-		std::array<VkVertexInputAttributeDescription, 1> inputAttribs;
-		inputAttribs[0] = utils::InputAttribute(0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0);
-
-		VkPipelineVertexInputStateCreateInfo vertexInput{ VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO };
-		vertexInput.vertexBindingDescriptionCount = inputBindings.size();
-		vertexInput.pVertexBindingDescriptions = inputBindings.data();
-		vertexInput.vertexAttributeDescriptionCount = inputAttribs.size();
-		vertexInput.pVertexAttributeDescriptions = inputAttribs.data();
-
-		VkPipelineInputAssemblyStateCreateInfo inputAssembly{ VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO };
-		inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-		inputAssembly.primitiveRestartEnable = VK_FALSE;
-
-		VkPipelineViewportStateCreateInfo viewport{ VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO };
-		viewport.viewportCount = 1;
-		viewport.scissorCount = 1;
-
-		VkPipelineRasterizationStateCreateInfo rasterizer{ VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO };
-		rasterizer.cullMode = VK_CULL_MODE_NONE;
-		rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
-		rasterizer.lineWidth = 1.0f;
-		rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-		rasterizer.depthBiasEnable = VK_FALSE;
-
-		VkPipelineMultisampleStateCreateInfo multisample{ VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO };
-		multisample.sampleShadingEnable = VK_FALSE;
-		multisample.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-
-		VkPipelineColorBlendStateCreateInfo colorBlend{ VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO };
-		colorBlend.attachmentCount = 0;
-		colorBlend.logicOpEnable = VK_FALSE;
-
-		VkPipelineDepthStencilStateCreateInfo depthStencil{ VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO };
-		depthStencil.depthTestEnable = VK_TRUE;
-		depthStencil.depthWriteEnable = VK_TRUE;
-		depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
-
 		VkPushConstantRange matrixRange{};
 		matrixRange.offset = 0;
-		matrixRange.size = sizeof(MatrixData);
+		matrixRange.size = sizeof(ShadowPassData);
 		matrixRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
-		VkPipelineLayoutCreateInfo layoutInfo{ VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
-		layoutInfo.pushConstantRangeCount = 1;
-		layoutInfo.pPushConstantRanges = &matrixRange;
+		const std::vector<VkDescriptorSetLayout> setLayouts{};
+		const std::vector<VkPushConstantRange> pcRanges{ matrixRange };
+		mShadowPipeLayout = std::make_unique<PipelineLayout>(*mDevice, setLayouts, pcRanges);
 
-		VK_CHECK(vkCreatePipelineLayout(dev, &layoutInfo, nullptr, &mShadowPipeLayout));
+		VkVertexInputBindingDescription inputBinding{};
+		inputBinding.binding = 0;
+		inputBinding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+		inputBinding.stride = sizeof(Vertex);
 
-		const auto format = mDevice->GetSwapchain().GetFormat();
-		VkPipelineRenderingCreateInfo renderingInfo{ VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO };
-		renderingInfo.depthAttachmentFormat = mShadowMap->GetFormat();
-
-		VkGraphicsPipelineCreateInfo pipelineInfo{ VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO };
-		pipelineInfo.pNext = &renderingInfo;
-		pipelineInfo.stageCount = stages.size();
-		pipelineInfo.pStages = stages.data();
-		pipelineInfo.pVertexInputState = &vertexInput;
-		pipelineInfo.pInputAssemblyState = &inputAssembly;
-		pipelineInfo.pViewportState = &viewport;
-		pipelineInfo.pRasterizationState = &rasterizer;
-		pipelineInfo.pMultisampleState = &multisample;
-		pipelineInfo.pColorBlendState = &colorBlend;
-		pipelineInfo.pDynamicState = &dynamicState;
-		pipelineInfo.pDepthStencilState = &depthStencil;
-		pipelineInfo.layout = mShadowPipeLayout;
-
-		VK_CHECK(vkCreateGraphicsPipelines(dev, mDevice->GetPipelineCache(), 1, &pipelineInfo, nullptr, &mShadowPipe));
+		mShadowPipe = std::make_unique<GraphicsPipeline>(*mDevice, *mShadowPipeLayout);
+		mShadowPipe->AddShader(shader, VK_SHADER_STAGE_VERTEX_BIT, "VSMain")
+			.SetVertexInput({ inputBinding }, { utils::InputAttribute(0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0) })
+			.SetPrimitiveTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
+			.SetRasterizer(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE, VK_POLYGON_MODE_FILL)
+			.SetMsaaSamples(VK_SAMPLE_COUNT_1_BIT)
+			.SetDepthAttachment(mShadowMap->GetFormat(), true)
+			.Commit();
 
 		vkDestroyShaderModule(dev, shader, nullptr);
 	}
 
-	void App::InitDescriptorSets()
+	void App::InitDescriptors()
 	{
 		const auto dev = mDevice->Get();
 
+		VkDescriptorPoolSize globalSizes[]{
+			{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, MaxFramesInFlight },
+			{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2 * MaxFramesInFlight }, // UBOs
+			{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1 } }; // Cubemap pass
+
+		VkDescriptorPoolCreateInfo poolInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO };
+		poolInfo.maxSets = MaxFramesInFlight + 1;
+		poolInfo.poolSizeCount = std::size(globalSizes);
+		poolInfo.pPoolSizes = globalSizes;
+		VK_CHECK(vkCreateDescriptorPool(dev, &poolInfo, nullptr, &mGlobalPool));
+
 		mGlobalSets.resize(MaxFramesInFlight);
-		VkDescriptorSetLayout globalLayouts[]{ mGlobalLayout, mGlobalLayout };
+		VkDescriptorSetLayout globalLayouts[]{ mGlobalLayout->Get(), mGlobalLayout->Get() };
 		VkDescriptorSetAllocateInfo allocInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO };
 		allocInfo.descriptorPool = mGlobalPool;
-		allocInfo.descriptorSetCount = MaxFramesInFlight;
+		allocInfo.descriptorSetCount = std::size(globalLayouts);
 		allocInfo.pSetLayouts = globalLayouts;
 		VK_CHECK(vkAllocateDescriptorSets(dev, &allocInfo, mGlobalSets.data()));
 
-		allocInfo.descriptorPool = mPerObjectPool;
-		allocInfo.descriptorSetCount = 1;
-		allocInfo.pSetLayouts = &mPerObjectLayout;
-		VK_CHECK(vkAllocateDescriptorSets(dev, &allocInfo, &mPerObjectSet));
-
+		VkDescriptorSetLayout cubemapLayouts[]{ mEnvMapSetLayout->Get()};
 		allocInfo.descriptorPool = mGlobalPool;
-		allocInfo.descriptorSetCount = 1;
-		allocInfo.pSetLayouts = &mEnvMapSetLayout;
+		allocInfo.descriptorSetCount = std::size(cubemapLayouts);
+		allocInfo.pSetLayouts = cubemapLayouts;
 		VK_CHECK(vkAllocateDescriptorSets(dev, &allocInfo, &mEnvMapSet));
 
 		VkDescriptorImageInfo imageWrite{};
-		imageWrite.imageView = mTexture->GetView();
+		imageWrite.imageView = mEnvMap->GetView();
 		imageWrite.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-		imageWrite.sampler = mTextureSampler;
+		imageWrite.sampler = mEnvMapSampler;
 
 		VkWriteDescriptorSet write{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
 		write.descriptorCount = 1;
 		write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 		write.dstArrayElement = 0;
 		write.dstBinding = 0;
-		write.dstSet = mPerObjectSet;
-		write.pImageInfo = &imageWrite;
-		vkUpdateDescriptorSets(dev, 1, &write, 0, nullptr);
-
-		imageWrite.imageView = mEnvMap->GetView();
-		imageWrite.sampler = mEnvMapSampler;
-
 		write.dstSet = mEnvMapSet;
+		write.pImageInfo = &imageWrite;
 		vkUpdateDescriptorSets(dev, 1, &write, 0, nullptr);
 
 		for (int i = 0; i < MaxFramesInFlight; ++i)
@@ -1335,7 +895,7 @@ namespace im
 			VkDescriptorBufferInfo buffer{};
 			buffer.buffer = mUniformBuffers[i]->Get();
 			buffer.offset = 0;
-			buffer.range = sizeof(LightingData);
+			buffer.range = sizeof(GlobalPassData);
 
 			VkWriteDescriptorSet bufferWrite{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
 			bufferWrite.descriptorCount = 1;
@@ -1346,9 +906,20 @@ namespace im
 			bufferWrite.pBufferInfo = &buffer;
 
 			// Cubemap
-			write.dstBinding = 1;
-			write.dstSet = mGlobalSets[i];
+			VkDescriptorImageInfo cubemapInfo{};
+			cubemapInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			cubemapInfo.imageView = mEnvMap->GetView();
+			cubemapInfo.sampler = mEnvMapSampler;
 
+			VkWriteDescriptorSet cubemapWrite{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
+			cubemapWrite.descriptorCount = 1;
+			cubemapWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+			cubemapWrite.dstArrayElement = 0;
+			cubemapWrite.dstBinding = 1;
+			cubemapWrite.dstSet = mGlobalSets[i];
+			cubemapWrite.pImageInfo = &cubemapInfo;
+
+			// Shadow Map
 			VkDescriptorImageInfo depthMap{};
 			depthMap.imageView = mShadowMap->GetView();
 			depthMap.imageLayout = VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL;
@@ -1362,7 +933,7 @@ namespace im
 			depthMapWrite.dstSet = mGlobalSets[i];
 			depthMapWrite.pImageInfo = &depthMap;
 
-			VkWriteDescriptorSet writes[]{ bufferWrite, write, depthMapWrite };
+			VkWriteDescriptorSet writes[]{ bufferWrite, cubemapWrite, depthMapWrite };
 			vkUpdateDescriptorSets(dev, 3, writes, 0, nullptr);
 		}
 	}
@@ -1474,6 +1045,67 @@ namespace im
 		vkFreeCommandBuffers(mDevice->Get(), mTransientPool, 1, &commandBuffer);
 	}
 
+	std::unique_ptr<Texture2D> App::CreateAndStageTexture(const std::filesystem::path& path, VkFormat format, bool generateMipmaps)
+	{
+		/*ktxTexture* texture;
+		KTX_error_code res = ktxTexture_CreateFromNamedFile(path.string().c_str(), KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &texture);
+		if (res != KTX_SUCCESS)
+		{
+			std::cerr << "Failed to load KTX texture!\n";
+			return nullptr;
+		}
+
+		uint32_t width = texture->baseWidth;
+		uint32_t height = texture->baseHeight;
+		ktx_size_t size = ktxTexture_GetImageSize(texture, 0);
+		ktx_uint8_t* data = ktxTexture_GetData(texture);
+
+		Buffer stagingTex(*mDevice, size, data);
+
+		ktxTexture_Destroy(texture);*/
+
+		stbi_set_flip_vertically_on_load(true);
+
+		int width, height, channels;
+		stbi_uc* data = stbi_load(path.string().c_str(), &width, &height, &channels, STBI_rgb_alpha);
+		if (!data)
+		{
+			std::cerr << "Failed to load image from " << path << "!\n";
+			return nullptr;
+		}
+
+		VkDeviceSize size = width * height * 4;
+		Buffer stagingTex(*mDevice, size, data);
+
+		auto resTex = std::make_unique<Texture2D>(*mDevice,
+			format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+			width, height, generateMipmaps);
+
+		auto cmds = CreateImmediateCommandBuffer();
+		resTex->Barrier(cmds,
+			VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE,
+			VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT);
+
+		VkBufferImageCopy buffer2Image = resTex->CopyFromBuffer();
+		vkCmdCopyBufferToImage(cmds, stagingTex.Get(), resTex->Get(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &buffer2Image);
+
+		if (generateMipmaps)
+		{
+			resTex->GenerateMipmaps(cmds, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_READ_BIT);
+		}
+		else
+		{
+			resTex->Barrier(cmds,
+				VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+				VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+				VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_READ_BIT);
+		}
+
+		SubmitImmediateCommandBuffer(cmds);
+		return resTex;
+	}
+
 	void App::FramebufferSizeCallback(GLFWwindow* window, int width, int height)
 	{
 		App* app = reinterpret_cast<App*>(glfwGetWindowUserPointer(window));
@@ -1500,14 +1132,5 @@ namespace im
 		app->mCamera.yaw += sensitivity * deltaX;
 		app->mCamera.pitch += sensitivity * deltaY;
 		glfwSetCursorPos(window, lastX, lastY);
-	}
-
-	VkPipelineShaderStageCreateInfo App::MakeShaderStage(VkShaderModule shader, VkShaderStageFlagBits stage, const char* entrypoint)
-	{
-		VkPipelineShaderStageCreateInfo res{ VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO };
-		res.module = shader;
-		res.pName = entrypoint;
-		res.stage = stage;
-		return res;
 	}
 }

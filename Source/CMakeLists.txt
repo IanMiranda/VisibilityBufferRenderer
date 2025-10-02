@@ -30,6 +30,18 @@ target_sources(
             ShadowPass.h
             ShadowPass.cpp
 
+            DescriptorSetLayout.h
+            DescriptorSetLayout.cpp
+
+            PipelineLayout.h
+            PipelineLayout.cpp
+
+            GraphicsPipeline.h
+            GraphicsPipeline.cpp
+
             BindlessSet.h
             BindlessSet.cpp
+
+            Common.h
+            Common.cpp
 )

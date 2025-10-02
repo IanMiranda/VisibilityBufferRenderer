@@ -79,13 +79,8 @@ target_include_directories(
         PUBLIC
             ${imgui_SOURCE_DIR}
             ${Vulkan_INCLUDE_DIRS}
+            ${VulkanMemoryAllocator_SOURCE_DIR}
             ${glfw3_SOURCE_DIR}/include
-)
-
-target_include_directories(
-    imgui
-        PUBLIC
-            ${imgui_SOURCE_DIR}
 )
 
 target_include_directories(

@@ -1,7 +1,10 @@
 #include "Texture2D.h"
 
+#include <ktx.h>
+
 #include "Device.h"
 #include "TextureCube.h"
+#include "Buffer.h"
 
 namespace im
 {

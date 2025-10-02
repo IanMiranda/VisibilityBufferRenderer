@@ -1,6 +1,7 @@
 #pragma once
 
 #include <deque>
+#include <unordered_map>
 
 #include "Common.h"
 
@@ -15,10 +16,10 @@ namespace im
 		BindlessSet(Device& device, uint32_t maxTextures);
 		~BindlessSet();
 
-		VkDescriptorSetLayout GetSetLayout() const	{ return mBindlessSetLayout; }
+		VkDescriptorSetLayout GetSetLayout() const { return mBindlessSetLayout; }
 		VkDescriptorSet Get() const	{ return mBindlessSet; }
 
-		void RegisterTexture(VkDescriptorImageInfo imageInfo);
+		uint32_t RegisterTexture(Texture2D& texture, VkSampler sampler);
 
 	private:
 		Device& mDevice;
