@@ -5,6 +5,7 @@
 
 namespace im
 {
+	class CommandBuffer;
 	class Device
 	{
 	public:
@@ -28,9 +29,16 @@ namespace im
 		uint32_t GetPresentIndex() const { return mPresentIndex; }
 		VkQueue GetPresentQueue() const { return mPresentQueue; }
 
+		void Submit(CommandBuffer& cmd,
+			VkSemaphore waitSemaphore = VK_NULL_HANDLE,
+			VkPipelineStageFlags waitDstStage = VK_PIPELINE_STAGE_2_NONE,
+			VkSemaphore signalSemaphore = VK_NULL_HANDLE,
+			VkFence fence = VK_NULL_HANDLE);
+		void SubmitAndFlush(CommandBuffer& cmd);
 		void WaitIdle();
 
-		VkFormat GetSupportedFormat(const std::initializer_list<VkFormat>& formats, VkImageTiling tiling, VkFormatFeatureFlags flags);
+		VkFormat GetSupportedFormat(const std::initializer_list<VkFormat>& formats, VkImageTiling tiling, VkFormatFeatureFlags flags) const;
+		VkFormat GetDepthFormat() const;
 
 	private:
 		void InitInstance();

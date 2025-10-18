@@ -18,14 +18,8 @@ namespace im
 		VkImage Get() const { return mImage; }
 		VkImageView GetView() const { return mView; }
 		VkFormat GetFormat() const { return mFormat; }
-
-		VkBufferImageCopy CopyFromBuffer() const;
-
-		void Barrier(
-			VkCommandBuffer commandBuffer,
-			VkImageLayout oldLayout, VkImageLayout newLayout,
-			VkPipelineStageFlags2 srcStage, VkAccessFlags2 srcAccess,
-			VkPipelineStageFlags2 dstStage, VkAccessFlags2 dstAccess);
+		uint32_t GetWidth() const { return mWidth; }
+		uint32_t GetHeight() const { return mHeight; }
 
 	private:
 		Device& mDevice;

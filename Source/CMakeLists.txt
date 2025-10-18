@@ -18,6 +18,12 @@ target_sources(
             Swapchain.h
             Swapchain.cpp
 
+            CommandPool.h
+            CommandPool.cpp
+
+            CommandBuffer.h
+            CommandBuffer.cpp
+
             Buffer.h
             Buffer.cpp
 

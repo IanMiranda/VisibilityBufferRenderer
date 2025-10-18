@@ -4,9 +4,9 @@
 
 namespace im
 {
-	std::array<VkVertexInputAttributeDescription, 6> Vertex::GetInputAttributes()
+	std::vector<VkVertexInputAttributeDescription> Vertex::GetInputAttributes()
 	{
-		std::array<VkVertexInputAttributeDescription, 6> inputAttribs;
+		std::vector<VkVertexInputAttributeDescription> inputAttribs(6);
 		inputAttribs[0] = utils::InputAttribute(0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0);
 		inputAttribs[1] = utils::InputAttribute(0, 1, VK_FORMAT_R32G32B32A32_SFLOAT, sizeof(float) * 3);
 		inputAttribs[2] = utils::InputAttribute(0, 2, VK_FORMAT_R32G32_SFLOAT, sizeof(float) * 7);

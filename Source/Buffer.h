@@ -22,9 +22,6 @@ namespace im
 		void* Map();
 		void Unmap();
 
-		void CopyInto(VkCommandBuffer commandBuffer, Buffer& other);
-		void CopyInto(VkCommandBuffer commandBuffer, Buffer& other, VkDeviceSize size);
-
 	private:
 		Device& mDevice;
 

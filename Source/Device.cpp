@@ -3,6 +3,8 @@
 #include <optional>
 #include <cassert>
 
+#include "CommandBuffer.h"
+
 namespace im
 {
 #ifndef NDEBUG
@@ -46,12 +48,33 @@ namespace im
 		vkDestroyInstance(mInstance, nullptr);
 	}
 
+	void Device::Submit(CommandBuffer& cmd, VkSemaphore waitSemaphore, VkPipelineStageFlags waitDstStage, VkSemaphore signalSemaphore, VkFence fence)
+	{
+		VkCommandBuffer cmds[] = { cmd.Get() };
+		VkSubmitInfo submitInfo{ VK_STRUCTURE_TYPE_SUBMIT_INFO };
+		submitInfo.commandBufferCount = std::size(cmds);
+		submitInfo.pCommandBuffers = cmds;
+		submitInfo.waitSemaphoreCount = waitSemaphore != VK_NULL_HANDLE ? 1 : 0;
+		submitInfo.pWaitSemaphores = waitSemaphore != VK_NULL_HANDLE ? &waitSemaphore : nullptr;
+		submitInfo.pWaitDstStageMask = &waitDstStage;
+		submitInfo.signalSemaphoreCount = signalSemaphore != VK_NULL_HANDLE ? 1 : 0;
+		submitInfo.pSignalSemaphores = signalSemaphore != VK_NULL_HANDLE ? &signalSemaphore : nullptr;
+
+		VK_CHECK(vkQueueSubmit(mGraphicsQueue, 1, &submitInfo, fence));
+	}
+
+	void Device::SubmitAndFlush(CommandBuffer& cmd)
+	{
+		Submit(cmd);
+		VK_CHECK(vkQueueWaitIdle(mGraphicsQueue));
+	}
+
 	void Device::WaitIdle()
 	{
 		VK_CHECK(vkDeviceWaitIdle(mDevice));
 	}
 
-	VkFormat Device::GetSupportedFormat(const std::initializer_list<VkFormat>& formats, VkImageTiling tiling, VkFormatFeatureFlags flags)
+	VkFormat Device::GetSupportedFormat(const std::initializer_list<VkFormat>& formats, VkImageTiling tiling, VkFormatFeatureFlags flags) const
 	{
 		for (auto fmt : formats)
 		{
@@ -66,6 +89,20 @@ namespace im
 
 		std::cerr << "Failed to find supported format!\n";
 		return VK_FORMAT_UNDEFINED;
+	}
+
+	VkFormat Device::GetDepthFormat() const
+	{
+		return GetSupportedFormat
+		(
+			{
+				VK_FORMAT_D32_SFLOAT,
+				VK_FORMAT_D32_SFLOAT_S8_UINT,
+				VK_FORMAT_D24_UNORM_S8_UINT
+			},
+			VK_IMAGE_TILING_OPTIMAL,
+			VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT
+		);
 	}
 
 	void Device::InitInstance()

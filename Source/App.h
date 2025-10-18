@@ -8,6 +8,8 @@
 #include "Common.h"
 #include "Camera.h"
 #include "Device.h"
+#include "CommandPool.h"
+#include "CommandBuffer.h"
 #include "Buffer.h"
 #include "Texture2D.h"
 #include "TextureCube.h"
@@ -15,6 +17,7 @@
 #include "PipelineLayout.h"
 #include "GraphicsPipeline.h"
 #include "BindlessSet.h"
+#include "ShadowPass.h"
 
 namespace im
 {
@@ -37,7 +40,8 @@ namespace im
 		void Render();
 
 	private:
-		void DrawShadowMap(VkCommandBuffer commandBuffer, const glm::mat4& lightView, const glm::mat4& lightProj);
+		void DrawScene(CommandBuffer& commandBuffer);
+		void DrawShadowMap(CommandBuffer& commandBuffer, const glm::mat4& lightView, const glm::mat4& lightProj);
 
 	private:
 		void InitWindow();
@@ -56,8 +60,6 @@ namespace im
 		void CleanupSwapchain();
 		void RecreateSwapchain();
 
-		VkShaderModule CreateShader(const std::vector<char>& source);
-
 		void TransitionSwapchainImage(
 			VkImage image,
 			VkImageLayout oldLayout,
@@ -67,9 +69,9 @@ namespace im
 			VkPipelineStageFlags2 srcStage,
 			VkPipelineStageFlags2 dstStage);
 
-		VkCommandBuffer CreateImmediateCommandBuffer();
-		void CopyBuffer(VkCommandBuffer commandBuffer, VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
-		void SubmitImmediateCommandBuffer(VkCommandBuffer commandBuffer);
+		std::unique_ptr<CommandBuffer> CreateImmediateCommandBuffer();
+
+		void RunImmediateCommands(const std::function<void(CommandBuffer&)>& cmds);
 
 		std::unique_ptr<Texture2D> CreateAndStageTexture(
 			const std::filesystem::path& path,
@@ -84,8 +86,8 @@ namespace im
 		std::unique_ptr<Device> mDevice;
 		std::unique_ptr<BindlessSet> mBindlessSet;
 
-		VkCommandPool mCommandPool{ VK_NULL_HANDLE };
-		VkCommandPool mTransientPool{ VK_NULL_HANDLE };
+		std::unique_ptr<CommandPool> mCommandPool;
+		std::unique_ptr<CommandPool> mTransientPool;
 
 		std::unique_ptr<DescriptorSetLayout> mGlobalLayout;
 		std::unique_ptr<PipelineLayout> mPipeLayout;
@@ -110,12 +112,9 @@ namespace im
 		VkDescriptorPool mEnvMapPool{ VK_NULL_HANDLE };
 		VkDescriptorSet mEnvMapSet{ VK_NULL_HANDLE };
 
-		std::unique_ptr<Texture2D> mShadowMap;
-		VkSampler mShadowMapSampler{ VK_NULL_HANDLE };
-		std::unique_ptr<PipelineLayout> mShadowPipeLayout;
-		std::unique_ptr<GraphicsPipeline> mShadowPipe;
+		std::unique_ptr<ShadowPass> mShadowPass;
 
-		std::vector<VkCommandBuffer> mCommandBuffers;
+		std::vector<std::unique_ptr<CommandBuffer>> mCommandBuffers;
 		std::vector<VkSemaphore> mAcquireSemaphores;
 		std::vector<VkSemaphore> mRenderSemaphores;
 		std::vector<VkFence> mRenderFences;

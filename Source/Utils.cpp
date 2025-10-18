@@ -8,6 +8,15 @@
 
 namespace im::utils
 {
+	VkVertexInputBindingDescription InputBinding(uint32_t binding, VkVertexInputRate rate, uint32_t stride)
+	{
+		VkVertexInputBindingDescription res{};
+		res.binding = binding;
+		res.inputRate = rate;
+		res.stride = stride;
+		return res;
+	}
+
 	VkVertexInputAttributeDescription InputAttribute(uint32_t binding, uint32_t location, VkFormat format, uint32_t offset)
 	{
 		VkVertexInputAttributeDescription res{};
@@ -15,6 +24,14 @@ namespace im::utils
 		res.location = location;
 		res.format = format;
 		res.offset = offset;
+		return res;
+	}
+
+	VkRect2D Scissor(VkExtent2D size)
+	{
+		VkRect2D res{};
+		res.offset = { 0, 0 };
+		res.extent = size;
 		return res;
 	}
 
@@ -29,9 +46,7 @@ namespace im::utils
 		res.first.height = -static_cast<float>(size.height);
 		res.first.minDepth = 0.0f;
 		res.first.maxDepth = 1.0f;
-
-		res.second.offset = { 0, 0 };
-		res.second.extent = size;
+		res.second = Scissor(size);
 	
 		return res;
 	}
@@ -235,5 +250,31 @@ namespace im::utils
 		depthAttach.loadOp = load;
 		depthAttach.storeOp = store;
 		return depthAttach;
+	}
+
+	VkShaderModule CreateShader(VkDevice device, const std::vector<char>& source)
+	{
+		VkShaderModuleCreateInfo shaderInfo{ VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO };
+		shaderInfo.codeSize = source.size() * sizeof(source[0]);
+		shaderInfo.pCode = reinterpret_cast<const uint32_t*>(source.data());
+
+		VkShaderModule res;
+		VK_CHECK(vkCreateShaderModule(device, &shaderInfo, nullptr, &res));
+		return res;
+	}
+
+	VkClearValue ClearColor(const glm::vec4& value)
+	{
+		VkClearValue res{};
+		res.color = { value.r, value.g, value.b, value.a };
+		return res;
+	}
+
+	VkClearValue ClearDepth(float depth, uint32_t stencil)
+	{
+		VkClearValue res{};
+		res.depthStencil.depth = depth;
+		res.depthStencil.stencil = stencil;
+		return res;
 	}
 }

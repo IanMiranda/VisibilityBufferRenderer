@@ -40,7 +40,7 @@ namespace im
 				&& bitangent == other.bitangent;
 		}
 
-		static std::array<VkVertexInputAttributeDescription, 6> GetInputAttributes();
+		static std::vector<VkVertexInputAttributeDescription> GetInputAttributes();
 	};
 
 	struct ShadowPassData
@@ -67,7 +67,7 @@ namespace im
 
 	struct CubemapData
 	{
-		glm::mat4 vpInverse;
+		glm::mat4 viewProjInverse;
 	};
 
 	class Device;

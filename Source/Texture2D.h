@@ -23,27 +23,13 @@ namespace im
 		uint32_t GetWidth() const		{ return mWidth; }
 		uint32_t GetHeight() const		{ return mHeight; }
 		VkExtent2D GetExtent() const	{ return { mWidth, mHeight }; }
-
-		VkBufferImageCopy CopyFromBuffer() const;
-
-		void Barrier(
-			VkCommandBuffer commandBuffer,
-			VkImageLayout oldLayout, VkImageLayout newLayout,
-			VkPipelineStageFlags2 srcStage, VkAccessFlags2 srcAccess,
-			VkPipelineStageFlags2 dstStage, VkAccessFlags2 dstAccess);
-
-		void Barrier(
-			VkCommandBuffer commandBuffer,
-			VkImageLayout oldLayout, VkImageLayout newLayout,
-			VkPipelineStageFlags2 srcStage, VkAccessFlags2 srcAccess,
-			VkPipelineStageFlags2 dstStage, VkAccessFlags2 dstAccess,
-			uint32_t mipLevel);
+		uint32_t GetMipLevels() const	{ return mMipLevelCount; }
 
 		void GenerateMipmaps(VkCommandBuffer commandBuffer, VkImageLayout newLayout, VkPipelineStageFlags2 dstStage, VkAccessFlags2 dstAccess);
 
-	private:
 		VkImageAspectFlags GetAspect() const;
 
+	private:
 		static bool IsDepthFormat(VkFormat format);
 		static bool IsStencilFormat(VkFormat format);
 
