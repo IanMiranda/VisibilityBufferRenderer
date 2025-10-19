@@ -25,7 +25,8 @@ namespace im::utils
 
 	VkPipelineViewportStateCreateInfo PipelineViewport();
 
-	VkRenderingAttachmentInfo RenderingDepthAttachment(VkImageView view, VkAttachmentLoadOp load, VkAttachmentStoreOp store);
+	VkRenderingAttachmentInfo ColorAttachment(VkImageView view, VkAttachmentLoadOp load, VkAttachmentStoreOp store);
+	VkRenderingAttachmentInfo DepthAttachment(VkImageView view, VkAttachmentLoadOp load, VkAttachmentStoreOp store);
 
 	VkShaderModule CreateShader(VkDevice device, const std::vector<char>& source);
 

@@ -8,15 +8,16 @@ namespace im
 	class Device;
 	class Texture2D;
 	class GraphicsPipeline;
+	class CommandBuffer;
 
 	class ShadowPass
 	{
 	public:
-		ShadowPass(Device& device, VkDeviceSize pushConstantSize, VkFormat depthFormat, VkExtent2D dims);
+		ShadowPass(Device& device, VkDeviceSize pushConstantSize, VkExtent2D dims);
 		~ShadowPass();
 
-		void Begin(VkCommandBuffer commandBuffer);
-		void End(VkCommandBuffer commandBuffer);
+		void Begin(CommandBuffer& cmds);
+		void End(CommandBuffer& cmds);
 
 		Texture2D& GetMap() { return *mShadowMap; }
 		VkSampler GetSampler() { return mShadowMapSampler; }
@@ -25,7 +26,6 @@ namespace im
 	private:
 		Device& mDevice;
 		VkDeviceSize mPushConstSize;
-		VkFormat mDepthFormat;
 
 		std::unique_ptr<Texture2D> mShadowMap;
 		VkSampler mShadowMapSampler{ VK_NULL_HANDLE };

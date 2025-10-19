@@ -25,8 +25,6 @@ namespace im
 		VkExtent2D GetExtent() const	{ return { mWidth, mHeight }; }
 		uint32_t GetMipLevels() const	{ return mMipLevelCount; }
 
-		void GenerateMipmaps(VkCommandBuffer commandBuffer, VkImageLayout newLayout, VkPipelineStageFlags2 dstStage, VkAccessFlags2 dstAccess);
-
 		VkImageAspectFlags GetAspect() const;
 
 	private:

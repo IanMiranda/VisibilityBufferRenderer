@@ -69,8 +69,6 @@ namespace im
 			VkPipelineStageFlags2 srcStage,
 			VkPipelineStageFlags2 dstStage);
 
-		std::unique_ptr<CommandBuffer> CreateImmediateCommandBuffer();
-
 		void RunImmediateCommands(const std::function<void(CommandBuffer&)>& cmds);
 
 		std::unique_ptr<Texture2D> CreateAndStageTexture(

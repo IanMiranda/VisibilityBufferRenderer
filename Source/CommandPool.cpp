@@ -1,6 +1,7 @@
 #include "CommandPool.h"
 
 #include "Device.h"
+#include "CommandBuffer.h"
 
 namespace im
 {
@@ -46,8 +47,9 @@ namespace im
 		
 		std::vector<std::unique_ptr<CommandBuffer>> res;
 		res.reserve(count);
-		for (const auto& cmdBuf : commandBuffers)
+		for (auto cmdBuf : commandBuffers)
 			res.emplace_back(std::make_unique<CommandBuffer>(*this, cmdBuf));
+		return res;
 	}
 
 	Device& CommandPool::GetDevice()

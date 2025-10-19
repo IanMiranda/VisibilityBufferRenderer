@@ -9,6 +9,7 @@ namespace im
 	class Texture2D;
 	class TextureCube;
 	class GraphicsPipeline;
+	class PipelineLayout;
 	class Buffer;
 
 	class CommandBuffer
@@ -38,6 +39,8 @@ namespace im
 			VkImageLayout oldLayout, VkImageLayout newLayout,
 			VkPipelineStageFlags2 srcStage, VkAccessFlags2 srcAccess,
 			VkPipelineStageFlags2 dstStage, VkAccessFlags2 dstAccess);
+
+		void GenerateMipmaps(Texture2D& texture, VkImageLayout newLayout, VkPipelineStageFlags2 dstStage, VkAccessFlags2 dstAccess);
 
 		void Copy(Buffer& src, Buffer& dst);
 		void Copy(Buffer& src, Buffer& dst, VkDeviceSize size);

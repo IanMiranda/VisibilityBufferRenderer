@@ -58,4 +58,11 @@ namespace im
 	{
 		vmaUnmapMemory(mDevice.GetAllocator(), mAllocation);
 	}
+
+	void Buffer::SetData(void* data, size_t dataSize)
+	{
+		void* address = Map();
+		std::memcpy(address, data, dataSize);
+		Unmap();
+	}
 }

@@ -118,6 +118,60 @@ namespace im
 		vkCmdPipelineBarrier2(mCmdBuf, &depInfo);
 	}
 
+	void CommandBuffer::GenerateMipmaps(Texture2D& texture, VkImageLayout newLayout, VkPipelineStageFlags2 dstStage, VkAccessFlags2 dstAccess)
+	{
+		VkFormatProperties props{};
+		vkGetPhysicalDeviceFormatProperties(mPool.GetDevice().GetGpu(), texture.GetFormat(), &props);
+		if (!(props.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT))
+		{
+			std::cerr << "Failed to generate mipmaps, image does not support linear blit!\n";
+			return;
+		}
+
+		int currentWidth = texture.GetWidth();
+		int currentHeight = texture.GetHeight();
+
+		for (int i = 1; i < texture.GetMipLevels(); ++i)
+		{
+			Barrier(texture,
+				VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+				VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+				VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_READ_BIT,
+				i - 1);
+
+			VkImageBlit blit{};
+			blit.srcOffsets[0] = { 0, 0, 0 };
+			blit.srcOffsets[1] = { currentWidth, currentHeight, 1 };
+			blit.dstOffsets[0] = { 0, 0, 0 };
+			blit.dstOffsets[1] = { currentWidth > 1 ? currentWidth / 2 : 1, currentHeight > 1 ? currentHeight / 2 : 1, 1 };
+			blit.srcSubresource.aspectMask = texture.GetAspect();
+			blit.srcSubresource.baseArrayLayer = 0;
+			blit.srcSubresource.layerCount = 1;
+			blit.srcSubresource.mipLevel = i - 1;
+			blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			blit.dstSubresource.baseArrayLayer = 0;
+			blit.dstSubresource.layerCount = 1;
+			blit.dstSubresource.mipLevel = i;
+
+			vkCmdBlitImage(mCmdBuf, texture.Get(),
+				VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, texture.Get(),
+				VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
+
+			Barrier(texture,
+				VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, newLayout,
+				VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_READ_BIT,
+				dstStage, dstAccess, i - 1);
+
+			if (currentWidth > 1) currentWidth /= 2;
+			if (currentHeight > 1) currentHeight /= 2;
+		}
+
+		Barrier(texture,
+			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, newLayout,
+			VK_PIPELINE_STAGE_2_TRANSFER_BIT_KHR, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+			dstStage, dstAccess, texture.GetMipLevels() - 1);
+	}
+
 	void CommandBuffer::Copy(Buffer& src, Buffer& dst)
 	{
 		VkBufferCopy copy{};

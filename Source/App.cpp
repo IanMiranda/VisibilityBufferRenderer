@@ -43,7 +43,6 @@ namespace im
 	App::~App()
 	{
 		const auto dev = mDevice->Get();
-		const auto allocator = mDevice->GetAllocator();
 
 		mDevice->WaitIdle();
 
@@ -84,6 +83,7 @@ namespace im
 
 		CleanupSwapchain();
 
+		mCommandBuffers.clear();
 		mTransientPool.reset();
 		mCommandPool.reset();
 
@@ -213,21 +213,11 @@ namespace im
 
 		commandBuffer.SetViewportAndScissor(swapExtent);
 
-		VkRenderingAttachmentInfo colorAttach{ VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO };
-		colorAttach.clearValue = utils::ClearColor();
-		colorAttach.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-		colorAttach.imageView = swapchain.GetViews()[swapchain.GetImageIndex()];
-		colorAttach.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-		colorAttach.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-
-		VkRenderingAttachmentInfo depthAttach{ VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO };
-		depthAttach.clearValue = utils::ClearDepth();
-		depthAttach.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-		depthAttach.imageView = mDepthImage->GetView();
-		depthAttach.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-		depthAttach.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-
-		commandBuffer.BeginRendering({ colorAttach }, depthAttach, utils::Scissor(swapExtent));
+		commandBuffer.BeginRendering(
+			{ utils::ColorAttachment(swapchain.GetViews()[swapchain.GetImageIndex()], VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE) },
+			utils::DepthAttachment(mDepthImage->GetView(), VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_DONT_CARE),
+			utils::Scissor(swapExtent)
+		);
 
 		CubemapData cubemapData{};
 		glm::mat4 view = mCamera.GetViewMatrix();
@@ -237,7 +227,7 @@ namespace im
 		// Cubemap pass
 		commandBuffer.BindPipeline(*mEnvMapPipe);
 		commandBuffer.PushConstants(*mEnvMapPipeLayout, VK_SHADER_STAGE_VERTEX_BIT, sizeof(cubemapData), &cubemapData);
-		vkCmdBindDescriptorSets(mCommandBuffers[mFrameIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, mEnvMapPipeLayout->Get(), 0, 1, &mEnvMapSet, 0, nullptr);
+		vkCmdBindDescriptorSets(mCommandBuffers[mFrameIndex]->Get(), VK_PIPELINE_BIND_POINT_GRAPHICS, mEnvMapPipeLayout->Get(), 0, 1, &mEnvMapSet, 0, nullptr);
 		commandBuffer.Draw(3);
 
 		// Forward pass
@@ -247,14 +237,11 @@ namespace im
 		passData.viewProjLight = lightProj * lightView;
 		passData.viewInverse = glm::inverse(view);
 		passData.lightDir = view * glm::vec4(lightDir, 0.0f);
-
-		void* globalBufferData = mUniformBuffers[mFrameIndex]->Map();
-		std::memcpy(globalBufferData, &passData, sizeof(passData));
-		mUniformBuffers[mFrameIndex]->Unmap();
+		mUniformBuffers[mFrameIndex]->SetData(&passData, sizeof(passData));
 
 		VkDescriptorSet descSets[] = { mGlobalSets[mFrameIndex], mBindlessSet->Get() };
 		commandBuffer.BindPipeline(*mPipe);
-		vkCmdBindDescriptorSets(mCommandBuffers[mFrameIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, mPipeLayout->Get(), 0, 2, descSets, 0, nullptr);
+		vkCmdBindDescriptorSets(mCommandBuffers[mFrameIndex]->Get(), VK_PIPELINE_BIND_POINT_GRAPHICS, mPipeLayout->Get(), 0, 2, descSets, 0, nullptr);
 
 		ObjectData pushConsts{};
 		for (const auto& mesh : mMeshes)
@@ -263,8 +250,10 @@ namespace im
 			pushConsts.textureHandle = mesh.textureHandle;
 			pushConsts.normalMapHandle = mesh.normalMapHandle;
 
-			commandBuffer.PushConstants(*mPipeLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-				sizeof(pushConsts), &pushConsts);
+			commandBuffer.PushConstants(*mPipeLayout,
+				VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+				sizeof(pushConsts), &pushConsts
+			);
 			commandBuffer.BindVertexBuffer(*mesh.vertexBuffer);
 			commandBuffer.BindIndexBuffer(*mesh.indexBuffer);
 			commandBuffer.DrawIndexed(mesh.indexCount);
@@ -290,18 +279,18 @@ namespace im
 	void App::DrawShadowMap(CommandBuffer& commandBuffer, const glm::mat4& lightView, const glm::mat4& lightProj)
 	{
 		mShadowPass->Begin(commandBuffer);
+
+		ShadowPassData pushConsts{};
+		glm::mat4 viewProj = lightProj * lightView;
+		for (const auto& mesh : mMeshes)
 		{
-			ShadowPassData pushConsts{};
-			glm::mat4 viewProj = lightProj * lightView;
-			for (const auto& mesh : mMeshes)
-			{
-				pushConsts.mvp = viewProj * mesh.transform;
-				commandBuffer.PushConstants(mShadowPass->GetLayout(), VK_SHADER_STAGE_VERTEX_BIT, sizeof(pushConsts), &pushConsts);
-				commandBuffer.BindVertexBuffer(*mesh.vertexBuffer);
-				commandBuffer.BindIndexBuffer(*mesh.indexBuffer);
-				commandBuffer.Draw(mesh.indexCount);
-			}
+			pushConsts.mvp = viewProj * mesh.transform;
+			commandBuffer.PushConstants(mShadowPass->GetLayout(), VK_SHADER_STAGE_VERTEX_BIT, sizeof(pushConsts), &pushConsts);
+			commandBuffer.BindVertexBuffer(*mesh.vertexBuffer);
+			commandBuffer.BindIndexBuffer(*mesh.indexBuffer);
+			commandBuffer.DrawIndexed(mesh.indexCount);
 		}
+
 		mShadowPass->End(commandBuffer);
 	}
 
@@ -429,7 +418,6 @@ namespace im
 		ImGui_ImplGlfw_InitForVulkan(mWindow, true);
 
 		const auto format = mDevice->GetSwapchain().GetFormat();
-
 		VkPipelineRenderingCreateInfo renderingInfo{ VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO };
 		renderingInfo.colorAttachmentCount = 1;
 		renderingInfo.pColorAttachmentFormats = &format;
@@ -561,8 +549,6 @@ namespace im
 	{
 		stbi_set_flip_vertically_on_load(false); // Reversing UV coords using vp^-1, so images will be loaded in correct orientation
 
-		const auto dev = mDevice->Get();
-		const auto allocator = mDevice->GetAllocator();
 		constexpr VkDeviceSize bytesPerPixel = 4;
 		constexpr size_t cubemapFaces = 6;
 		int width, height, channels;
@@ -635,6 +621,7 @@ namespace im
 		samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
 		samplerInfo.unnormalizedCoordinates = VK_FALSE;
 
+		const auto dev = mDevice->Get();
 		VK_CHECK(vkCreateSampler(dev, &samplerInfo, nullptr, &mEnvMapSampler));
 		
 		// Create environment pipeline
@@ -670,7 +657,7 @@ namespace im
 	void App::InitShadowResources()
 	{
 		const VkExtent2D shadowDim{ 2048, 2048 };
-		mShadowPass = std::make_unique<ShadowPass>(*mDevice, sizeof(ShadowPassData), mDepthImage->GetFormat(), shadowDim);
+		mShadowPass = std::make_unique<ShadowPass>(*mDevice, sizeof(ShadowPassData), shadowDim);
 	}
 
 	void App::InitDescriptors()
@@ -817,20 +804,15 @@ namespace im
 		depInfo.imageMemoryBarrierCount = 1;
 		depInfo.pImageMemoryBarriers = &barrier;
 
-		vkCmdPipelineBarrier2(mCommandBuffers[mFrameIndex], &depInfo);
-	}
-
-	std::unique_ptr<CommandBuffer> App::CreateImmediateCommandBuffer()
-	{
-		auto cmdBuf = mTransientPool->Allocate();
-		cmdBuf->Begin();
-		return cmdBuf;
+		vkCmdPipelineBarrier2(mCommandBuffers[mFrameIndex]->Get(), &depInfo);
 	}
 
 	void App::RunImmediateCommands(const std::function<void(CommandBuffer&)>& cmds)
 	{
-		auto cmdBuf = CreateImmediateCommandBuffer();
+		auto cmdBuf = mTransientPool->Allocate();
+		cmdBuf->Begin();
 		cmds(*cmdBuf);
+		cmdBuf->End();
 		mDevice->SubmitAndFlush(*cmdBuf);
 	}
 
@@ -870,27 +852,28 @@ namespace im
 			format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
 			width, height, generateMipmaps);
 
-		auto cmds = CreateImmediateCommandBuffer();
-		cmds->Barrier(*resTex,
-			VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-			VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE,
-			VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT);
-
-		cmds->Copy(stagingTex, *resTex);
-
-		if (generateMipmaps)
+		RunImmediateCommands([&resTex, &stagingTex, generateMipmaps](CommandBuffer& cmds)
 		{
-			resTex->GenerateMipmaps(cmds, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_READ_BIT);
-		}
-		else
-		{
-			cmds->Barrier(*resTex,
-				VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-				VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
-				VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_READ_BIT);
-		}
+			cmds.Barrier(*resTex,
+				VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+				VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE,
+				VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT);
 
-		mDevice->SubmitAndFlush(*cmds);
+			cmds.Copy(stagingTex, *resTex);
+
+			if (generateMipmaps)
+			{
+				cmds.GenerateMipmaps(*resTex, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_READ_BIT);
+			}
+			else
+			{
+				cmds.Barrier(*resTex,
+					VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+					VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+					VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_READ_BIT);
+			}
+		});
+
 		return resTex;
 	}
 

@@ -237,14 +237,21 @@ namespace im::utils
 		return res;
 	}
 
-	VkRenderingAttachmentInfo RenderingDepthAttachment(VkImageView view, VkAttachmentLoadOp load, VkAttachmentStoreOp store)
+	VkRenderingAttachmentInfo ColorAttachment(VkImageView view, VkAttachmentLoadOp load, VkAttachmentStoreOp store)
 	{
-		VkClearValue depthClear{};
-		depthClear.depthStencil.depth = 1.0f;
-		depthClear.depthStencil.stencil = 0;
+		VkRenderingAttachmentInfo colorAttach{ VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO };
+		colorAttach.clearValue = ClearColor();
+		colorAttach.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		colorAttach.imageView = view;
+		colorAttach.loadOp = load;
+		colorAttach.storeOp = store;
+		return colorAttach;
+	}
 
+	VkRenderingAttachmentInfo DepthAttachment(VkImageView view, VkAttachmentLoadOp load, VkAttachmentStoreOp store)
+	{
 		VkRenderingAttachmentInfo depthAttach{ VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO };
-		depthAttach.clearValue = depthClear;
+		depthAttach.clearValue = ClearDepth();
 		depthAttach.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 		depthAttach.imageView = view;
 		depthAttach.loadOp = load;
