@@ -4,7 +4,7 @@
 
 #include <tiny_gltf.h>
 
-#include "Buffer.h"
+#include "API/Buffer.h"
 
 namespace im::utils
 {
@@ -257,17 +257,6 @@ namespace im::utils
 		depthAttach.loadOp = load;
 		depthAttach.storeOp = store;
 		return depthAttach;
-	}
-
-	VkShaderModule CreateShader(VkDevice device, const std::vector<char>& source)
-	{
-		VkShaderModuleCreateInfo shaderInfo{ VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO };
-		shaderInfo.codeSize = source.size() * sizeof(source[0]);
-		shaderInfo.pCode = reinterpret_cast<const uint32_t*>(source.data());
-
-		VkShaderModule res;
-		VK_CHECK(vkCreateShaderModule(device, &shaderInfo, nullptr, &res));
-		return res;
 	}
 
 	VkClearValue ClearColor(const glm::vec4& value)

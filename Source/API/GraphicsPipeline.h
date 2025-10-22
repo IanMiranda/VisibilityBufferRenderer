@@ -5,15 +5,15 @@
 namespace im
 {
 	class Device;
+	class Shader;
 	class PipelineLayout;
 
 	class GraphicsPipeline
 	{
 	public:
-		GraphicsPipeline(Device& device, PipelineLayout& layout);
+		GraphicsPipeline(Device& device, PipelineLayout& layout, Shader& shader);
 		~GraphicsPipeline();
 
-		GraphicsPipeline& AddShader(VkShaderModule shader, VkShaderStageFlagBits stage, const char* entrypoint);
 		GraphicsPipeline& SetVertexInput(
 			const std::vector<VkVertexInputBindingDescription>& bindings,
 			const std::vector<VkVertexInputAttributeDescription>& attributes);
@@ -30,6 +30,7 @@ namespace im
 	private:
 		Device& mDevice;
 		PipelineLayout& mLayout;
+		Shader& mShader;
 
 		VkPipeline mPipeline;
 
@@ -39,7 +40,6 @@ namespace im
 		VkPipelineMultisampleStateCreateInfo mMultisample{ VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO };
 		VkPipelineDepthStencilStateCreateInfo mDepthStencil{ VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO };
 
-		std::vector<VkPipelineShaderStageCreateInfo> mStages;
 		std::vector<VkVertexInputBindingDescription> mInputBindings;
 		std::vector<VkVertexInputAttributeDescription> mInputAttribs;
 		std::vector<VkPipelineColorBlendAttachmentState> mColorBlendStates;

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Common.h"
-#include "PipelineLayout.h"
+#include "API/PipelineLayout.h"
 
 namespace im
 {
@@ -25,7 +25,7 @@ namespace im
 
 	private:
 		Device& mDevice;
-		VkDeviceSize mPushConstSize;
+		const VkDeviceSize mPushConstSize;
 
 		std::unique_ptr<Texture2D> mShadowMap;
 		VkSampler mShadowMapSampler{ VK_NULL_HANDLE };

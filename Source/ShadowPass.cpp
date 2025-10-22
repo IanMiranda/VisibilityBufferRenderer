@@ -1,9 +1,10 @@
 #include "ShadowPass.h"
 
-#include "Device.h"
-#include "Texture2D.h"
-#include "GraphicsPipeline.h"
-#include "CommandBuffer.h"
+#include "API/Device.h"
+#include "API/Texture2D.h"
+#include "API/Shader.h"
+#include "API/GraphicsPipeline.h"
+#include "API/CommandBuffer.h"
 #include "Utils.h"
 
 namespace im
@@ -36,23 +37,24 @@ namespace im
 		samplerInfo.compareOp = VK_COMPARE_OP_LESS;
 		samplerInfo.unnormalizedCoordinates = VK_FALSE;
 
-		const auto dev = mDevice.Get();
-		VK_CHECK(vkCreateSampler(dev, &samplerInfo, nullptr, &mShadowMapSampler));
+		VK_CHECK(vkCreateSampler(mDevice.Get(), &samplerInfo, nullptr, &mShadowMapSampler));
 
-		VkShaderModule shader = utils::CreateShader(mDevice.Get(), utils::ReadFile("Assets/Shaders/ShadowDepthPass.spv"));
+		Shader shader(mDevice, "Assets/Shaders/ShadowDepthPass.spv");
+		shader.AddStage(VK_SHADER_STAGE_VERTEX_BIT, "VSMain");
 
 		VkPushConstantRange passDataRange{};
 		passDataRange.offset = 0;
 		passDataRange.size = sizeof(ShadowPassData);
 		passDataRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
-		const std::vector<VkDescriptorSetLayout> setLayouts{};
-		const std::vector<VkPushConstantRange> pcRanges{ passDataRange };
-		mShadowPipeLayout = std::make_unique<PipelineLayout>(mDevice, setLayouts, pcRanges);
+		mShadowPipeLayout = std::make_unique<PipelineLayout>(
+			mDevice,
+			std::vector<VkDescriptorSetLayout>{},
+			std::vector<VkPushConstantRange>{ passDataRange }
+		);
 
-		mShadowPipe = std::make_unique<GraphicsPipeline>(mDevice, *mShadowPipeLayout);
-		mShadowPipe->AddShader(shader, VK_SHADER_STAGE_VERTEX_BIT, "VSMain")
-			.SetVertexInput(
+		mShadowPipe = std::make_unique<GraphicsPipeline>(mDevice, *mShadowPipeLayout, shader);
+		mShadowPipe->SetVertexInput(
 				{ utils::InputBinding(0, VK_VERTEX_INPUT_RATE_VERTEX, sizeof(Vertex)) },
 				{ utils::InputAttribute(0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0) }
 			)
@@ -61,8 +63,6 @@ namespace im
 			.SetMsaaSamples(VK_SAMPLE_COUNT_1_BIT)
 			.SetDepthAttachment(mShadowMap->GetFormat(), true)
 			.Commit();
-
-		vkDestroyShaderModule(dev, shader, nullptr);
 	}
 
 	ShadowPass::~ShadowPass()

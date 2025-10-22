@@ -1,12 +1,13 @@
 #include "GraphicsPipeline.h"
 
 #include "Device.h"
+#include "Shader.h"
 #include "PipelineLayout.h"
 
 namespace im
 {
-	GraphicsPipeline::GraphicsPipeline(Device& device, PipelineLayout& layout)
-		: mDevice(device), mLayout(layout)
+	GraphicsPipeline::GraphicsPipeline(Device& device, PipelineLayout& layout, Shader& shader)
+		: mDevice(device), mLayout(layout), mShader(shader)
 	{
 	}
 
@@ -14,16 +15,6 @@ namespace im
 	{
 		mDevice.WaitIdle();
 		vkDestroyPipeline(mDevice.Get(), mPipeline, nullptr);
-	}
-
-	GraphicsPipeline& GraphicsPipeline::AddShader(VkShaderModule shader, VkShaderStageFlagBits stage, const char* entrypoint)
-	{
-		VkPipelineShaderStageCreateInfo stageInfo{ VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO };
-		stageInfo.module = shader;
-		stageInfo.pName = entrypoint;
-		stageInfo.stage = stage;
-		mStages.emplace_back(stageInfo);
-		return *this;
 	}
 
 	GraphicsPipeline& GraphicsPipeline::SetVertexInput(
@@ -114,8 +105,8 @@ namespace im
 
 		VkGraphicsPipelineCreateInfo pipelineInfo{ VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO };
 		pipelineInfo.pNext = &renderingInfo;
-		pipelineInfo.stageCount = mStages.size();
-		pipelineInfo.pStages = mStages.data();
+		pipelineInfo.stageCount = mShader.mStages.size();
+		pipelineInfo.pStages = mShader.mStages.data();
 		pipelineInfo.pVertexInputState = &mVertexInput;
 		pipelineInfo.pInputAssemblyState = &mInputAssembly;
 		pipelineInfo.pViewportState = &viewport;
@@ -129,7 +120,6 @@ namespace im
 
 		VK_CHECK(vkCreateGraphicsPipelines(mDevice.Get(), mDevice.GetPipelineCache(), 1, &pipelineInfo, nullptr, &mPipeline));
 
-		mStages.clear();
 		mInputBindings.clear();
 		mInputAttribs.clear();
 		mColorBlendStates.clear();

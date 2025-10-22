@@ -340,8 +340,6 @@ namespace im
 	void App::InitPipeline()
 	{
 		const auto dev = mDevice->Get();
-		VkShaderModule shader = utils::CreateShader(dev, utils::ReadFile("Assets/Shaders/Basic.spv"));
-
 		VkPushConstantRange pcRange{};
 		pcRange.offset = 0;
 		pcRange.size = sizeof(ObjectData);
@@ -358,18 +356,17 @@ namespace im
 		const std::vector<VkPushConstantRange> pcRanges{ pcRange };
 		mPipeLayout = std::make_unique<PipelineLayout>(*mDevice, setLayouts, pcRanges);
 
-		mPipe = std::make_unique<GraphicsPipeline>(*mDevice, *mPipeLayout);
-		mPipe->AddShader(shader, VK_SHADER_STAGE_VERTEX_BIT, "VSMain")
-			.AddShader(shader, VK_SHADER_STAGE_FRAGMENT_BIT, "FSMain")
-			.SetVertexInput({ utils::InputBinding(0, VK_VERTEX_INPUT_RATE_VERTEX, sizeof(Vertex) )}, Vertex::GetInputAttributes())
+		Shader shader(*mDevice, "Assets/Shaders/Basic.spv");
+		shader.AddStage(VK_SHADER_STAGE_VERTEX_BIT, "VSMain")
+			.AddStage(VK_SHADER_STAGE_FRAGMENT_BIT, "FSMain");
+		mPipe = std::make_unique<GraphicsPipeline>(*mDevice, *mPipeLayout, shader);
+		mPipe->SetVertexInput({ utils::InputBinding(0, VK_VERTEX_INPUT_RATE_VERTEX, sizeof(Vertex) )}, Vertex::GetInputAttributes())
 			.SetPrimitiveTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
 			.SetRasterizer(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE, VK_POLYGON_MODE_FILL)
 			.SetMsaaSamples(VK_SAMPLE_COUNT_1_BIT)
 			.AddColorAttachment(mDevice->GetSwapchain().GetFormat())
 			.SetDepthAttachment(mDepthImage->GetFormat(), true)
 			.Commit();
-
-		vkDestroyShaderModule(dev, shader, nullptr);
 	}
 
 	void App::InitCommandBuffers()
@@ -549,9 +546,7 @@ namespace im
 	{
 		stbi_set_flip_vertically_on_load(false); // Reversing UV coords using vp^-1, so images will be loaded in correct orientation
 
-		constexpr VkDeviceSize bytesPerPixel = 4;
 		constexpr size_t cubemapFaces = 6;
-		int width, height, channels;
 
 		const std::array<std::filesystem::path, cubemapFaces> skyboxPaths
 		{
@@ -563,6 +558,7 @@ namespace im
 			"Assets/Textures/Skybox/back.jpg",
 		};
 
+		int width, height, channels;
 		std::array<stbi_uc*, cubemapFaces> cubemapData;
 		for (size_t i = 0; i < cubemapFaces; ++i)
 		{
@@ -575,6 +571,7 @@ namespace im
 			cubemapData[i] = data;
 		}
 
+		constexpr VkDeviceSize bytesPerPixel = 4;
 		const VkDeviceSize faceSize = width * height * bytesPerPixel;
 		const VkDeviceSize size = faceSize * 6;
 
@@ -621,12 +618,9 @@ namespace im
 		samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
 		samplerInfo.unnormalizedCoordinates = VK_FALSE;
 
-		const auto dev = mDevice->Get();
-		VK_CHECK(vkCreateSampler(dev, &samplerInfo, nullptr, &mEnvMapSampler));
+		VK_CHECK(vkCreateSampler(mDevice->Get(), &samplerInfo, nullptr, &mEnvMapSampler));
 		
 		// Create environment pipeline
-		VkShaderModule shader = utils::CreateShader(dev, utils::ReadFile("Assets/Shaders/Cubemap.spv"));
-
 		mEnvMapSetLayout = std::make_unique<DescriptorSetLayout>(*mDevice);
 		mEnvMapSetLayout->AddBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
 						.Commit();
@@ -640,18 +634,17 @@ namespace im
 		const std::vector<VkPushConstantRange> pcRanges{ pcRange };
 		mEnvMapPipeLayout = std::make_unique<PipelineLayout>(*mDevice, setLayouts, pcRanges);
 
-		mEnvMapPipe = std::make_unique<GraphicsPipeline>(*mDevice, *mEnvMapPipeLayout);
-		mEnvMapPipe->AddShader(shader, VK_SHADER_STAGE_VERTEX_BIT, "VSMain")
-			.AddShader(shader, VK_SHADER_STAGE_FRAGMENT_BIT, "FSMain")
-			.SetVertexInput({}, {})
+		Shader shader(*mDevice, "Assets/Shaders/Cubemap.spv");
+		shader.AddStage(VK_SHADER_STAGE_VERTEX_BIT, "VSMain")
+			.AddStage(VK_SHADER_STAGE_FRAGMENT_BIT, "FSMain");
+		mEnvMapPipe = std::make_unique<GraphicsPipeline>(*mDevice, *mEnvMapPipeLayout, shader);
+		mEnvMapPipe->SetVertexInput({}, {})
 			.SetPrimitiveTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
 			.SetRasterizer(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE, VK_POLYGON_MODE_FILL)
 			.SetMsaaSamples(VK_SAMPLE_COUNT_1_BIT)
 			.AddColorAttachment(mDevice->GetSwapchain().GetFormat())
 			.SetDepthAttachment(mDepthImage->GetFormat(), false)
 			.Commit();
-
-		vkDestroyShaderModule(dev, shader, nullptr);
 	}
 
 	void App::InitShadowResources()

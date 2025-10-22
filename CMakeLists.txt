@@ -88,6 +88,7 @@ target_include_directories(
         PRIVATE
             ${Vulkan_INCLUDE_DIRS}
             ${tinygltf_SOURCE_DIR}
+            ${VulkanApp_SOURCE_DIR}/Source
 )
 
 target_compile_definitions(

@@ -28,8 +28,6 @@ namespace im::utils
 	VkRenderingAttachmentInfo ColorAttachment(VkImageView view, VkAttachmentLoadOp load, VkAttachmentStoreOp store);
 	VkRenderingAttachmentInfo DepthAttachment(VkImageView view, VkAttachmentLoadOp load, VkAttachmentStoreOp store);
 
-	VkShaderModule CreateShader(VkDevice device, const std::vector<char>& source);
-
 	VkClearValue ClearColor(const glm::vec4& value = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
 	VkClearValue ClearDepth(float depth = 1.0f, uint32_t stencil = 0);
 }
