@@ -15,16 +15,6 @@ namespace im::utils
 
 	std::pair<std::vector<Vertex>, std::vector<uint32_t>> LoadModel(const std::filesystem::path& path);
 
-	VkPipelineDynamicStateCreateInfo PipelineDynamicState(std::vector<VkDynamicState>& dynamicStates);
-
-	VkPipelineVertexInputStateCreateInfo PipelineVertexInput(
-		std::vector<VkVertexInputBindingDescription>& bindings,
-		std::vector<VkVertexInputAttributeDescription>& attributes);
-
-	VkPipelineInputAssemblyStateCreateInfo PipelineInputAssembly(VkPrimitiveTopology primitive);
-
-	VkPipelineViewportStateCreateInfo PipelineViewport();
-
 	VkRenderingAttachmentInfo ColorAttachment(VkImageView view, VkAttachmentLoadOp load, VkAttachmentStoreOp store);
 	VkRenderingAttachmentInfo DepthAttachment(VkImageView view, VkAttachmentLoadOp load, VkAttachmentStoreOp store);
 

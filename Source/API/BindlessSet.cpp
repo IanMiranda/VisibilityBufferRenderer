@@ -68,35 +68,39 @@ namespace im
 
 	BindlessSet::~BindlessSet()
 	{
-		const auto dev = mDevice.Get();
 		mDevice.WaitIdle();
-
-		vkDestroyDescriptorSetLayout(dev, mBindlessSetLayout, nullptr);
-		vkDestroyDescriptorPool(dev, mBindlessPool, nullptr);
+		vkDestroyDescriptorSetLayout(mDevice.Get(), mBindlessSetLayout, nullptr);
+		vkDestroyDescriptorPool(mDevice.Get(), mBindlessPool, nullptr);
 	}
 
-	uint32_t BindlessSet::RegisterTexture(Texture2D& texture, VkSampler sampler)
+	uint32_t BindlessSet::GetOrCreateId(std::shared_ptr<Texture2D> texture, VkSampler sampler)
 	{
-		// TODO: Watch out for mid-frame
-		assert(!mTexFreeList.empty() && "No more textures left!");
+		if (mTexMap.find(texture) != mTexMap.end())
+		{
+			return mTexMap[texture];
+		}
+		else
+		{
+			assert(!mTexFreeList.empty() && "No more textures left!");
 
-		const uint32_t freeIndex = mTexFreeList.front();
-		mTexFreeList.pop_front();
+			VkDescriptorImageInfo imageInfo{};
+			imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			imageInfo.imageView = texture->GetView();
+			imageInfo.sampler = sampler;
 
-		VkDescriptorImageInfo imageInfo{};
-		imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-		imageInfo.imageView = texture.GetView();
-		imageInfo.sampler = sampler;
+			VkWriteDescriptorSet write{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
+			write.descriptorCount = 1;
+			write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+			write.dstArrayElement = mTexFreeList.front();
+			write.dstBinding = 0;
+			write.dstSet = mBindlessSet;
+			write.pImageInfo = &imageInfo;
 
-		VkWriteDescriptorSet write{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
-		write.descriptorCount = 1;
-		write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-		write.dstArrayElement = freeIndex;
-		write.dstBinding = 0;
-		write.dstSet = mBindlessSet;
-		write.pImageInfo = &imageInfo;
+			vkUpdateDescriptorSets(mDevice.Get(), 1, &write, 0, nullptr);
+			mTexFreeList.pop_front();
 
-		vkUpdateDescriptorSets(mDevice.Get(), 1, &write, 0, nullptr);
-		return freeIndex;
+			mTexMap[texture] = write.dstArrayElement;
+			return write.dstArrayElement;
+		}
 	}
 }

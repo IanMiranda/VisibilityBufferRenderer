@@ -21,12 +21,14 @@ namespace im
 		InitPipelineCache();
 
 		mSwapchain = std::make_unique<Swapchain>(*this);
+		mSamplers = std::make_unique<Samplers>(*this);
 	}
 
 	Device::~Device()
 	{
 		WaitIdle();
 
+		mSamplers.reset();
 		mSwapchain.reset();
 
 		vkDestroyPipelineCache(mDevice, mPipelineCache, nullptr);
@@ -36,10 +38,10 @@ namespace im
 
 		if constexpr (gEnableValidationLayers)
 		{
-			auto destroy = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(
-				vkGetInstanceProcAddr(mInstance, "vkDestroyDebugUtilsMessengerEXT"));
-
-			if (destroy)
+			if (auto destroy = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(
+					vkGetInstanceProcAddr(mInstance, "vkDestroyDebugUtilsMessengerEXT")
+				);
+				destroy)
 				destroy(mInstance, mDebugMessenger, nullptr);
 			else
 				std::cerr << "Failed to load vkDestroyDebugUtilsMessengerEXT!\n";
@@ -155,9 +157,9 @@ namespace im
 
 		if constexpr (gEnableValidationLayers)
 		{
-			auto create = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(
+			if (auto create = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(
 				vkGetInstanceProcAddr(mInstance, "vkCreateDebugUtilsMessengerEXT"));
-			if (create)
+				create)
 			{
 				VK_CHECK(create(mInstance, &debugInfo, nullptr, &mDebugMessenger));
 			}
@@ -288,7 +290,6 @@ namespace im
 	void Device::InitPipelineCache()
 	{
 		VkPipelineCacheCreateInfo cacheInfo{ VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO };
-		
 		VK_CHECK(vkCreatePipelineCache(mDevice, &cacheInfo, nullptr, &mPipelineCache));
 	}
 

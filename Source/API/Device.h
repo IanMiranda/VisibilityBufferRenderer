@@ -2,6 +2,7 @@
 
 #include "Common.h"
 #include "Swapchain.h"
+#include "Sampler.h"
 
 namespace im
 {
@@ -22,7 +23,9 @@ namespace im
 		VkDevice Get() const { return mDevice; }
 		VmaAllocator GetAllocator() const { return mAllocator; }
 		VkPipelineCache GetPipelineCache() const { return mPipelineCache; }
+		
 		Swapchain& GetSwapchain() { return *mSwapchain; }
+		Samplers& GetSamplers() { return *mSamplers; }
 
 		uint32_t GetGraphicsIndex() const { return mGraphicsIndex; }
 		VkQueue GetGraphicsQueue() const { return mGraphicsQueue; }
@@ -76,5 +79,6 @@ namespace im
 		uint32_t mPresentIndex;
 
 		std::unique_ptr<Swapchain> mSwapchain;
+		std::unique_ptr<Samplers> mSamplers;
 	};
 }

@@ -1,4 +1,0 @@
-void VSMain()
-{
-	float4
-}

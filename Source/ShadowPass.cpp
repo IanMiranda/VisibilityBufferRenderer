@@ -12,32 +12,11 @@ namespace im
 	ShadowPass::ShadowPass(Device& device, VkDeviceSize pushConstantSize, VkExtent2D dims)
 		: mDevice(device), mPushConstSize(pushConstantSize)
 	{
-		// stbi_set_flip_vertically_on_load(false); // Reversing UV coords using vp^-1, so images will be loaded in correct orientation
-
 		mShadowMap = std::make_unique<Texture2D>(
 			mDevice, mDevice.GetDepthFormat(),
 			VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
 			dims.width, dims.height, false
 		);
-
-		VkSamplerCreateInfo samplerInfo{ VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
-		samplerInfo.minFilter = VK_FILTER_LINEAR;
-		samplerInfo.magFilter = VK_FILTER_LINEAR;
-		samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-		samplerInfo.minLod = 0.0f;
-		samplerInfo.maxLod = VK_LOD_CLAMP_NONE;
-		samplerInfo.mipLodBias = 0.0f;
-		samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-		samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-		samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-		samplerInfo.maxAnisotropy = 1.0f;
-		samplerInfo.anisotropyEnable = VK_FALSE;
-		samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
-		samplerInfo.compareEnable = VK_TRUE;
-		samplerInfo.compareOp = VK_COMPARE_OP_LESS;
-		samplerInfo.unnormalizedCoordinates = VK_FALSE;
-
-		VK_CHECK(vkCreateSampler(mDevice.Get(), &samplerInfo, nullptr, &mShadowMapSampler));
 
 		Shader shader(mDevice, "Assets/Shaders/ShadowDepthPass.spv");
 		shader.AddStage(VK_SHADER_STAGE_VERTEX_BIT, "VSMain");
@@ -63,11 +42,6 @@ namespace im
 			.SetMsaaSamples(VK_SAMPLE_COUNT_1_BIT)
 			.SetDepthAttachment(mShadowMap->GetFormat(), true)
 			.Commit();
-	}
-
-	ShadowPass::~ShadowPass()
-	{
-		vkDestroySampler(mDevice.Get(), mShadowMapSampler, nullptr);
 	}
 
 	void ShadowPass::Begin(CommandBuffer& cmds)

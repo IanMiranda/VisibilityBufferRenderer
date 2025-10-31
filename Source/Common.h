@@ -51,7 +51,7 @@ namespace im
 	struct ObjectData
 	{
 		glm::mat4 model;
-		uint32_t textureHandle;
+		uint32_t diffuseMapHandle;
 		uint32_t normalMapHandle;
 	};
 
@@ -80,8 +80,8 @@ namespace im
 		std::unique_ptr<Buffer> indexBuffer;
 		uint32_t indexCount;
 		glm::mat4 transform;
-		uint32_t textureHandle;
-		uint32_t normalMapHandle;
+		std::shared_ptr<Texture2D> diffuseMap;
+		std::shared_ptr<Texture2D> normalMap;
 	};
 }
 
@@ -91,7 +91,7 @@ namespace std
 	{
 		size_t operator()(const im::Vertex& vertex) const
 		{
-			return 0; // TODO: change for better hash
+			return 0; // TODO: change for actual hash
 		}
 	};
 }

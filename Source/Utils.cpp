@@ -192,51 +192,6 @@ namespace im::utils
 		return { vertices, indices };
 	}
 
-	VkPipelineDynamicStateCreateInfo PipelineDynamicState(std::vector<VkDynamicState>& dynamicStates)
-	{
-		VkPipelineDynamicStateCreateInfo dynamicState{ VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO };
-		dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
-		dynamicState.pDynamicStates = dynamicStates.data();
-		return dynamicState;
-	}
-
-	VkPipelineVertexInputStateCreateInfo PipelineVertexInput(
-		std::vector<VkVertexInputBindingDescription>& bindings,
-		std::vector<VkVertexInputAttributeDescription>& attributes)
-	{
-		VkPipelineVertexInputStateCreateInfo vertexInput{ VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO };
-		vertexInput.vertexBindingDescriptionCount = bindings.size();
-		vertexInput.pVertexBindingDescriptions = bindings.data();
-		vertexInput.vertexAttributeDescriptionCount = attributes.size();
-		vertexInput.pVertexAttributeDescriptions = attributes.data();
-		return vertexInput;
-	}
-
-	VkPipelineInputAssemblyStateCreateInfo PipelineInputAssembly(VkPrimitiveTopology primitive)
-	{
-		VkPipelineInputAssemblyStateCreateInfo inputAssembly{ VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO };
-		inputAssembly.topology = primitive;
-		inputAssembly.primitiveRestartEnable = VK_FALSE;
-		return inputAssembly;
-	}
-
-	VkPipelineViewportStateCreateInfo PipelineViewport()
-	{
-		VkPipelineViewportStateCreateInfo viewport{ VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO };
-		viewport.viewportCount = 1;
-		viewport.scissorCount = 1;
-		return viewport;
-	}
-
-	VkPipelineShaderStageCreateInfo PipelineShaderStage(VkShaderModule shader, VkShaderStageFlagBits stage, const char* entrypoint)
-	{
-		VkPipelineShaderStageCreateInfo res{ VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO };
-		res.module = shader;
-		res.pName = entrypoint;
-		res.stage = stage;
-		return res;
-	}
-
 	VkRenderingAttachmentInfo ColorAttachment(VkImageView view, VkAttachmentLoadOp load, VkAttachmentStoreOp store)
 	{
 		VkRenderingAttachmentInfo colorAttach{ VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO };

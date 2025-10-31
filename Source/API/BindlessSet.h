@@ -19,7 +19,7 @@ namespace im
 		VkDescriptorSetLayout GetSetLayout() const { return mBindlessSetLayout; }
 		VkDescriptorSet Get() const	{ return mBindlessSet; }
 
-		uint32_t RegisterTexture(Texture2D& texture, VkSampler sampler);
+		uint32_t GetOrCreateId(std::shared_ptr<Texture2D> texture, VkSampler sampler);
 
 	private:
 		Device& mDevice;
@@ -30,5 +30,6 @@ namespace im
 		VkDescriptorSet mBindlessSet;
 
 		std::deque<uint32_t> mTexFreeList;
+		std::unordered_map<std::shared_ptr<Texture2D>, uint32_t> mTexMap;
 	};
 }

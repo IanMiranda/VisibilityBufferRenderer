@@ -77,6 +77,8 @@ namespace im
 			VkFormat format,
 			bool generateMipmaps);
 
+		Mesh UploadMesh(const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices);
+
 	private:
 		static constexpr int MaxFramesInFlight = 2;
 
@@ -86,7 +88,7 @@ namespace im
 		std::unique_ptr<BindlessSet> mBindlessSet;
 
 		std::unique_ptr<CommandPool> mCommandPool;
-		std::unique_ptr<CommandPool> mTransientPool;
+		std::unique_ptr<CommandPool> mImmediatePool;
 
 		std::unique_ptr<DescriptorSetLayout> mGlobalLayout;
 		std::unique_ptr<PipelineLayout> mPipeLayout;
@@ -99,12 +101,10 @@ namespace im
 
 		std::vector<std::unique_ptr<Buffer>> mUniformBuffers;
 
-		std::unique_ptr<Texture2D> mTexture;
-		std::unique_ptr<Texture2D> mNormalMap;
-		VkSampler mTextureSampler{ VK_NULL_HANDLE };
+		std::shared_ptr<Texture2D> mDiffuseMap;
+		std::shared_ptr<Texture2D> mNormalMap;
 
 		std::unique_ptr<TextureCube> mEnvMap;
-		VkSampler mEnvMapSampler{ VK_NULL_HANDLE };
 		std::unique_ptr<DescriptorSetLayout> mEnvMapSetLayout;
 		std::unique_ptr<PipelineLayout> mEnvMapPipeLayout;
 		std::unique_ptr<GraphicsPipeline> mEnvMapPipe;

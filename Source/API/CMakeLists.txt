@@ -22,6 +22,9 @@ target_sources(
             TextureCube.h
             TextureCube.cpp
 
+            Sampler.h
+            Sampler.cpp
+
             Shader.h
             Shader.cpp
 

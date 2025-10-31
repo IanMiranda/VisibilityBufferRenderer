@@ -42,8 +42,6 @@ namespace im
 
 	App::~App()
 	{
-		const auto dev = mDevice->Get();
-
 		mDevice->WaitIdle();
 
 		mShadowPass.reset();
@@ -52,11 +50,8 @@ namespace im
 		mEnvMapPipeLayout.reset();
 		mEnvMapSetLayout.reset();
 
-		vkDestroySampler(dev, mEnvMapSampler, nullptr);
 		mEnvMap.reset();
-
-		vkDestroySampler(dev, mTextureSampler, nullptr);
-		mTexture.reset();
+		mDiffuseMap.reset();
 		mNormalMap.reset();
 
 		mMeshes.clear();
@@ -67,15 +62,15 @@ namespace im
 		ImGui::DestroyContext();
 
 		for (const auto& fence : mRenderFences)
-			vkDestroyFence(dev, fence, nullptr);
+			vkDestroyFence(mDevice->Get(), fence, nullptr);
 		
 		for (const auto& sem : mRenderSemaphores)
-			vkDestroySemaphore(dev, sem, nullptr);
+			vkDestroySemaphore(mDevice->Get(), sem, nullptr);
 
 		for (const auto& sem : mAcquireSemaphores)
-			vkDestroySemaphore(dev, sem, nullptr);
+			vkDestroySemaphore(mDevice->Get(), sem, nullptr);
 
-		vkDestroyDescriptorPool(dev, mGlobalPool, nullptr);
+		vkDestroyDescriptorPool(mDevice->Get(), mGlobalPool, nullptr);
 
 		mPipe.reset();
 		mPipeLayout.reset();
@@ -84,7 +79,7 @@ namespace im
 		CleanupSwapchain();
 
 		mCommandBuffers.clear();
-		mTransientPool.reset();
+		mImmediatePool.reset();
 		mCommandPool.reset();
 
 		mBindlessSet.reset();
@@ -96,7 +91,6 @@ namespace im
 	void App::Run()
 	{
 		float lastTime = glfwGetTime();
-
 		while (!glfwWindowShouldClose(mWindow))
 		{
 			glfwPollEvents();
@@ -136,9 +130,8 @@ namespace im
 	void App::Render()
 	{
 		Swapchain& swapchain = mDevice->GetSwapchain();
-		const auto dev = mDevice->Get();
 
-		VK_CHECK(vkWaitForFences(dev, 1, &mRenderFences[mFrameIndex], VK_TRUE, UINT64_MAX));
+		VK_CHECK(vkWaitForFences(mDevice->Get(), 1, &mRenderFences[mFrameIndex], VK_TRUE, UINT64_MAX));
 
 		auto [res, imageIndex] = swapchain.AcquireNextImage(mAcquireSemaphores[mSemaphoreIndex]);
 		if (res == VK_ERROR_OUT_OF_DATE_KHR)
@@ -151,7 +144,7 @@ namespace im
 			VK_CHECK(res);
 		}
 
-		VK_CHECK(vkResetFences(dev, 1, &mRenderFences[mFrameIndex]));
+		VK_CHECK(vkResetFences(mDevice->Get(), 1, &mRenderFences[mFrameIndex]));
 
 		ImGui_ImplVulkan_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
@@ -187,18 +180,18 @@ namespace im
 
 	void App::DrawScene(CommandBuffer& commandBuffer)
 	{
-		Swapchain& swapchain = mDevice->GetSwapchain();
+		const Swapchain& swapchain = mDevice->GetSwapchain();
 		const auto swapExtent = swapchain.GetExtent();
 
-		glm::vec3 lightDir = glm::vec3(2.0f * sin(glfwGetTime()), 2.0f, -2.0f * cos(glfwGetTime()));
-		glm::mat4 lightView = glm::lookAt(
+		const glm::vec3 lightDir = glm::vec3(2.0f * sin(glfwGetTime()), 2.0f, -2.0f * cos(glfwGetTime()));
+		const glm::mat4 lightView = glm::lookAt(
 			lightDir,
 			glm::vec3(0.0f, 0.0f, 0.0f),
 			glm::vec3(0.0f, 1.0f, 0.0f));
 
 		// Transform and project to "light space"
 		constexpr float shadowProjDim = 10.0f;
-		glm::mat4 lightProj = glm::ortho(-shadowProjDim, shadowProjDim, -shadowProjDim, shadowProjDim, 0.1f, shadowProjDim); // No perspective skew for dir light
+		const glm::mat4 lightProj = glm::ortho(-shadowProjDim, shadowProjDim, -shadowProjDim, shadowProjDim, 0.1f, shadowProjDim); // No perspective skew for dir light
 
 		DrawShadowMap(commandBuffer, lightView, lightProj);
 
@@ -239,7 +232,7 @@ namespace im
 		passData.lightDir = view * glm::vec4(lightDir, 0.0f);
 		mUniformBuffers[mFrameIndex]->SetData(&passData, sizeof(passData));
 
-		VkDescriptorSet descSets[] = { mGlobalSets[mFrameIndex], mBindlessSet->Get() };
+		const VkDescriptorSet descSets[] = { mGlobalSets[mFrameIndex], mBindlessSet->Get() };
 		commandBuffer.BindPipeline(*mPipe);
 		vkCmdBindDescriptorSets(mCommandBuffers[mFrameIndex]->Get(), VK_PIPELINE_BIND_POINT_GRAPHICS, mPipeLayout->Get(), 0, 2, descSets, 0, nullptr);
 
@@ -247,8 +240,8 @@ namespace im
 		for (const auto& mesh : mMeshes)
 		{
 			pushConsts.model = mesh.transform;
-			pushConsts.textureHandle = mesh.textureHandle;
-			pushConsts.normalMapHandle = mesh.normalMapHandle;
+			pushConsts.diffuseMapHandle = mBindlessSet->GetOrCreateId(mesh.diffuseMap, mDevice->GetSamplers().TrilinearColor());
+			pushConsts.normalMapHandle = mBindlessSet->GetOrCreateId(mesh.normalMap, mDevice->GetSamplers().TrilinearColor());
 
 			commandBuffer.PushConstants(*mPipeLayout,
 				VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
@@ -318,7 +311,7 @@ namespace im
 	{
 		const uint32_t graphicsIndex = mDevice->GetGraphicsIndex();
 		mCommandPool = std::make_unique<CommandPool>(*mDevice, graphicsIndex, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
-		mTransientPool = std::make_unique<CommandPool>(*mDevice, graphicsIndex, VK_COMMAND_POOL_CREATE_TRANSIENT_BIT);
+		mImmediatePool = std::make_unique<CommandPool>(*mDevice, graphicsIndex, VK_COMMAND_POOL_CREATE_TRANSIENT_BIT);
 	}
 
 	void App::InitDepthBuffer()
@@ -339,12 +332,6 @@ namespace im
 
 	void App::InitPipeline()
 	{
-		const auto dev = mDevice->Get();
-		VkPushConstantRange pcRange{};
-		pcRange.offset = 0;
-		pcRange.size = sizeof(ObjectData);
-		pcRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
-
 		mGlobalLayout = std::make_unique<DescriptorSetLayout>(*mDevice);
 		mGlobalLayout->
 			AddBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)	// Lighting
@@ -352,9 +339,16 @@ namespace im
 			.AddBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)						// Shadow Map
 			.Commit();
 
-		const std::vector<VkDescriptorSetLayout> setLayouts{ mGlobalLayout->Get(), mBindlessSet->GetSetLayout() };
-		const std::vector<VkPushConstantRange> pcRanges{ pcRange };
-		mPipeLayout = std::make_unique<PipelineLayout>(*mDevice, setLayouts, pcRanges);
+		VkPushConstantRange pcRange{};
+		pcRange.offset = 0;
+		pcRange.size = sizeof(ObjectData);
+		pcRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+
+		mPipeLayout = std::make_unique<PipelineLayout>(
+			*mDevice,
+			std::vector<VkDescriptorSetLayout>{ mGlobalLayout->Get(), mBindlessSet->GetSetLayout() },
+			std::vector<VkPushConstantRange>{ pcRange }
+		);
 
 		Shader shader(*mDevice, "Assets/Shaders/Basic.spv");
 		shader.AddStage(VK_SHADER_STAGE_VERTEX_BIT, "VSMain")
@@ -376,29 +370,22 @@ namespace im
 
 	void App::InitSyncPrimitives()
 	{
-		const auto dev = mDevice->Get();
-		mAcquireSemaphores.clear();
-		mRenderSemaphores.clear();
-		mRenderFences.clear();
-
 		mAcquireSemaphores.resize(MaxFramesInFlight);
 		mRenderSemaphores.resize(MaxFramesInFlight);
 		mRenderFences.resize(MaxFramesInFlight);
 
 		VkSemaphoreCreateInfo semaphoreInfo{ VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
+		for (size_t i = 0; i < mDevice->GetSwapchain().GetViews().size(); ++i)
+		{
+			VK_CHECK(vkCreateSemaphore(mDevice->Get(), &semaphoreInfo, nullptr, &mAcquireSemaphores[i]));
+			VK_CHECK(vkCreateSemaphore(mDevice->Get(), &semaphoreInfo, nullptr, &mRenderSemaphores[i]));
+		}
 
 		VkFenceCreateInfo fenceInfo{ VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
 		fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-
-		for (size_t i = 0; i < mDevice->GetSwapchain().GetViews().size(); ++i)
-		{
-			VK_CHECK(vkCreateSemaphore(dev, &semaphoreInfo, nullptr, &mAcquireSemaphores[i]));
-			VK_CHECK(vkCreateSemaphore(dev, &semaphoreInfo, nullptr, &mRenderSemaphores[i]));
-		}
-
 		for (size_t i = 0; i < MaxFramesInFlight; ++i)
 		{
-			VK_CHECK(vkCreateFence(dev, &fenceInfo, nullptr, &mRenderFences[i]));
+			VK_CHECK(vkCreateFence(mDevice->Get(), &fenceInfo, nullptr, &mRenderFences[i]));
 		}
 	}
 
@@ -441,63 +428,22 @@ namespace im
 	void App::InitMeshes()
 	{
 		// Load texture image
-		mTexture = CreateAndStageTexture("Assets/Textures/brickwall.jpg", VK_FORMAT_R8G8B8A8_SRGB, false);
-		mNormalMap = CreateAndStageTexture("Assets/Textures/brickwall_normal.jpg", VK_FORMAT_R8G8B8A8_UNORM, false);
-
-		const auto dev = mDevice->Get();
-		VkSamplerCreateInfo samplerInfo{ VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
-		samplerInfo.minFilter = VK_FILTER_LINEAR;
-		samplerInfo.magFilter = VK_FILTER_LINEAR;
-		samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-		samplerInfo.minLod = 0.0f;
-		samplerInfo.maxLod = VK_LOD_CLAMP_NONE;
-		samplerInfo.mipLodBias = 0.0f;
-		samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-		samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-		samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-		samplerInfo.maxAnisotropy = 1.0f;
-		samplerInfo.anisotropyEnable = VK_FALSE;
-		samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
-		samplerInfo.compareEnable = VK_FALSE;
-		samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
-		samplerInfo.unnormalizedCoordinates = VK_FALSE;
-
-		VK_CHECK(vkCreateSampler(dev, &samplerInfo, nullptr, &mTextureSampler));
-
-		uint32_t texId = mBindlessSet->RegisterTexture(*mTexture, mTextureSampler);
-		uint32_t nmapId = mBindlessSet->RegisterTexture(*mNormalMap, mTextureSampler);
+		mDiffuseMap = std::shared_ptr<Texture2D>(CreateAndStageTexture("Assets/Textures/brickwall.jpg", VK_FORMAT_R8G8B8A8_SRGB, false));
+		mNormalMap = std::shared_ptr<Texture2D>(CreateAndStageTexture("Assets/Textures/brickwall_normal.jpg", VK_FORMAT_R8G8B8A8_UNORM, false));
 
 		// Duck
 		{
-			Mesh duck;
 
 			auto [duckVertices, duckIndices] = utils::LoadModel("Assets/Models/Duck.gltf");
-
-			Buffer stagingDuckVerts(*mDevice, duckVertices.size() * sizeof(duckVertices[0]), duckVertices.data());
-			Buffer stagingDuckIdxs(*mDevice, duckIndices.size() * sizeof(duckIndices[0]), duckIndices.data());
-			duck.vertexBuffer = std::make_unique<Buffer>(
-				*mDevice, stagingDuckVerts.GetSize(),
-				VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, 0);
-			duck.indexBuffer = std::make_unique<Buffer>(
-				*mDevice, stagingDuckIdxs.GetSize(),
-				VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, 0);
-			duck.textureHandle = texId;
-			duck.normalMapHandle = nmapId;
-			duck.indexCount = duckIndices.size();
-
-			RunImmediateCommands([this, &stagingDuckVerts, &stagingDuckIdxs, &duck](CommandBuffer& cmds)
-			{
-				cmds.Copy(stagingDuckVerts, *duck.vertexBuffer);
-				cmds.Copy(stagingDuckIdxs, *duck.indexBuffer);
-			});
-
+			Mesh duck = UploadMesh(duckVertices, duckIndices);
+			duck.diffuseMap = mDiffuseMap;
+			duck.normalMap = mNormalMap;
 			duck.transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -1.0f, 0.0f));
 			duck.transform = glm::scale(duck.transform, glm::vec3(0.01f));
 			mMeshes.emplace_back(std::move(duck));
 		}
 
 		{
-			Mesh plane;
 			const std::vector<Vertex> planeVertices
 			{
 				{ { -0.5f, 0.0f, 0.5f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 0.0f, 1.0f }, { 0.0f, 1.0f, 0.0f }, { 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 1.0f } },
@@ -512,21 +458,11 @@ namespace im
 				2, 3, 0
 			};
 
-			Buffer stagingPlaneVerts(*mDevice, planeVertices.size() * sizeof(planeVertices[0]), planeVertices.data());
-			Buffer stagingPlaneIdxs(*mDevice, planeIndices.size() * sizeof(planeIndices[0]), planeIndices.data());
-			plane.vertexBuffer = std::make_unique<Buffer>(*mDevice, stagingPlaneVerts.GetSize(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, 0);
-			plane.indexBuffer = std::make_unique<Buffer>(*mDevice, stagingPlaneIdxs.GetSize(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, 0);
-			RunImmediateCommands([this, &stagingPlaneVerts, &stagingPlaneIdxs, &plane](CommandBuffer& cmds)
-			{
-				cmds.Copy(stagingPlaneVerts, *plane.vertexBuffer);
-				cmds.Copy(stagingPlaneIdxs, *plane.indexBuffer);
-			});
-
-			plane.indexCount = planeIndices.size();
+			Mesh plane = UploadMesh(planeVertices, planeIndices);
 			plane.transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -1.0f, 0.0f));
 			plane.transform = glm::scale(plane.transform, glm::vec3(5.0f));
-			plane.textureHandle = texId;
-			plane.normalMapHandle = nmapId;
+			plane.diffuseMap = mDiffuseMap;
+			plane.normalMap = mNormalMap;
 			mMeshes.emplace_back(std::move(plane));
 		}
 	}
@@ -538,17 +474,38 @@ namespace im
 		{
 			mUniformBuffers.emplace_back(
 				std::make_unique<Buffer>(*mDevice, sizeof(GlobalPassData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-					VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT));
+					VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT)
+			);
 		}
+	}
+
+	static constexpr size_t gCubemapFaces = 6;
+	std::array<stbi_uc*, gCubemapFaces> LoadCubemap(
+		int& width,
+		int& height,
+		const std::array<std::filesystem::path, gCubemapFaces>& paths
+	)
+	{
+		int channels;
+		std::array<stbi_uc*, gCubemapFaces> cubemapData;
+		for (size_t i = 0; i < gCubemapFaces; ++i)
+		{
+			stbi_uc* data = stbi_load(paths[i].string().c_str(), &width, &height, &channels, STBI_rgb_alpha);
+			if (!data)
+			{
+				std::cerr << "Failed to load cubemap!\n";
+			}
+
+			cubemapData[i] = data;
+		}
+		return cubemapData;
 	}
 
 	void App::InitCubemap()
 	{
 		stbi_set_flip_vertically_on_load(false); // Reversing UV coords using vp^-1, so images will be loaded in correct orientation
 
-		constexpr size_t cubemapFaces = 6;
-
-		const std::array<std::filesystem::path, cubemapFaces> skyboxPaths
+		const std::array<std::filesystem::path, gCubemapFaces> skyboxPaths
 		{
 			"Assets/Textures/Skybox/right.jpg",
 			"Assets/Textures/Skybox/left.jpg",
@@ -558,26 +515,16 @@ namespace im
 			"Assets/Textures/Skybox/back.jpg",
 		};
 
-		int width, height, channels;
-		std::array<stbi_uc*, cubemapFaces> cubemapData;
-		for (size_t i = 0; i < cubemapFaces; ++i)
-		{
-			stbi_uc* data = stbi_load(skyboxPaths[i].string().c_str(), &width, &height, &channels, STBI_rgb_alpha);
-			if (!data)
-			{
-				std::cerr << "Failed to load cubemap!\n";
-			}
-
-			cubemapData[i] = data;
-		}
+		int width, height;
+		const auto cubemapData = LoadCubemap(width, height, skyboxPaths);
 
 		constexpr VkDeviceSize bytesPerPixel = 4;
 		const VkDeviceSize faceSize = width * height * bytesPerPixel;
-		const VkDeviceSize size = faceSize * 6;
+		const VkDeviceSize size = faceSize * gCubemapFaces;
 
 		Buffer staging(*mDevice, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
 		stbi_uc* mappedData = reinterpret_cast<stbi_uc*>(staging.Map());
-		for (size_t i = 0; i < cubemapFaces; ++i)
+		for (size_t i = 0; i < gCubemapFaces; ++i)
 			std::memcpy(mappedData + faceSize * i, cubemapData[i], faceSize);
 
 		staging.Unmap();
@@ -600,25 +547,6 @@ namespace im
 				VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
 				VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_READ_BIT_KHR);
 		});
-
-		VkSamplerCreateInfo samplerInfo{ VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
-		samplerInfo.minFilter = VK_FILTER_LINEAR;
-		samplerInfo.magFilter = VK_FILTER_LINEAR;
-		samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-		samplerInfo.minLod = 0.0f;
-		samplerInfo.maxLod = VK_LOD_CLAMP_NONE;
-		samplerInfo.mipLodBias = 0.0f;
-		samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-		samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-		samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-		samplerInfo.maxAnisotropy = 1.0f;
-		samplerInfo.anisotropyEnable = VK_FALSE;
-		samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
-		samplerInfo.compareEnable = VK_FALSE;
-		samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
-		samplerInfo.unnormalizedCoordinates = VK_FALSE;
-
-		VK_CHECK(vkCreateSampler(mDevice->Get(), &samplerInfo, nullptr, &mEnvMapSampler));
 		
 		// Create environment pipeline
 		mEnvMapSetLayout = std::make_unique<DescriptorSetLayout>(*mDevice);
@@ -630,9 +558,11 @@ namespace im
 		pcRange.size = sizeof(CubemapData);
 		pcRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
-		const std::vector<VkDescriptorSetLayout> setLayouts{ mEnvMapSetLayout->Get() };
-		const std::vector<VkPushConstantRange> pcRanges{ pcRange };
-		mEnvMapPipeLayout = std::make_unique<PipelineLayout>(*mDevice, setLayouts, pcRanges);
+		mEnvMapPipeLayout = std::make_unique<PipelineLayout>(
+			*mDevice,
+			std::vector<VkDescriptorSetLayout>{ mEnvMapSetLayout->Get() },
+			std::vector<VkPushConstantRange>{ pcRange }
+		);
 
 		Shader shader(*mDevice, "Assets/Shaders/Cubemap.spv");
 		shader.AddStage(VK_SHADER_STAGE_VERTEX_BIT, "VSMain")
@@ -649,8 +579,7 @@ namespace im
 
 	void App::InitShadowResources()
 	{
-		const VkExtent2D shadowDim{ 2048, 2048 };
-		mShadowPass = std::make_unique<ShadowPass>(*mDevice, sizeof(ShadowPassData), shadowDim);
+		mShadowPass = std::make_unique<ShadowPass>(*mDevice, sizeof(ShadowPassData), VkExtent2D{ 2048, 2048 });
 	}
 
 	void App::InitDescriptors()
@@ -685,7 +614,7 @@ namespace im
 		VkDescriptorImageInfo imageWrite{};
 		imageWrite.imageView = mEnvMap->GetView();
 		imageWrite.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-		imageWrite.sampler = mEnvMapSampler;
+		imageWrite.sampler = mDevice->GetSamplers().TrilinearColor();
 
 		VkWriteDescriptorSet write{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
 		write.descriptorCount = 1;
@@ -715,7 +644,7 @@ namespace im
 			VkDescriptorImageInfo cubemapInfo{};
 			cubemapInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 			cubemapInfo.imageView = mEnvMap->GetView();
-			cubemapInfo.sampler = mEnvMapSampler;
+			cubemapInfo.sampler = mDevice->GetSamplers().TrilinearColor();
 
 			VkWriteDescriptorSet cubemapWrite{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
 			cubemapWrite.descriptorCount = 1;
@@ -729,7 +658,7 @@ namespace im
 			VkDescriptorImageInfo depthMap{};
 			depthMap.imageView = mShadowPass->GetMap().GetView();
 			depthMap.imageLayout = VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL;
-			depthMap.sampler = mShadowPass->GetSampler();
+			depthMap.sampler = mDevice->GetSamplers().Shadow();
 
 			VkWriteDescriptorSet depthMapWrite{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
 			depthMapWrite.descriptorCount = 1;
@@ -802,7 +731,7 @@ namespace im
 
 	void App::RunImmediateCommands(const std::function<void(CommandBuffer&)>& cmds)
 	{
-		auto cmdBuf = mTransientPool->Allocate();
+		auto cmdBuf = mImmediatePool->Allocate();
 		cmdBuf->Begin();
 		cmds(*cmdBuf);
 		cmdBuf->End();
@@ -870,6 +799,26 @@ namespace im
 		return resTex;
 	}
 
+	Mesh App::UploadMesh(const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices)
+	{
+		Mesh res;
+		Buffer stagingVerts(*mDevice, vertices.size() * sizeof(vertices[0]), vertices.data());
+		Buffer stagingIdxs(*mDevice, indices.size() * sizeof(indices[0]), indices.data());
+		res.vertexBuffer = std::make_unique<Buffer>(
+			*mDevice, stagingVerts.GetSize(),
+			VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, 0);
+		res.indexBuffer = std::make_unique<Buffer>(
+			*mDevice, stagingIdxs.GetSize(),
+			VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, 0);
+		res.indexCount = indices.size();
+		RunImmediateCommands([this, &stagingVerts, &stagingIdxs, &res](CommandBuffer& cmds)
+		{
+			cmds.Copy(stagingVerts, *res.vertexBuffer);
+			cmds.Copy(stagingIdxs, *res.indexBuffer);
+		});
+		return res;
+	}
+
 	void App::FramebufferSizeCallback(GLFWwindow* window, int width, int height)
 	{
 		App* app = reinterpret_cast<App*>(glfwGetWindowUserPointer(window));
@@ -889,10 +838,10 @@ namespace im
 			lastY = ypos;
 		}
 
-		constexpr float sensitivity = 0.2f;
 		float deltaX = xpos - lastX;
 		float deltaY = lastY - ypos;
 
+		constexpr float sensitivity = 0.2f;
 		app->mCamera.yaw += sensitivity * deltaX;
 		app->mCamera.pitch += sensitivity * deltaY;
 		glfwSetCursorPos(window, lastX, lastY);
