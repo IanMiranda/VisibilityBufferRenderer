@@ -195,14 +195,13 @@ namespace im
 
 		DrawShadowMap(commandBuffer, lightView, lightProj);
 
-		TransitionSwapchainImage(
+		commandBuffer.BarrierSwapchainImage(
 			swapchain.GetImages()[swapchain.GetImageIndex()],
-			VK_IMAGE_LAYOUT_UNDEFINED,
-			VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-			VK_ACCESS_2_NONE,
-			VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+			VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
 			VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-			VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
+			VK_ACCESS_2_NONE,
+			VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+			VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT);
 
 		commandBuffer.SetViewportAndScissor(swapExtent);
 
@@ -259,14 +258,13 @@ namespace im
 
 		commandBuffer.EndRendering();
 
-		TransitionSwapchainImage( // TODO: use command buffer?
+		commandBuffer.BarrierSwapchainImage(
 			swapchain.GetImages()[swapchain.GetImageIndex()],
-			VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-			VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-			VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-			VK_ACCESS_2_NONE,
+			VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
 			VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-			VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT);
+			VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+			VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
+			VK_ACCESS_2_NONE);
 	}
 
 	void App::DrawShadowMap(CommandBuffer& commandBuffer, const glm::mat4& lightView, const glm::mat4& lightProj)
@@ -695,38 +693,6 @@ namespace im
 
 		mDevice->GetSwapchain().Recreate();
 		InitDepthBuffer();
-	}
-
-	void App::TransitionSwapchainImage(
-		VkImage image,
-		VkImageLayout oldLayout,
-		VkImageLayout newLayout,
-		VkAccessFlags2 srcAccess,
-		VkAccessFlags2 dstAccess,
-		VkPipelineStageFlags2 srcStage,
-		VkPipelineStageFlags2 dstStage)
-	{
-		VkImageMemoryBarrier2 barrier{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2 };
-		barrier.srcStageMask = srcStage;
-		barrier.srcAccessMask = srcAccess;
-		barrier.dstStageMask = dstStage;
-		barrier.dstAccessMask = dstAccess;
-		barrier.oldLayout = oldLayout;
-		barrier.newLayout = newLayout;
-		barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		barrier.image = image;
-		barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		barrier.subresourceRange.baseArrayLayer = 0;
-		barrier.subresourceRange.layerCount = 1;
-		barrier.subresourceRange.baseMipLevel = 0;
-		barrier.subresourceRange.levelCount = 1;
-
-		VkDependencyInfo depInfo{ VK_STRUCTURE_TYPE_DEPENDENCY_INFO };
-		depInfo.imageMemoryBarrierCount = 1;
-		depInfo.pImageMemoryBarriers = &barrier;
-
-		vkCmdPipelineBarrier2(mCommandBuffers[mFrameIndex]->Get(), &depInfo);
 	}
 
 	void App::RunImmediateCommands(const std::function<void(CommandBuffer&)>& cmds)

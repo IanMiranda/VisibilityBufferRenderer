@@ -21,6 +21,12 @@ namespace im
 		void Begin(VkCommandBufferUsageFlags usage = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 		void End();
 
+		void BarrierSwapchainImage(
+			VkImage image,
+			VkImageLayout oldLayout, VkImageLayout newLayout,
+			VkPipelineStageFlags2 srcStage, VkAccessFlags2 srcAccess,
+			VkPipelineStageFlags2 dstStage, VkAccessFlags2 dstAccess);
+
 		void Barrier(
 			Texture2D& texture,
 			VkImageLayout oldLayout, VkImageLayout newLayout,

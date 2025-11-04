@@ -34,7 +34,36 @@ namespace im
 		VK_CHECK(vkEndCommandBuffer(mCmdBuf));
 	}
 
-	void CommandBuffer::Barrier(
+    void CommandBuffer::BarrierSwapchainImage(
+		VkImage image,
+		VkImageLayout oldLayout, VkImageLayout newLayout,
+		VkPipelineStageFlags2 srcStage, VkAccessFlags2 srcAccess,
+		VkPipelineStageFlags2 dstStage, VkAccessFlags2 dstAccess)
+    {
+		VkImageMemoryBarrier2 imageBarrier{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2 };
+		imageBarrier.image = image;
+		imageBarrier.oldLayout = oldLayout;
+		imageBarrier.newLayout = newLayout;
+		imageBarrier.srcStageMask = srcStage;
+		imageBarrier.srcAccessMask = srcAccess;
+		imageBarrier.dstStageMask = dstStage;
+		imageBarrier.dstAccessMask = dstAccess;
+		imageBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		imageBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		imageBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		imageBarrier.subresourceRange.baseArrayLayer = 0;
+		imageBarrier.subresourceRange.layerCount = 1;
+		imageBarrier.subresourceRange.baseMipLevel = 0;
+		imageBarrier.subresourceRange.levelCount = 1;
+
+		VkDependencyInfo depInfo{ VK_STRUCTURE_TYPE_DEPENDENCY_INFO };
+		depInfo.imageMemoryBarrierCount = 1;
+		depInfo.pImageMemoryBarriers = &imageBarrier;
+
+		vkCmdPipelineBarrier2(mCmdBuf, &depInfo);
+    }
+
+    void CommandBuffer::Barrier(
 		Texture2D& texture,
 		VkImageLayout oldLayout, VkImageLayout newLayout,
 		VkPipelineStageFlags2 srcStage, VkAccessFlags2 srcAccess,

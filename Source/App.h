@@ -61,15 +61,6 @@ namespace im
 		void CleanupSwapchain();
 		void RecreateSwapchain();
 
-		void TransitionSwapchainImage(
-			VkImage image,
-			VkImageLayout oldLayout,
-			VkImageLayout newLayout,
-			VkAccessFlags2 srcAccess,
-			VkAccessFlags2 dstAccess,
-			VkPipelineStageFlags2 srcStage,
-			VkPipelineStageFlags2 dstStage);
-
 		void RunImmediateCommands(const std::function<void(CommandBuffer&)>& cmds);
 
 		std::unique_ptr<Texture2D> CreateAndStageTexture(
