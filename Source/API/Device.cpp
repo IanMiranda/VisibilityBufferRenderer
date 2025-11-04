@@ -133,16 +133,26 @@ namespace im
 			}
 		}
 
+		if (InstanceExtensionSupported(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME))
+		{
+			instanceExtensions.emplace_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+		}
+
 		std::vector<const char*> instanceLayers;
 		if constexpr (gEnableValidationLayers)
 		{
 			instanceLayers.emplace_back("VK_LAYER_KHRONOS_validation");
-			instanceLayers.emplace_back("VK_LAYER_LUNARG_monitor");
+			// instanceLayers.emplace_back("VK_LAYER_LUNARG_monitor");
 		}
 
 		auto debugInfo = GetDebugInfo();
 
 		VkInstanceCreateInfo instanceInfo{ VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO };
+		if (InstanceExtensionSupported(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME))
+		{
+			instanceExtensions.emplace_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+			instanceInfo.flags = VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+		}
 		instanceInfo.pApplicationInfo = &appInfo;
 		instanceInfo.enabledExtensionCount = static_cast<uint32_t>(instanceExtensions.size());
 		instanceInfo.ppEnabledExtensionNames = instanceExtensions.data();
@@ -259,6 +269,11 @@ namespace im
 
 			VkPhysicalDeviceFeatures2 features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2 };
 			features.pNext = &dynamicRenderFeatures;
+
+			if (InstanceExtensionSupported(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME))
+			{
+				deviceExtensions.emplace_back("VK_KHR_portability_subset");
+			}
 
 			VkDeviceCreateInfo deviceInfo{ VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO };
 			deviceInfo.pNext = &features;

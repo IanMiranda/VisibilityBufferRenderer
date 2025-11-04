@@ -18,7 +18,7 @@
 
 namespace im
 {
-	static constexpr uint32_t gMaxTextures = 1024;
+	static constexpr uint32_t gMaxTextures = 512;
 
 	App::App()
 	{
