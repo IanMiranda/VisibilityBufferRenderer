@@ -4,11 +4,13 @@
 #include <unordered_map>
 
 #include "Common.h"
+#include "DescriptorSetLayout.h"
 
 namespace im
 {
 	class Device;
 	class Texture2D;
+	class DescriptorSetLayout;
 	
 	class BindlessSet
 	{
@@ -16,7 +18,7 @@ namespace im
 		BindlessSet(Device& device, uint32_t maxTextures);
 		~BindlessSet();
 
-		VkDescriptorSetLayout GetSetLayout() const { return mBindlessSetLayout; }
+		DescriptorSetLayout& GetSetLayout() { return mBindlessSetLayout; }
 		VkDescriptorSet Get() const	{ return mBindlessSet; }
 
 		uint32_t GetOrCreateId(std::shared_ptr<Texture2D> texture, VkSampler sampler);
@@ -26,7 +28,7 @@ namespace im
 		const uint32_t mMaxTextures;
 
 		VkDescriptorPool mBindlessPool;
-		VkDescriptorSetLayout mBindlessSetLayout;
+		DescriptorSetLayout mBindlessSetLayout;
 		VkDescriptorSet mBindlessSet;
 
 		std::deque<uint32_t> mTexFreeList;

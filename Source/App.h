@@ -45,6 +45,7 @@ namespace im
 	private:
 		void DrawScene(CommandBuffer& commandBuffer);
 		void DrawShadowMap(CommandBuffer& commandBuffer, const glm::mat4& lightView, const glm::mat4& lightProj);
+		void DrawUI();
 
 	private:
 		void InitWindow();
@@ -60,7 +61,6 @@ namespace im
 		void InitShadowResources();
 		void InitDescriptors();
 
-		void CleanupSwapchain();
 		void RecreateSwapchain();
 
 		void RunImmediateCommands(const std::function<void(CommandBuffer&)>& cmds);

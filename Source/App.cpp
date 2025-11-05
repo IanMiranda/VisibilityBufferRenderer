@@ -71,7 +71,7 @@ namespace im
 		mPipeLayout.reset();
 		mGlobalLayout.reset();
 
-		CleanupSwapchain();
+		mDepthImage.reset();
 
 		mCommandBuffers.clear();
 		mImmediatePool.reset();
@@ -246,11 +246,7 @@ namespace im
 			commandBuffer.DrawIndexed(mesh.indexCount);
 		}
 
-		if (ImGui::Begin("Vulkan Renderer"))
-		{
-			ImGui::Text("Hello world!");
-			ImGui::End();
-		}
+		DrawUI();
 
 		ImGui::Render();
 		ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer.Get());
@@ -284,7 +280,16 @@ namespace im
 		mShadowPass->End(commandBuffer);
 	}
 
-	void App::InitWindow()
+    void App::DrawUI()
+    {
+		if (ImGui::Begin("Vulkan Renderer"))
+		{
+			ImGui::Text("Hello world!");
+			ImGui::End();
+		}
+    }
+
+    void App::InitWindow()
 	{
 		constexpr uint32_t defaultWindowWidth = 1280;
 		constexpr uint32_t defaultWindowHeight = 720;
@@ -329,12 +334,16 @@ namespace im
 
 	void App::InitPipeline()
 	{
-		mGlobalLayout = std::make_unique<DescriptorSetLayout>(*mDevice);
-		mGlobalLayout->
-			AddBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)	// Lighting
-			.AddBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)						// Cubemap
-			.AddBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)						// Shadow Map
-			.Commit();
+		mGlobalLayout = std::make_unique<DescriptorSetLayout>(
+			*mDevice,
+			std::vector<VkDescriptorSetLayoutBinding>
+			{
+				DescriptorSetLayout::Binding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+					VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT),
+				DescriptorSetLayout::Binding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+				DescriptorSetLayout::Binding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
+			}
+		);
 
 		VkPushConstantRange pcRange{};
 		pcRange.offset = 0;
@@ -343,7 +352,7 @@ namespace im
 
 		mPipeLayout = std::make_unique<PipelineLayout>(
 			*mDevice,
-			std::vector<VkDescriptorSetLayout>{ mGlobalLayout->Get(), mBindlessSet->GetSetLayout() },
+			std::vector<VkDescriptorSetLayout>{ mGlobalLayout->Get(), mBindlessSet->GetSetLayout().Get() },
 			std::vector<VkPushConstantRange>{ pcRange }
 		);
 
@@ -542,9 +551,13 @@ namespace im
 		});
 		
 		// Create environment pipeline
-		mEnvMapSetLayout = std::make_unique<DescriptorSetLayout>(*mDevice);
-		mEnvMapSetLayout->AddBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
-						.Commit();
+		mEnvMapSetLayout = std::make_unique<DescriptorSetLayout>(
+			*mDevice,
+			std::vector<VkDescriptorSetLayoutBinding>
+			{
+				DescriptorSetLayout::Binding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
+			}
+		);
 
 		VkPushConstantRange pcRange{};
 		pcRange.offset = 0;
@@ -666,11 +679,6 @@ namespace im
 		}
 	}
 
-	void App::CleanupSwapchain()
-	{
-		mDepthImage.reset();
-	}
-
 	void App::RecreateSwapchain()
 	{
 		int width = 0;
@@ -683,8 +691,6 @@ namespace im
 		}
 
 		mDevice->WaitIdle();
-
-		CleanupSwapchain();
 
 		mDevice->GetSwapchain().Recreate();
 		InitDepthBuffer();
