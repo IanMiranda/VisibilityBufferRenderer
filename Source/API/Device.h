@@ -7,6 +7,8 @@
 namespace im
 {
 	class CommandBuffer;
+	class Fence;
+
 	class Device
 	{
 	public:
@@ -36,7 +38,7 @@ namespace im
 			VkSemaphore waitSemaphore = VK_NULL_HANDLE,
 			VkPipelineStageFlags waitDstStage = VK_PIPELINE_STAGE_2_NONE,
 			VkSemaphore signalSemaphore = VK_NULL_HANDLE,
-			VkFence fence = VK_NULL_HANDLE);
+			Fence* fence = nullptr);
 		void SubmitAndFlush(CommandBuffer& cmd);
 		void WaitIdle();
 

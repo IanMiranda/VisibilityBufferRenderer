@@ -13,6 +13,9 @@ target_sources(
             CommandBuffer.h
             CommandBuffer.cpp
 
+            Fence.h
+            Fence.cpp
+
             Buffer.h
             Buffer.cpp
 

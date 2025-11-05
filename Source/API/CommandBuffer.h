@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Common.h"
+#include "PipelineLayout.h"
 
 namespace im
 {
@@ -17,6 +18,9 @@ namespace im
 	public:
 		CommandBuffer(CommandPool& pool, VkCommandBuffer buffer);
 		~CommandBuffer();
+
+		CommandBuffer(const CommandBuffer& other) = delete;
+		CommandBuffer& operator=(const CommandBuffer& other) = delete;
 
 		void Begin(VkCommandBufferUsageFlags usage = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 		void End();
@@ -67,7 +71,11 @@ namespace im
 			uint32_t layers = 1);
 		void EndRendering();
 
-		void PushConstants(PipelineLayout& layout, VkShaderStageFlags stage, uint32_t size, void* data, uint32_t offset = 0);
+		template <typename T>
+		void PushConstants(PipelineLayout& layout, VkShaderStageFlags stage, const T& data, uint32_t offset = 0)
+		{
+			vkCmdPushConstants(mCmdBuf, layout.Get(), stage, offset, sizeof(data), &data);
+		}
 
 		void BindPipeline(GraphicsPipeline& pipeline);
 		void BindVertexBuffer(Buffer& vertexBuffer);

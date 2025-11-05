@@ -287,11 +287,6 @@ namespace im
 		vkCmdEndRendering(mCmdBuf);
 	}
 
-	void CommandBuffer::PushConstants(PipelineLayout& layout, VkShaderStageFlags stage, uint32_t size, void* data, uint32_t offset)
-	{
-		vkCmdPushConstants(mCmdBuf, layout.Get(), stage, offset, size, data);
-	}
-
 	void CommandBuffer::BindPipeline(GraphicsPipeline& pipeline)
 	{
 		vkCmdBindPipeline(mCmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.Get());

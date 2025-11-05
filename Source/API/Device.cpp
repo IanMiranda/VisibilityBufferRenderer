@@ -4,6 +4,7 @@
 #include <cassert>
 
 #include "CommandBuffer.h"
+#include "Fence.h"
 
 namespace im
 {
@@ -50,7 +51,7 @@ namespace im
 		vkDestroyInstance(mInstance, nullptr);
 	}
 
-	void Device::Submit(CommandBuffer& cmd, VkSemaphore waitSemaphore, VkPipelineStageFlags waitDstStage, VkSemaphore signalSemaphore, VkFence fence)
+	void Device::Submit(CommandBuffer& cmd, VkSemaphore waitSemaphore, VkPipelineStageFlags waitDstStage, VkSemaphore signalSemaphore, Fence* fence)
 	{
 		VkCommandBuffer cmds[] = { cmd.Get() };
 		VkSubmitInfo submitInfo{ VK_STRUCTURE_TYPE_SUBMIT_INFO };
@@ -62,7 +63,7 @@ namespace im
 		submitInfo.signalSemaphoreCount = signalSemaphore != VK_NULL_HANDLE ? 1 : 0;
 		submitInfo.pSignalSemaphores = signalSemaphore != VK_NULL_HANDLE ? &signalSemaphore : nullptr;
 
-		VK_CHECK(vkQueueSubmit(mGraphicsQueue, 1, &submitInfo, fence));
+		VK_CHECK(vkQueueSubmit(mGraphicsQueue, 1, &submitInfo, (fence ? fence->Get() : nullptr)));
 	}
 
 	void Device::SubmitAndFlush(CommandBuffer& cmd)
@@ -76,7 +77,7 @@ namespace im
 		VK_CHECK(vkDeviceWaitIdle(mDevice));
 	}
 
-	VkFormat Device::GetSupportedFormat(const std::initializer_list<VkFormat>& formats, VkImageTiling tiling, VkFormatFeatureFlags flags) const
+    VkFormat Device::GetSupportedFormat(const std::initializer_list<VkFormat>& formats, VkImageTiling tiling, VkFormatFeatureFlags flags) const
 	{
 		for (auto fmt : formats)
 		{

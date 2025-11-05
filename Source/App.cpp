@@ -61,8 +61,7 @@ namespace im
 		ImGui_ImplGlfw_Shutdown();
 		ImGui::DestroyContext();
 
-		for (const auto& fence : mRenderFences)
-			vkDestroyFence(mDevice->Get(), fence, nullptr);
+		mRenderFences.clear();
 		
 		for (const auto& sem : mRenderSemaphores)
 			vkDestroySemaphore(mDevice->Get(), sem, nullptr);
@@ -131,7 +130,7 @@ namespace im
 	{
 		Swapchain& swapchain = mDevice->GetSwapchain();
 
-		VK_CHECK(vkWaitForFences(mDevice->Get(), 1, &mRenderFences[mFrameIndex], VK_TRUE, UINT64_MAX));
+		mRenderFences[mFrameIndex]->Wait();
 
 		auto [res, imageIndex] = swapchain.AcquireNextImage(mAcquireSemaphores[mSemaphoreIndex]);
 		if (res == VK_ERROR_OUT_OF_DATE_KHR)
@@ -144,7 +143,7 @@ namespace im
 			VK_CHECK(res);
 		}
 
-		VK_CHECK(vkResetFences(mDevice->Get(), 1, &mRenderFences[mFrameIndex]));
+		mRenderFences[mFrameIndex]->Reset();
 
 		ImGui_ImplVulkan_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
@@ -158,7 +157,7 @@ namespace im
 
 		mDevice->Submit(*(mCommandBuffers[mFrameIndex]),
 			mAcquireSemaphores[mSemaphoreIndex], VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-			mRenderSemaphores[imageIndex], mRenderFences[mFrameIndex]);
+			mRenderSemaphores[imageIndex], mRenderFences[mFrameIndex].get());
 
 		ImGui::UpdatePlatformWindows();
 		ImGui::RenderPlatformWindowsDefault();
@@ -218,7 +217,7 @@ namespace im
 
 		// Cubemap pass
 		commandBuffer.BindPipeline(*mEnvMapPipe);
-		commandBuffer.PushConstants(*mEnvMapPipeLayout, VK_SHADER_STAGE_VERTEX_BIT, sizeof(cubemapData), &cubemapData);
+		commandBuffer.PushConstants(*mEnvMapPipeLayout, VK_SHADER_STAGE_VERTEX_BIT, cubemapData);
 		vkCmdBindDescriptorSets(mCommandBuffers[mFrameIndex]->Get(), VK_PIPELINE_BIND_POINT_GRAPHICS, mEnvMapPipeLayout->Get(), 0, 1, &mEnvMapSet, 0, nullptr);
 		commandBuffer.Draw(3);
 
@@ -244,14 +243,18 @@ namespace im
 
 			commandBuffer.PushConstants(*mPipeLayout,
 				VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-				sizeof(pushConsts), &pushConsts
+				pushConsts
 			);
 			commandBuffer.BindVertexBuffer(*mesh.vertexBuffer);
 			commandBuffer.BindIndexBuffer(*mesh.indexBuffer);
 			commandBuffer.DrawIndexed(mesh.indexCount);
 		}
 
-		// ImGui::ShowDemoWindow();
+		if (ImGui::Begin("Vulkan Renderer"))
+		{
+			ImGui::Text("Hello world!");
+			ImGui::End();
+		}
 
 		ImGui::Render();
 		ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer.Get());
@@ -276,7 +279,7 @@ namespace im
 		for (const auto& mesh : mMeshes)
 		{
 			pushConsts.mvp = viewProj * mesh.transform;
-			commandBuffer.PushConstants(mShadowPass->GetLayout(), VK_SHADER_STAGE_VERTEX_BIT, sizeof(pushConsts), &pushConsts);
+			commandBuffer.PushConstants(mShadowPass->GetLayout(), VK_SHADER_STAGE_VERTEX_BIT, pushConsts);
 			commandBuffer.BindVertexBuffer(*mesh.vertexBuffer);
 			commandBuffer.BindIndexBuffer(*mesh.indexBuffer);
 			commandBuffer.DrawIndexed(mesh.indexCount);
@@ -379,12 +382,8 @@ namespace im
 			VK_CHECK(vkCreateSemaphore(mDevice->Get(), &semaphoreInfo, nullptr, &mRenderSemaphores[i]));
 		}
 
-		VkFenceCreateInfo fenceInfo{ VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
-		fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 		for (size_t i = 0; i < MaxFramesInFlight; ++i)
-		{
-			VK_CHECK(vkCreateFence(mDevice->Get(), &fenceInfo, nullptr, &mRenderFences[i]));
-		}
+			mRenderFences[i] = std::make_unique<Fence>(*mDevice, true);
 	}
 
 	void App::InitImGui()
