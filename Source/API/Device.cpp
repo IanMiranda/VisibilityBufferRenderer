@@ -5,6 +5,7 @@
 
 #include "CommandBuffer.h"
 #include "Fence.h"
+#include "Semaphore.h"
 
 namespace im
 {
@@ -51,17 +52,20 @@ namespace im
 		vkDestroyInstance(mInstance, nullptr);
 	}
 
-	void Device::Submit(CommandBuffer& cmd, VkSemaphore waitSemaphore, VkPipelineStageFlags waitDstStage, VkSemaphore signalSemaphore, Fence* fence)
+	void Device::Submit(CommandBuffer& cmd, Semaphore* waitSemaphore, VkPipelineStageFlags waitDstStage, Semaphore* signalSemaphore, Fence* fence)
 	{
 		VkCommandBuffer cmds[] = { cmd.Get() };
+		VkSemaphore waitSems[] = { waitSemaphore ? waitSemaphore->Get() : nullptr };
+		VkSemaphore signalSems[] = { signalSemaphore ? signalSemaphore->Get() : nullptr };
+
 		VkSubmitInfo submitInfo{ VK_STRUCTURE_TYPE_SUBMIT_INFO };
 		submitInfo.commandBufferCount = std::size(cmds);
 		submitInfo.pCommandBuffers = cmds;
-		submitInfo.waitSemaphoreCount = waitSemaphore != VK_NULL_HANDLE ? 1 : 0;
-		submitInfo.pWaitSemaphores = waitSemaphore != VK_NULL_HANDLE ? &waitSemaphore : nullptr;
+		submitInfo.waitSemaphoreCount = waitSemaphore ? 1 : 0;
+		submitInfo.pWaitSemaphores = waitSems;
 		submitInfo.pWaitDstStageMask = &waitDstStage;
-		submitInfo.signalSemaphoreCount = signalSemaphore != VK_NULL_HANDLE ? 1 : 0;
-		submitInfo.pSignalSemaphores = signalSemaphore != VK_NULL_HANDLE ? &signalSemaphore : nullptr;
+		submitInfo.signalSemaphoreCount = signalSemaphore ? 1 : 0;
+		submitInfo.pSignalSemaphores = signalSems;
 
 		VK_CHECK(vkQueueSubmit(mGraphicsQueue, 1, &submitInfo, (fence ? fence->Get() : nullptr)));
 	}
@@ -375,6 +379,8 @@ namespace im
 			break;
 		case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
 			std::cerr << "[Vulkan] Error: " << data->pMessage << '\n';
+			break;
+		default:
 			break;
 		}
 		return VK_FALSE;

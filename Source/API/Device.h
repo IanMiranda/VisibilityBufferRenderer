@@ -35,9 +35,9 @@ namespace im
 		VkQueue GetPresentQueue() const { return mPresentQueue; }
 
 		void Submit(CommandBuffer& cmd,
-			VkSemaphore waitSemaphore = VK_NULL_HANDLE,
+			Semaphore* waitSemaphore = nullptr,
 			VkPipelineStageFlags waitDstStage = VK_PIPELINE_STAGE_2_NONE,
-			VkSemaphore signalSemaphore = VK_NULL_HANDLE,
+			Semaphore* signalSemaphore = nullptr,
 			Fence* fence = nullptr);
 		void SubmitAndFlush(CommandBuffer& cmd);
 		void WaitIdle();

@@ -62,12 +62,8 @@ namespace im
 		ImGui::DestroyContext();
 
 		mRenderFences.clear();
-		
-		for (const auto& sem : mRenderSemaphores)
-			vkDestroySemaphore(mDevice->Get(), sem, nullptr);
-
-		for (const auto& sem : mAcquireSemaphores)
-			vkDestroySemaphore(mDevice->Get(), sem, nullptr);
+		mRenderSemaphores.clear();
+		mAcquireSemaphores.clear();
 
 		vkDestroyDescriptorPool(mDevice->Get(), mGlobalPool, nullptr);
 
@@ -132,7 +128,7 @@ namespace im
 
 		mRenderFences[mFrameIndex]->Wait();
 
-		auto [res, imageIndex] = swapchain.AcquireNextImage(mAcquireSemaphores[mSemaphoreIndex]);
+		auto [res, imageIndex] = swapchain.AcquireNextImage(*mAcquireSemaphores[mSemaphoreIndex]);
 		if (res == VK_ERROR_OUT_OF_DATE_KHR)
 		{
 			RecreateSwapchain();
@@ -156,13 +152,13 @@ namespace im
 		mCommandBuffers[mFrameIndex]->End();
 
 		mDevice->Submit(*(mCommandBuffers[mFrameIndex]),
-			mAcquireSemaphores[mSemaphoreIndex], VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-			mRenderSemaphores[imageIndex], mRenderFences[mFrameIndex].get());
+			mAcquireSemaphores[mSemaphoreIndex].get(), VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+			mRenderSemaphores[imageIndex].get(), mRenderFences[mFrameIndex].get());
 
 		ImGui::UpdatePlatformWindows();
 		ImGui::RenderPlatformWindowsDefault();
 
-		res = swapchain.Present(mRenderSemaphores[imageIndex]);
+		res = swapchain.Present(*mRenderSemaphores[imageIndex]);
 		if (res == VK_ERROR_OUT_OF_DATE_KHR || res == VK_SUBOPTIMAL_KHR || mFramebufferResized)
 		{
 			mFramebufferResized = false;
@@ -371,15 +367,15 @@ namespace im
 
 	void App::InitSyncPrimitives()
 	{
-		mAcquireSemaphores.resize(MaxFramesInFlight);
-		mRenderSemaphores.resize(MaxFramesInFlight);
+		mAcquireSemaphores.resize(mDevice->GetSwapchain().GetViews().size());
+		mRenderSemaphores.resize(mDevice->GetSwapchain().GetViews().size());
 		mRenderFences.resize(MaxFramesInFlight);
 
 		VkSemaphoreCreateInfo semaphoreInfo{ VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
 		for (size_t i = 0; i < mDevice->GetSwapchain().GetViews().size(); ++i)
 		{
-			VK_CHECK(vkCreateSemaphore(mDevice->Get(), &semaphoreInfo, nullptr, &mAcquireSemaphores[i]));
-			VK_CHECK(vkCreateSemaphore(mDevice->Get(), &semaphoreInfo, nullptr, &mRenderSemaphores[i]));
+			mAcquireSemaphores[i] = std::make_unique<Semaphore>(*mDevice);
+			mRenderSemaphores[i] = std::make_unique<Semaphore>(*mDevice);
 		}
 
 		for (size_t i = 0; i < MaxFramesInFlight; ++i)

@@ -11,6 +11,7 @@
 #include "API/CommandPool.h"
 #include "API/CommandBuffer.h"
 #include "API/Fence.h"
+#include "API/Semaphore.h"
 #include "API/Buffer.h"
 #include "API/Texture2D.h"
 #include "API/TextureCube.h"
@@ -106,8 +107,8 @@ namespace im
 		std::unique_ptr<ShadowPass> mShadowPass;
 
 		std::vector<std::unique_ptr<CommandBuffer>> mCommandBuffers;
-		std::vector<VkSemaphore> mAcquireSemaphores;
-		std::vector<VkSemaphore> mRenderSemaphores;
+		std::vector<std::unique_ptr<Semaphore>> mAcquireSemaphores;
+		std::vector<std::unique_ptr<Semaphore>> mRenderSemaphores;
 		std::vector<std::unique_ptr<Fence>> mRenderFences;
 		uint32_t mFrameIndex{ 0 };
 		uint32_t mSemaphoreIndex{ 0 };

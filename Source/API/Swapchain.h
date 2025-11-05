@@ -5,6 +5,7 @@
 namespace im
 {
 	class Device;
+	class Semaphore;
 
 	class Swapchain
 	{
@@ -21,8 +22,8 @@ namespace im
 		const std::vector<VkImageView>& GetViews() const { return mSwapchainImageViews; }
 		uint32_t GetImageIndex() const { return mLastImageIndex; }
 
-		std::pair<VkResult, uint32_t> AcquireNextImage(const VkSemaphore& acquiredSemaphore);
-		VkResult Present(const VkSemaphore& presentedSemaphore);
+		std::pair<VkResult, uint32_t> AcquireNextImage(const Semaphore& acquiredSemaphore);
+		VkResult Present(const Semaphore& presentedSemaphore);
 
 		void Recreate();
 

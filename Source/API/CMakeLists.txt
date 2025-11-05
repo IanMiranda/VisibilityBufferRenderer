@@ -16,6 +16,9 @@ target_sources(
             Fence.h
             Fence.cpp
 
+            Semaphore.h
+            Semaphore.cpp
+
             Buffer.h
             Buffer.cpp
 

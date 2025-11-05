@@ -10,8 +10,6 @@ namespace im
 	BindlessSet::BindlessSet(Device& device, uint32_t maxTextures)
 		: mDevice(device), mMaxTextures(maxTextures)
 	{
-		const auto dev = mDevice.Get();
-
 		std::vector<VkDescriptorPoolSize> sizes =
 		{
 			{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, mMaxTextures }
@@ -22,7 +20,7 @@ namespace im
 		poolInfo.poolSizeCount = sizes.size();
 		poolInfo.pPoolSizes = sizes.data();
 
-		VK_CHECK(vkCreateDescriptorPool(dev, &poolInfo, nullptr, &mBindlessPool));
+		VK_CHECK(vkCreateDescriptorPool(mDevice.Get(), &poolInfo, nullptr, &mBindlessPool));
 
 		std::vector<VkDescriptorSetLayoutBinding> setLayoutBindings;
 		setLayoutBindings.reserve(1);
@@ -49,7 +47,7 @@ namespace im
 		setLayoutInfo.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
 		setLayoutInfo.bindingCount = setLayoutBindings.size();
 		setLayoutInfo.pBindings = setLayoutBindings.data();
-		VK_CHECK(vkCreateDescriptorSetLayout(dev, &setLayoutInfo, nullptr, &mBindlessSetLayout));
+		VK_CHECK(vkCreateDescriptorSetLayout(mDevice.Get(), &setLayoutInfo, nullptr, &mBindlessSetLayout));
 
 		VkDescriptorSetVariableDescriptorCountAllocateInfo variableDescInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO };
 		variableDescInfo.descriptorSetCount = 1;
@@ -60,7 +58,7 @@ namespace im
 		setInfo.descriptorPool = mBindlessPool;
 		setInfo.descriptorSetCount = 1;
 		setInfo.pSetLayouts = &mBindlessSetLayout;
-		VK_CHECK(vkAllocateDescriptorSets(dev, &setInfo, &mBindlessSet));
+		VK_CHECK(vkAllocateDescriptorSets(mDevice.Get(), &setInfo, &mBindlessSet));
 
 		for (uint32_t i = 0; i < mMaxTextures; ++i)
 			mTexFreeList.emplace_back(i);

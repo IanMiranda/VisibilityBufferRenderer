@@ -4,6 +4,7 @@
 #include <cassert>
 
 #include "Device.h"
+#include "Semaphore.h"
 
 namespace im
 {
@@ -18,18 +19,19 @@ namespace im
 		CleanUp();
 	}
 
-	std::pair<VkResult, uint32_t> Swapchain::AcquireNextImage(const VkSemaphore& acquiredSemaphore)
+	std::pair<VkResult, uint32_t> Swapchain::AcquireNextImage(const Semaphore& acquiredSemaphore)
 	{
-		VkResult res = vkAcquireNextImageKHR(mDevice.Get(), mSwapchain, UINT64_MAX, acquiredSemaphore, nullptr, &mLastImageIndex);
+		VkResult res = vkAcquireNextImageKHR(mDevice.Get(), mSwapchain, UINT64_MAX, acquiredSemaphore.Get(), nullptr, &mLastImageIndex);
 		return { res, mLastImageIndex };
 	}
 
-	VkResult Swapchain::Present(const VkSemaphore& presentedSemaphore)
+	VkResult Swapchain::Present(const Semaphore& presentedSemaphore)
 	{
+		VkSemaphore ps = presentedSemaphore.Get();
 		VkPresentInfoKHR presentInfo{ VK_STRUCTURE_TYPE_PRESENT_INFO_KHR };
 		presentInfo.pImageIndices = &mLastImageIndex;
 		presentInfo.waitSemaphoreCount = 1;
-		presentInfo.pWaitSemaphores = &presentedSemaphore;
+		presentInfo.pWaitSemaphores = &ps;
 		presentInfo.swapchainCount = 1;
 		presentInfo.pSwapchains = &mSwapchain;
 
