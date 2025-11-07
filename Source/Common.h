@@ -74,14 +74,19 @@ namespace im
 	class Buffer;
 	class Texture2D;
 
+	struct Material
+	{
+		std::shared_ptr<Texture2D> diffuseMap;
+		std::shared_ptr<Texture2D> normalMap;
+	};
+
 	struct Mesh
 	{
 		std::unique_ptr<Buffer> vertexBuffer;
 		std::unique_ptr<Buffer> indexBuffer;
 		uint32_t indexCount;
+		Material material;
 		glm::mat4 transform;
-		std::shared_ptr<Texture2D> diffuseMap;
-		std::shared_ptr<Texture2D> normalMap;
 	};
 }
 

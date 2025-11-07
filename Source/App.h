@@ -70,7 +70,12 @@ namespace im
 			VkFormat format,
 			bool generateMipmaps);
 
-		Mesh UploadMesh(const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices);
+		Mesh UploadMesh(
+			const std::vector<Vertex>& vertices,
+			const std::vector<uint32_t>& indices,
+			const Material& material,
+			const glm::mat4& transform
+		);
 
 	private:
 		static constexpr int MaxFramesInFlight = 2;

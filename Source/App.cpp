@@ -234,8 +234,8 @@ namespace im
 		for (const auto& mesh : mMeshes)
 		{
 			pushConsts.model = mesh.transform;
-			pushConsts.diffuseMapHandle = mBindlessSet->GetOrCreateId(mesh.diffuseMap, mDevice->GetSamplers().TrilinearColor());
-			pushConsts.normalMapHandle = mBindlessSet->GetOrCreateId(mesh.normalMap, mDevice->GetSamplers().TrilinearColor());
+			pushConsts.diffuseMapHandle = mBindlessSet->GetOrCreateId(mesh.material.diffuseMap, mDevice->GetSamplers().TrilinearColor());
+			pushConsts.normalMapHandle = mBindlessSet->GetOrCreateId(mesh.material.normalMap, mDevice->GetSamplers().TrilinearColor());
 
 			commandBuffer.PushConstants(*mPipeLayout,
 				VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
@@ -433,16 +433,11 @@ namespace im
 		mDiffuseMap = std::shared_ptr<Texture2D>(CreateAndStageTexture("./Assets/Textures/brickwall.jpg", VK_FORMAT_R8G8B8A8_SRGB, false));
 		mNormalMap = std::shared_ptr<Texture2D>(CreateAndStageTexture("./Assets/Textures/brickwall_normal.jpg", VK_FORMAT_R8G8B8A8_UNORM, false));
 
-		// Duck
 		{
-
 			auto [duckVertices, duckIndices] = utils::LoadModel("./Assets/Models/Duck.gltf");
-			Mesh duck = UploadMesh(duckVertices, duckIndices);
-			duck.diffuseMap = mDiffuseMap;
-			duck.normalMap = mNormalMap;
-			duck.transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -1.0f, 0.0f));
-			duck.transform = glm::scale(duck.transform, glm::vec3(0.01f));
-			mMeshes.emplace_back(std::move(duck));
+			glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -1.0f, 0.0f));
+			model = glm::scale(model, glm::vec3(0.01f));
+			mMeshes.emplace_back(UploadMesh(duckVertices, duckIndices, { mDiffuseMap, mNormalMap }, model));
 		}
 
 		{
@@ -460,12 +455,9 @@ namespace im
 				2, 3, 0
 			};
 
-			Mesh plane = UploadMesh(planeVertices, planeIndices);
-			plane.transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -1.0f, 0.0f));
-			plane.transform = glm::scale(plane.transform, glm::vec3(5.0f));
-			plane.diffuseMap = mDiffuseMap;
-			plane.normalMap = mNormalMap;
-			mMeshes.emplace_back(std::move(plane));
+			glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -1.0f, 0.0f));
+			model = glm::scale(model, glm::vec3(5.0f));
+			mMeshes.emplace_back(UploadMesh(planeVertices, planeIndices, { mDiffuseMap, mNormalMap }, model));
 		}
 	}
 
@@ -766,7 +758,11 @@ namespace im
 		return resTex;
 	}
 
-	Mesh App::UploadMesh(const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices)
+	Mesh App::UploadMesh(
+		const std::vector<Vertex>& vertices,
+		const std::vector<uint32_t>& indices,
+		const Material& material,
+		const glm::mat4& transform)
 	{
 		Mesh res;
 		Buffer stagingVerts(*mDevice, vertices.size() * sizeof(vertices[0]), vertices.data());
@@ -778,6 +774,9 @@ namespace im
 			*mDevice, stagingIdxs.GetSize(),
 			VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, 0);
 		res.indexCount = indices.size();
+		res.material.diffuseMap = material.diffuseMap;
+		res.material.normalMap = material.normalMap;
+		res.transform = transform;
 		RunImmediateCommands([this, &stagingVerts, &stagingIdxs, &res](CommandBuffer& cmds)
 		{
 			cmds.Copy(stagingVerts, *res.vertexBuffer);
