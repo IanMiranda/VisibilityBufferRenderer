@@ -356,7 +356,7 @@ namespace im
 			std::vector<VkPushConstantRange>{ pcRange }
 		);
 
-		Shader shader(*mDevice, "Assets/Shaders/Basic.spv");
+		Shader shader(*mDevice, "./Assets/Shaders/Basic.spv");
 		shader.AddStage(VK_SHADER_STAGE_VERTEX_BIT, "VSMain")
 			.AddStage(VK_SHADER_STAGE_FRAGMENT_BIT, "FSMain");
 		mPipe = std::make_unique<GraphicsPipeline>(*mDevice, *mPipeLayout, shader);
@@ -430,13 +430,13 @@ namespace im
 	void App::InitMeshes()
 	{
 		// Load texture image
-		mDiffuseMap = std::shared_ptr<Texture2D>(CreateAndStageTexture("Assets/Textures/brickwall.jpg", VK_FORMAT_R8G8B8A8_SRGB, false));
-		mNormalMap = std::shared_ptr<Texture2D>(CreateAndStageTexture("Assets/Textures/brickwall_normal.jpg", VK_FORMAT_R8G8B8A8_UNORM, false));
+		mDiffuseMap = std::shared_ptr<Texture2D>(CreateAndStageTexture("./Assets/Textures/brickwall.jpg", VK_FORMAT_R8G8B8A8_SRGB, false));
+		mNormalMap = std::shared_ptr<Texture2D>(CreateAndStageTexture("./Assets/Textures/brickwall_normal.jpg", VK_FORMAT_R8G8B8A8_UNORM, false));
 
 		// Duck
 		{
 
-			auto [duckVertices, duckIndices] = utils::LoadModel("Assets/Models/Duck.gltf");
+			auto [duckVertices, duckIndices] = utils::LoadModel("./Assets/Models/Duck.gltf");
 			Mesh duck = UploadMesh(duckVertices, duckIndices);
 			duck.diffuseMap = mDiffuseMap;
 			duck.normalMap = mNormalMap;
@@ -509,12 +509,12 @@ namespace im
 
 		const std::array<std::filesystem::path, gCubemapFaces> skyboxPaths
 		{
-			"Assets/Textures/Skybox/right.jpg",
-			"Assets/Textures/Skybox/left.jpg",
-			"Assets/Textures/Skybox/top.jpg",
-			"Assets/Textures/Skybox/bottom.jpg",
-			"Assets/Textures/Skybox/front.jpg",
-			"Assets/Textures/Skybox/back.jpg",
+			"./Assets/Textures/Skybox/right.jpg",
+			"./Assets/Textures/Skybox/left.jpg",
+			"./Assets/Textures/Skybox/top.jpg",
+			"./Assets/Textures/Skybox/bottom.jpg",
+			"./Assets/Textures/Skybox/front.jpg",
+			"./Assets/Textures/Skybox/back.jpg",
 		};
 
 		int width, height;
@@ -570,7 +570,7 @@ namespace im
 			std::vector<VkPushConstantRange>{ pcRange }
 		);
 
-		Shader shader(*mDevice, "Assets/Shaders/Cubemap.spv");
+		Shader shader(*mDevice, "./Assets/Shaders/Cubemap.spv");
 		shader.AddStage(VK_SHADER_STAGE_VERTEX_BIT, "VSMain")
 			.AddStage(VK_SHADER_STAGE_FRAGMENT_BIT, "FSMain");
 		mEnvMapPipe = std::make_unique<GraphicsPipeline>(*mDevice, *mEnvMapPipeLayout, shader);
