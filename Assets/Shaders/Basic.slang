@@ -46,6 +46,28 @@ VSOutput VSMain(VSInput input)
     return output;
 }
 
+float4 Diffuse(float3 N, float3 W, float4 Kd, float4 I)
+{
+    float NoW = dot(N, W);
+
+    // Attenuation
+    // float dist = distance(lightPos, input.posView);
+    // I *= (1.0 / (dist * dist + 0.01));
+    float4 diffuse = saturate(NoW) * Kd * I;
+    return diffuse;
+}
+
+float4 Specular(float3 N, float3 W, float3 V, float4 Ks, float4 I, float alpha)
+{
+    float3 H = normalize(W + V);
+    // float3 R = normalize(reflect(W, N));
+    float NoH = dot(N, H);
+    // float VoR = dot(V, R);
+    float4 specular = I * Ks * pow(saturate(NoH), alpha);
+    // float4 specular = I * Ks * pow(max(VoR, 0.0), alpha);
+    return specular;
+}
+
 [shader("fragment")]
 float4 FSMain(VSOutput input) : SV_Target0
 {
@@ -63,20 +85,10 @@ float4 FSMain(VSOutput input) : SV_Target0
     N = normalize(mul(input.tbn, N));
 
     float3 W = normalize(gPassData.lightDir);
-    float NoW = dot(N, W);
-
-    // Attenuation
-    // float dist = distance(lightPos, input.posView);
-    // I *= (1.0 / (dist * dist + 0.01));
-    float4 diffuse = saturate(NoW) * Kd * I;
+    float4 diffuse = Diffuse(N, W, Kd, I);
 
     float3 V = -normalize(input.posView);
-    float3 H = normalize(W + V);
-    float3 R = normalize(reflect(W, N));
-    float NoH = dot(N, H);
-    float VoR = dot(V, R);
-    float4 specular = I * Ks * pow(saturate(NoH), alpha);
-    // float4 specular = I * Ks * pow(max(VoR, 0.0), alpha);
+    float4 specular = Specular(N, W, V, Ks, I, alpha);
 
     float4 ambient = Kd * Ia;
 
