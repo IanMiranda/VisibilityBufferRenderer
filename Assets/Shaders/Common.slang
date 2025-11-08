@@ -1,6 +1,6 @@
 module Common;
 
-#define MAX_LIGHTS (1024)
+public static const int gNumLights = 1024;
 
 public struct ObjectData
 {
@@ -30,7 +30,7 @@ public struct PointLight
 
 public struct LightData
 {
-    public PointLight lights[MAX_LIGHTS];
+    public PointLight lights[gNumLights];
 };
 
 [push_constant] public ConstantBuffer<ObjectData> gObjectData;
