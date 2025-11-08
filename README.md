@@ -1,5 +1,6 @@
 # VulkanRenderer
 VulkanRenderer is a project for me to experiment with graphics programming.
+
 ![Sample photo of duck mesh with customizable point lights](Media/Preview.png)
 
 ## How to build
