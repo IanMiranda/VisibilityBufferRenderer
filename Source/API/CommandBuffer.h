@@ -11,6 +11,7 @@ namespace im
 	class TextureCube;
 	class GraphicsPipeline;
 	class PipelineLayout;
+	class DescriptorSet;
 	class Buffer;
 
 	class CommandBuffer
@@ -77,7 +78,12 @@ namespace im
 			vkCmdPushConstants(mCmdBuf, layout.Get(), stage, offset, sizeof(data), &data);
 		}
 
-		void BindPipeline(GraphicsPipeline& pipeline);
+		void BindGraphicsDescriptorSets(
+			PipelineLayout& layout,
+			uint32_t firstSet,
+			const std::vector<std::reference_wrapper<DescriptorSet>>& sets);
+
+		void BindGraphicsPipeline(GraphicsPipeline& pipeline);
 		void BindVertexBuffer(Buffer& vertexBuffer);
 		void BindIndexBuffer(Buffer& indexBuffer, VkIndexType indexType = VK_INDEX_TYPE_UINT32);
 

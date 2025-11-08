@@ -6,6 +6,7 @@
 #include "Common.h"
 #include "DescriptorPool.h"
 #include "DescriptorSetLayout.h"
+#include "DescriptorSet.h"
 
 namespace im
 {
@@ -19,7 +20,7 @@ namespace im
 		~BindlessSet();
 
 		DescriptorSetLayout& GetSetLayout() { return mBindlessSetLayout; }
-		VkDescriptorSet Get() const	{ return mBindlessSet; }
+		DescriptorSet& Get() { return *mBindlessSet; }
 
 		uint32_t GetOrCreateId(std::shared_ptr<Texture2D> texture, VkSampler sampler);
 
@@ -29,7 +30,7 @@ namespace im
 
 		DescriptorPool mBindlessPool;
 		DescriptorSetLayout mBindlessSetLayout;
-		VkDescriptorSet mBindlessSet;
+		std::unique_ptr<DescriptorSet> mBindlessSet;
 
 		std::deque<uint32_t> mTexFreeList;
 		std::unordered_map<std::shared_ptr<Texture2D>, uint32_t> mTexMap;

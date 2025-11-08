@@ -180,9 +180,9 @@ namespace im
 		cubemapData.viewProjInverse = glm::inverse(proj * glm::mat4(glm::mat3(view))); // Remove translations
 
 		// Cubemap pass
-		commandBuffer.BindPipeline(*mEnvMapPipe);
+		commandBuffer.BindGraphicsPipeline(*mEnvMapPipe);
+		commandBuffer.BindGraphicsDescriptorSets(*mEnvMapPipeLayout, 0, { *mEnvMapSet });
 		commandBuffer.PushConstants(*mEnvMapPipeLayout, VK_SHADER_STAGE_VERTEX_BIT, cubemapData);
-		vkCmdBindDescriptorSets(mCommandBuffers[mFrameIndex]->Get(), VK_PIPELINE_BIND_POINT_GRAPHICS, mEnvMapPipeLayout->Get(), 0, 1, &mEnvMapSet, 0, nullptr);
 		commandBuffer.Draw(3);
 
 		// Forward pass
@@ -194,9 +194,8 @@ namespace im
 		passData.lightDir = view * glm::vec4(lightDir, 0.0f);
 		mUniformBuffers[mFrameIndex]->SetData(&passData, sizeof(passData));
 
-		const VkDescriptorSet descSets[] = { mGlobalSets[mFrameIndex], mBindlessSet->Get() };
-		commandBuffer.BindPipeline(*mPipe);
-		vkCmdBindDescriptorSets(mCommandBuffers[mFrameIndex]->Get(), VK_PIPELINE_BIND_POINT_GRAPHICS, mPipeLayout->Get(), 0, 2, descSets, 0, nullptr);
+		commandBuffer.BindGraphicsPipeline(*mPipe);
+		commandBuffer.BindGraphicsDescriptorSets(*mPipeLayout, 0, { *(mGlobalSets[mFrameIndex]), mBindlessSet->Get() });
 
 		ObjectData pushConsts{};
 		for (const auto& mesh : mMeshes)
@@ -550,8 +549,6 @@ namespace im
 
 	void App::InitDescriptors()
 	{
-		const auto dev = mDevice->Get();
-
 		mGlobalPool = std::make_unique<DescriptorPool>(
 			*mDevice,
 			std::vector<VkDescriptorPoolSize>
@@ -563,79 +560,28 @@ namespace im
 			MaxFramesInFlight + 1
 		);
 
-		mGlobalSets.resize(MaxFramesInFlight);
-		VkDescriptorSetLayout globalLayouts[]{ mGlobalLayout->Get(), mGlobalLayout->Get() };
-		VkDescriptorSetAllocateInfo allocInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO };
-		allocInfo.descriptorPool = mGlobalPool->Get();
-		allocInfo.descriptorSetCount = std::size(globalLayouts);
-		allocInfo.pSetLayouts = globalLayouts;
-		VK_CHECK(vkAllocateDescriptorSets(dev, &allocInfo, mGlobalSets.data()));
+		mGlobalSets = mGlobalPool->Allocate({ *mGlobalLayout, *mGlobalLayout });
+		mEnvMapSet = mGlobalPool->Allocate(*mEnvMapSetLayout);
 
-		VkDescriptorSetLayout cubemapLayouts[]{ mEnvMapSetLayout->Get()};
-		allocInfo.descriptorPool = mGlobalPool->Get();
-		allocInfo.descriptorSetCount = std::size(cubemapLayouts);
-		allocInfo.pSetLayouts = cubemapLayouts;
-		VK_CHECK(vkAllocateDescriptorSets(dev, &allocInfo, &mEnvMapSet));
-
-		VkDescriptorImageInfo imageWrite{};
-		imageWrite.imageView = mEnvMap->GetView();
-		imageWrite.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-		imageWrite.sampler = mDevice->GetSamplers().TrilinearColor();
-
-		VkWriteDescriptorSet write{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
-		write.descriptorCount = 1;
-		write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-		write.dstArrayElement = 0;
-		write.dstBinding = 0;
-		write.dstSet = mEnvMapSet;
-		write.pImageInfo = &imageWrite;
-		vkUpdateDescriptorSets(dev, 1, &write, 0, nullptr);
+		mEnvMapSet->PushWrite(
+			0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+			mEnvMap.get(), &mDevice->GetSamplers().TrilinearColor(),
+			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+			.Update();
 
 		for (int i = 0; i < MaxFramesInFlight; ++i)
 		{
-			VkDescriptorBufferInfo buffer{};
-			buffer.buffer = mUniformBuffers[i]->Get();
-			buffer.offset = 0;
-			buffer.range = sizeof(GlobalPassData);
-
-			VkWriteDescriptorSet bufferWrite{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
-			bufferWrite.descriptorCount = 1;
-			bufferWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-			bufferWrite.dstArrayElement = 0;
-			bufferWrite.dstBinding = 0;
-			bufferWrite.dstSet = mGlobalSets[i];
-			bufferWrite.pBufferInfo = &buffer;
-
-			// Cubemap
-			VkDescriptorImageInfo cubemapInfo{};
-			cubemapInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-			cubemapInfo.imageView = mEnvMap->GetView();
-			cubemapInfo.sampler = mDevice->GetSamplers().TrilinearColor();
-
-			VkWriteDescriptorSet cubemapWrite{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
-			cubemapWrite.descriptorCount = 1;
-			cubemapWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-			cubemapWrite.dstArrayElement = 0;
-			cubemapWrite.dstBinding = 1;
-			cubemapWrite.dstSet = mGlobalSets[i];
-			cubemapWrite.pImageInfo = &cubemapInfo;
-
-			// Shadow Map
-			VkDescriptorImageInfo depthMap{};
-			depthMap.imageView = mShadowPass->GetMap().GetView();
-			depthMap.imageLayout = VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL;
-			depthMap.sampler = mDevice->GetSamplers().Shadow();
-
-			VkWriteDescriptorSet depthMapWrite{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
-			depthMapWrite.descriptorCount = 1;
-			depthMapWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-			depthMapWrite.dstArrayElement = 0;
-			depthMapWrite.dstBinding = 2;
-			depthMapWrite.dstSet = mGlobalSets[i];
-			depthMapWrite.pImageInfo = &depthMap;
-
-			VkWriteDescriptorSet writes[]{ bufferWrite, cubemapWrite, depthMapWrite };
-			vkUpdateDescriptorSets(dev, 3, writes, 0, nullptr);
+			mGlobalSets[i]->PushWrite(
+					0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, *(mUniformBuffers[i]))
+				.PushWrite(
+					1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+					mEnvMap.get(), &mDevice->GetSamplers().TrilinearColor(),
+					VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+				.PushWrite(
+					2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+					&mShadowPass->GetMap(), &mDevice->GetSamplers().Shadow(),
+					VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL)
+				.Update();
 		}
 	}
 

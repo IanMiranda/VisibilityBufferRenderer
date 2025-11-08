@@ -20,6 +20,7 @@
 #include "API/PipelineLayout.h"
 #include "API/GraphicsPipeline.h"
 #include "API/DescriptorPool.h"
+#include "API/DescriptorSet.h"
 #include "API/BindlessSet.h"
 #include "ShadowPass.h"
 
@@ -94,7 +95,7 @@ namespace im
 		std::unique_ptr<GraphicsPipeline> mPipe;
 		
 		std::unique_ptr<DescriptorPool> mGlobalPool;
-		std::vector<VkDescriptorSet> mGlobalSets;
+		std::vector<std::unique_ptr<DescriptorSet>> mGlobalSets;
 
 		std::unique_ptr<Texture2D> mDepthImage;
 
@@ -108,7 +109,7 @@ namespace im
 		std::unique_ptr<PipelineLayout> mEnvMapPipeLayout;
 		std::unique_ptr<GraphicsPipeline> mEnvMapPipe;
 		std::unique_ptr<DescriptorPool> mEnvMapPool;
-		VkDescriptorSet mEnvMapSet{ VK_NULL_HANDLE };
+		std::unique_ptr<DescriptorSet> mEnvMapSet;
 
 		std::unique_ptr<ShadowPass> mShadowPass;
 

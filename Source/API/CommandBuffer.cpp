@@ -6,6 +6,7 @@
 #include "Texture2D.h"
 #include "TextureCube.h"
 #include "PipelineLayout.h"
+#include "DescriptorSet.h"
 #include "GraphicsPipeline.h"
 #include "Utils.h"
 
@@ -287,12 +288,30 @@ namespace im
 		vkCmdEndRendering(mCmdBuf);
 	}
 
-	void CommandBuffer::BindPipeline(GraphicsPipeline& pipeline)
+	void CommandBuffer::BindGraphicsDescriptorSets(
+		PipelineLayout& layout,
+		uint32_t firstSet,
+		const std::vector<std::reference_wrapper<DescriptorSet>>& sets)
+	{
+		std::vector<VkDescriptorSet> vulkanSets;
+		vulkanSets.reserve(sets.size());
+		for (const auto& set : sets)
+			vulkanSets.emplace_back(set.get().Get());
+		
+		vkCmdBindDescriptorSets(
+			mCmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS,
+			layout.Get(),
+			firstSet,
+			vulkanSets.size(), vulkanSets.data(),
+			0, nullptr);
+	}
+
+	void CommandBuffer::BindGraphicsPipeline(GraphicsPipeline& pipeline)
 	{
 		vkCmdBindPipeline(mCmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.Get());
 	}
 
-	void CommandBuffer::BindVertexBuffer(Buffer& vertexBuffer)
+    void CommandBuffer::BindVertexBuffer(Buffer& vertexBuffer)
 	{
 		const VkDeviceSize offsets[] = { 0 };
 		const VkBuffer buffer = vertexBuffer.Get();

@@ -33,14 +33,7 @@ namespace im
 		variableDescInfo.descriptorSetCount = 1;
 		variableDescInfo.pDescriptorCounts = &mMaxTextures;
 
-		const auto bindlessSetLayout = mBindlessSetLayout.Get();
-		VkDescriptorSetAllocateInfo setInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO };
-		setInfo.pNext = &variableDescInfo;
-		setInfo.descriptorPool = mBindlessPool.Get();
-		setInfo.descriptorSetCount = 1;
-		setInfo.pSetLayouts = &bindlessSetLayout;
-		VK_CHECK(vkAllocateDescriptorSets(mDevice.Get(), &setInfo, &mBindlessSet));
-
+		mBindlessSet = mBindlessPool.Allocate({ mBindlessSetLayout }, &variableDescInfo);
 		for (uint32_t i = 0; i < mMaxTextures; ++i)
 			mTexFreeList.emplace_back(i);
 	}
@@ -58,25 +51,16 @@ namespace im
 		else
 		{
 			assert(!mTexFreeList.empty() && "No more textures left!");
+			auto idx = mTexFreeList.front();
 
-			VkDescriptorImageInfo imageInfo{};
-			imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-			imageInfo.imageView = texture->GetView();
-			imageInfo.sampler = sampler;
-
-			VkWriteDescriptorSet write{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
-			write.descriptorCount = 1;
-			write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-			write.dstArrayElement = mTexFreeList.front();
-			write.dstBinding = 0;
-			write.dstSet = mBindlessSet;
-			write.pImageInfo = &imageInfo;
-
-			vkUpdateDescriptorSets(mDevice.Get(), 1, &write, 0, nullptr);
+			mBindlessSet->PushWrite(
+				0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+				texture.get(), &sampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+				idx).Update();
+			
+			mTexMap[texture] = idx;
 			mTexFreeList.pop_front();
-
-			mTexMap[texture] = write.dstArrayElement;
-			return write.dstArrayElement;
+			return idx;
 		}
 	}
 }

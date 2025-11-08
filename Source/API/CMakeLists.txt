@@ -46,6 +46,9 @@ target_sources(
             DescriptorPool.h
             DescriptorPool.cpp
 
+            DescriptorSet.h
+            DescriptorSet.cpp
+
             BindlessSet.h
             BindlessSet.cpp
 )

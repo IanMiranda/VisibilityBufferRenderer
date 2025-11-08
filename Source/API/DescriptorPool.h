@@ -5,6 +5,8 @@
 namespace im
 {
     class Device;
+    class DescriptorSetLayout;
+    class DescriptorSet;
 
     class DescriptorPool
     {
@@ -20,6 +22,12 @@ namespace im
 		DescriptorPool& operator=(const DescriptorPool& other) = delete;
 
         VkDescriptorPool Get() const { return mPool; }
+        Device& GetDevice();
+
+		std::unique_ptr<DescriptorSet> Allocate(DescriptorSetLayout& layout, void* pNext = nullptr);
+        
+		std::vector<std::unique_ptr<DescriptorSet>> Allocate(
+            const std::vector<std::reference_wrapper<DescriptorSetLayout>>& layouts, void* pNext = nullptr);
 
     private:
         Device& mDevice;

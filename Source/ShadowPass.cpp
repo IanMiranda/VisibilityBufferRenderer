@@ -65,7 +65,7 @@ namespace im
 
 		cmds.SetViewportAndScissor(mShadowMap->GetExtent());
 
-		cmds.BindPipeline(*mShadowPipe);
+		cmds.BindGraphicsPipeline(*mShadowPipe);
 	}
 
 	void ShadowPass::End(CommandBuffer& cmds)

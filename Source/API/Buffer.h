@@ -21,7 +21,7 @@ namespace im
 
 		void* Map();
 		void Unmap();
-		void SetData(void* data, size_t dataSize);
+		void SetData(const void* data, size_t dataSize);
 
 	private:
 		Device& mDevice;

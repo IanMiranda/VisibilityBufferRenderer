@@ -20,30 +20,14 @@ namespace im
 	}
 
 	Buffer::Buffer(Device& device, VkDeviceSize size, const void* data)
-		: mDevice(device), mSize(size)
+		: Buffer(device, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT)
 	{
-		const auto allocator = mDevice.GetAllocator();
-
-		VkBufferCreateInfo bufferInfo{ VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
-		bufferInfo.size = mSize;
-		bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-		bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-		VmaAllocationCreateInfo allocInfo{};
-		allocInfo.usage = VMA_MEMORY_USAGE_AUTO;
-		allocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
-
-		VK_CHECK(vmaCreateBuffer(allocator, &bufferInfo, &allocInfo, &mBuffer, &mAllocation, nullptr));
-
-		void* mappedData = Map();
-		std::memcpy(mappedData, data, size);
-		Unmap();
+		SetData(data, size);
 	}
 
 	Buffer::~Buffer()
 	{
 		mDevice.WaitIdle();
-
 		vmaDestroyBuffer(mDevice.GetAllocator(), mBuffer, mAllocation);
 	}
 
@@ -59,7 +43,7 @@ namespace im
 		vmaUnmapMemory(mDevice.GetAllocator(), mAllocation);
 	}
 
-	void Buffer::SetData(void* data, size_t dataSize)
+	void Buffer::SetData(const void* data, size_t dataSize)
 	{
 		void* address = Map();
 		std::memcpy(address, data, dataSize);
