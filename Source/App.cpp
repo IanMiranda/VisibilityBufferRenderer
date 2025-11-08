@@ -36,8 +36,11 @@ namespace im
 		InitMeshes();
 		InitUniformBuffers();
 		InitCubemap();
-		InitShadowResources();
+		// InitShadowResources();
 		InitDescriptors();
+
+		srand(time(nullptr));
+		mPointLights.resize(4);
 	}
 
 	App::~App()
@@ -88,6 +91,8 @@ namespace im
 			mCamera.position += right * deltaTime * moveFactor;
 
 		mCamera.Update();
+
+		UpdateLights();
 	}
 
 	void App::Render()
@@ -141,12 +146,22 @@ namespace im
 		mFrameIndex = (mFrameIndex + 1) % MaxFramesInFlight;
 	}
 
-	void App::DrawScene(CommandBuffer& commandBuffer)
-	{
+    void App::UpdateLights()
+    {
+		float offset = 0.0f;
+		for (auto& light : mPointLights)
+		{
+			light.position = glm::vec3(10.0f * sin(glfwGetTime() + offset), 1.0f, -10.0f * cos(glfwGetTime() + offset));
+			offset += (2 * 3.14159) / mPointLights.size();
+		}
+    }
+
+    void App::DrawScene(CommandBuffer &commandBuffer)
+    {
 		const Swapchain& swapchain = mDevice->GetSwapchain();
 		const auto swapExtent = swapchain.GetExtent();
 
-		const glm::vec3 lightDir = glm::vec3(2.0f * sin(glfwGetTime()), 2.0f, -2.0f * cos(glfwGetTime()));
+		/* const glm::vec3 lightDir = glm::vec3(2.0f * sin(glfwGetTime()), 2.0f, -2.0f * cos(glfwGetTime()));
 		const glm::mat4 lightView = glm::lookAt(
 			lightDir,
 			glm::vec3(0.0f, 0.0f, 0.0f),
@@ -156,7 +171,7 @@ namespace im
 		constexpr float shadowProjDim = 10.0f;
 		const glm::mat4 lightProj = glm::ortho(-shadowProjDim, shadowProjDim, -shadowProjDim, shadowProjDim, 0.1f, shadowProjDim); // No perspective skew for dir light
 
-		DrawShadowMap(commandBuffer, lightView, lightProj);
+		DrawShadowMap(commandBuffer, lightView, lightProj);*/
 
 		commandBuffer.BarrierSwapchainImage(
 			swapchain.GetImages()[swapchain.GetImageIndex()],
@@ -189,10 +204,15 @@ namespace im
 		GlobalPassData passData{};
 		passData.view = view;
 		passData.viewProj = proj * view;
-		passData.viewProjLight = lightProj * lightView;
+		// passData.viewProjLight = lightProj * lightView;
 		passData.viewInverse = glm::inverse(view);
-		passData.lightDir = view * glm::vec4(lightDir, 0.0f);
-		mUniformBuffers[mFrameIndex]->SetData(&passData, sizeof(passData));
+		passData.lightCount = mPointLights.size();
+		mGlobalPassBuffers[mFrameIndex]->SetData(&passData, sizeof(passData));
+
+		LightData lightData{};
+		for (int i = 0; i < mPointLights.size(); ++i)
+			lightData.lights[i] = { glm::vec3(view * glm::vec4(mPointLights[i].position, 1.0f)), 0, mPointLights[i].i };
+		mLightBuffers[mFrameIndex]->SetData(&lightData, sizeof(lightData));
 
 		commandBuffer.BindGraphicsPipeline(*mPipe);
 		commandBuffer.BindGraphicsDescriptorSets(*mPipeLayout, 0, { *(mGlobalSets[mFrameIndex]), mBindlessSet->Get() });
@@ -251,7 +271,16 @@ namespace im
     {
 		if (ImGui::Begin("Vulkan Renderer"))
 		{
-			ImGui::Text("Hello world!");
+			int lightNumber = 0;
+			for (auto& light : mPointLights)
+			{
+				float color[4] = { light.i.r, light.i.g, light.i.b, light.i.a };
+				std::string label = std::string("Light ") + std::to_string(lightNumber);
+				ImGui::ColorPicker4(label.c_str(), color, 0, color);
+				light.i = glm::vec4(color[0], color[1], color[2], color[3]);
+
+				lightNumber++;
+			}
 			ImGui::End();
 		}
     }
@@ -273,6 +302,7 @@ namespace im
 		glfwSetWindowUserPointer(mWindow, this);
 		glfwSetFramebufferSizeCallback(mWindow, FramebufferSizeCallback);
 		glfwSetCursorPosCallback(mWindow, MousePositionCallback);
+		glfwSetKeyCallback(mWindow, KeyCallback);
 		glfwSetInputMode(mWindow, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 	}
 
@@ -307,8 +337,9 @@ namespace im
 			{
 				DescriptorSetLayout::Binding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
 					VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT),
-				DescriptorSetLayout::Binding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-				DescriptorSetLayout::Binding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
+				DescriptorSetLayout::Binding(1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT),
+				DescriptorSetLayout::Binding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+				// DescriptorSetLayout::Binding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
 			}
 		);
 
@@ -430,11 +461,16 @@ namespace im
 
 	void App::InitUniformBuffers()
 	{
-		mUniformBuffers.reserve(MaxFramesInFlight);
+		mGlobalPassBuffers.reserve(MaxFramesInFlight);
+		mLightBuffers.reserve(MaxFramesInFlight);
 		for (int i = 0; i < MaxFramesInFlight; ++i)
 		{
-			mUniformBuffers.emplace_back(
+			mGlobalPassBuffers.emplace_back(
 				std::make_unique<Buffer>(*mDevice, sizeof(GlobalPassData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+					VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT)
+			);
+			mLightBuffers.emplace_back(
+				std::make_unique<Buffer>(*mDevice, sizeof(LightData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
 					VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT)
 			);
 		}
@@ -554,7 +590,8 @@ namespace im
 			std::vector<VkDescriptorPoolSize>
 			{
 				{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, MaxFramesInFlight },
-				{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2 * MaxFramesInFlight }, // UBOs
+				{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, MaxFramesInFlight },
+				{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2 * MaxFramesInFlight },
 				{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1 }
 			},
 			MaxFramesInFlight + 1
@@ -572,15 +609,17 @@ namespace im
 		for (int i = 0; i < MaxFramesInFlight; ++i)
 		{
 			mGlobalSets[i]->PushWrite(
-					0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, *(mUniformBuffers[i]))
+					0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, *(mGlobalPassBuffers[i]))
 				.PushWrite(
-					1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-					mEnvMap.get(), &mDevice->GetSamplers().TrilinearColor(),
-					VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+					1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, *(mLightBuffers[i]))
 				.PushWrite(
 					2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+					mEnvMap.get(), &mDevice->GetSamplers().TrilinearColor(),
+					VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+				/*.PushWrite(
+					2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 					&mShadowPass->GetMap(), &mDevice->GetSamplers().Shadow(),
-					VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL)
+					VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL)*/
 				.Update();
 		}
 	}
@@ -705,12 +744,16 @@ namespace im
 		app->mFramebufferResized = true;
 	}
 
+	static bool cursorEnabled = false;
+
 	void App::MousePositionCallback(GLFWwindow* window, double xpos, double ypos)
 	{
 		static bool firstTouch = true;
 		static double lastX;
 		static double lastY;
 		App* app = reinterpret_cast<App*>(glfwGetWindowUserPointer(window));
+		if (cursorEnabled) return;
+
 		if (firstTouch)
 		{
 			firstTouch = false;
@@ -726,4 +769,21 @@ namespace im
 		app->mCamera.pitch += sensitivity * deltaY;
 		glfwSetCursorPos(window, lastX, lastY);
 	}
+
+    void App::KeyCallback(GLFWwindow *window, int key, int scanCode, int action, int mods)
+    {
+		if (key == GLFW_KEY_K && action == GLFW_PRESS)
+		{
+			if (cursorEnabled)
+			{
+				cursorEnabled = false;
+				glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+			}
+			else
+			{
+				cursorEnabled = true;
+				glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+			}
+		}
+    }
 }

@@ -23,6 +23,7 @@
 #include "API/DescriptorSet.h"
 #include "API/BindlessSet.h"
 #include "ShadowPass.h"
+#include "Light.h"
 
 namespace im
 {
@@ -45,6 +46,8 @@ namespace im
 		void Render();
 
 	private:
+		void UpdateLights();
+
 		void DrawScene(CommandBuffer& commandBuffer);
 		void DrawShadowMap(CommandBuffer& commandBuffer, const glm::mat4& lightView, const glm::mat4& lightProj);
 		void DrawUI();
@@ -99,7 +102,8 @@ namespace im
 
 		std::unique_ptr<Texture2D> mDepthImage;
 
-		std::vector<std::unique_ptr<Buffer>> mUniformBuffers;
+		std::vector<std::unique_ptr<Buffer>> mGlobalPassBuffers;
+		std::vector<std::unique_ptr<Buffer>> mLightBuffers;
 
 		std::shared_ptr<Texture2D> mDiffuseMap;
 		std::shared_ptr<Texture2D> mNormalMap;
@@ -124,8 +128,11 @@ namespace im
 		Camera mCamera;
 		std::vector<Mesh> mMeshes;
 
+		std::vector<PointLight> mPointLights;
+
 	private:
 		static void FramebufferSizeCallback(GLFWwindow* window, int width, int height);
 		static void MousePositionCallback(GLFWwindow* window, double xpos, double ypos);
+		static void KeyCallback(GLFWwindow* window, int key, int scanCode, int action, int mods);
 	};
 }

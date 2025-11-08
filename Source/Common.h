@@ -61,8 +61,10 @@ namespace im
 		glm::mat4 viewProj;
 		glm::mat4 viewProjLight;
 		glm::mat4 viewInverse;
-		glm::vec3 lightDir;
-		float _pad0;
+		uint32_t lightCount;
+		uint32_t _pad0;
+		uint32_t _pad1;
+		uint32_t _pad2;
 	};
 
 	struct CubemapData

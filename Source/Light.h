@@ -4,15 +4,17 @@
 
 namespace im
 {
-	struct DirectionalLight
-	{
-		glm::vec3 direction;
-		float _pad0;
-	};
+	inline constexpr uint32_t gMaxLights = 1024;
 
 	struct PointLight
 	{
 		glm::vec3 position;
 		float _pad0;
+		glm::vec4 i = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+	};
+
+	struct LightData
+	{
+		PointLight lights[gMaxLights];
 	};
 }

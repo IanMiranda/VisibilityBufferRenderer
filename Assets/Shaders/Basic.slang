@@ -46,13 +46,12 @@ VSOutput VSMain(VSInput input)
     return output;
 }
 
-float4 Diffuse(float3 N, float3 W, float4 Kd, float4 I)
+float4 Diffuse(float3 N, float3 W, float4 Kd, float4 I, float dist)
 {
     float NoW = dot(N, W);
 
     // Attenuation
-    // float dist = distance(lightPos, input.posView);
-    // I *= (1.0 / (dist * dist + 0.01));
+    I *= (1.0 / (dist * dist + 0.01));
     float4 diffuse = saturate(NoW) * Kd * I;
     return diffuse;
 }
@@ -68,12 +67,20 @@ float4 Specular(float3 N, float3 W, float3 V, float4 Ks, float4 I, float alpha)
     return specular;
 }
 
+/*float GetRecordedDepth(float4 posLight)
+{
+    float3 shadowCoord = posLight.xyz / posLight.w;
+    shadowCoord = float3(shadowCoord.xy * 0.5 + 0.5, shadowCoord.z);
+    float bias = 0.015;
+    float recordedDepth = gShadowMap.SampleCmp(shadowCoord.xy, shadowCoord.z - bias);
+    return recordedDepth;
+}*/
+
 [shader("fragment")]
 float4 FSMain(VSOutput input) : SV_Target0
 {
     float alpha = 16.0;
 
-    float4 I = float4(1.0, 1.0, 1.0, 1.0);
     float4 Ia = float4(0.01, 0.01, 0.01, 1.0);
 
     float4 Kd = gTextures[gObjectData.textureIndex].Sample(input.uv) * 0.1;
@@ -84,22 +91,26 @@ float4 FSMain(VSOutput input) : SV_Target0
     N = N * 2.0 - 1.0;
     N = normalize(mul(input.tbn, N));
 
-    float3 W = normalize(gPassData.lightDir);
-    float4 diffuse = Diffuse(N, W, Kd, I);
+    float4 finalColor = 0;
+    for (int i = 0; i < gPassData.lightCount; ++i)
+    {
+        PointLight l = gLightData.lights[i];
+        float3 W = normalize(l.posView - input.posView);
+        float4 diffuse = Diffuse(N, W, Kd, l.i, distance(gLightData.lights[i].posView, input.posView));
 
-    float3 V = -normalize(input.posView);
-    float4 specular = Specular(N, W, V, Ks, I, alpha);
+        float3 V = -normalize(input.posView);
+        float4 specular = Specular(N, W, V, Ks, l.i, alpha);
 
-    float4 ambient = Kd * Ia;
+        float4 ambient = Kd * Ia;
 
-    // Environment reflections
-    float3 Wr = normalize(reflect(-V, N));
-    float4 Kr = Ks * 0.1;
-    float4 envColor = Kr * gCubemap.Sample(mul(gPassData.viewInverse, float4(Wr, 1.0)).xyz);
+        // Environment reflections
+        float3 Wr = normalize(reflect(-V, N));
+        float4 Kr = Ks * 0.1;
+        float4 envColor = Kr * gCubemap.Sample(mul(gPassData.viewInverse, float4(Wr, 1.0)).xyz);
 
-    float3 shadowCoord = input.posLight.xyz / input.posLight.w;
-    shadowCoord = float3(shadowCoord.xy * 0.5 + 0.5, shadowCoord.z);
-    float bias = 0.015;
-    float recordedDepth = gShadowMap.SampleCmp(shadowCoord.xy, shadowCoord.z - bias);
-    return ambient + (diffuse + specular + envColor) * recordedDepth;
+        // float recordedDepth = GetRecordedDepth(input.posLight);
+        finalColor += ambient + (diffuse + specular + envColor);// * recordedDepth;
+    }
+
+    return finalColor;
 }
