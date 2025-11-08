@@ -28,7 +28,7 @@ namespace im
 
 		mShadowPipeLayout = std::make_unique<PipelineLayout>(
 			mDevice,
-			std::vector<VkDescriptorSetLayout>{},
+			std::vector<std::reference_wrapper<DescriptorSetLayout>>{},
 			std::vector<VkPushConstantRange>{ passDataRange }
 		);
 

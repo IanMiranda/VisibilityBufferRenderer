@@ -7,13 +7,18 @@ namespace im
 {
 	PipelineLayout::PipelineLayout(
 		Device& device,
-		const std::vector<VkDescriptorSetLayout>& setLayouts,
+		const std::vector<std::reference_wrapper<DescriptorSetLayout>>& setLayouts,
 		const std::vector<VkPushConstantRange>& pushConstantRanges)
 		: mDevice(device)
 	{
+		std::vector<VkDescriptorSetLayout> vulkanSetLayouts;
+		vulkanSetLayouts.reserve(setLayouts.size());
+		for (const auto& setLayout : setLayouts)
+			vulkanSetLayouts.emplace_back(setLayout.get().Get());
+		
 		VkPipelineLayoutCreateInfo layoutInfo{ VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
-		layoutInfo.setLayoutCount = setLayouts.size();
-		layoutInfo.pSetLayouts = setLayouts.data();
+		layoutInfo.setLayoutCount = vulkanSetLayouts.size();
+		layoutInfo.pSetLayouts = vulkanSetLayouts.data();
 		layoutInfo.pushConstantRangeCount = pushConstantRanges.size();
 		layoutInfo.pPushConstantRanges = pushConstantRanges.data();
 		

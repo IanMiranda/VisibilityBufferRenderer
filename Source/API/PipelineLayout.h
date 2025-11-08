@@ -12,7 +12,7 @@ namespace im
 	public:
 		PipelineLayout(
 			Device& device,
-			const std::vector<VkDescriptorSetLayout>& setLayouts,
+			const std::vector<std::reference_wrapper<DescriptorSetLayout>>& setLayouts,
 			const std::vector<VkPushConstantRange>& pushConstantRanges);
 		~PipelineLayout();
 

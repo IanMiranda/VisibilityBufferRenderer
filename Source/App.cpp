@@ -320,7 +320,7 @@ namespace im
 
 		mPipeLayout = std::make_unique<PipelineLayout>(
 			*mDevice,
-			std::vector<VkDescriptorSetLayout>{ mGlobalLayout->Get(), mBindlessSet->GetSetLayout().Get() },
+			std::vector<std::reference_wrapper<DescriptorSetLayout>>{ *mGlobalLayout, mBindlessSet->GetSetLayout() },
 			std::vector<VkPushConstantRange>{ pcRange }
 		);
 
@@ -526,7 +526,7 @@ namespace im
 
 		mEnvMapPipeLayout = std::make_unique<PipelineLayout>(
 			*mDevice,
-			std::vector<VkDescriptorSetLayout>{ mEnvMapSetLayout->Get() },
+			std::vector<std::reference_wrapper<DescriptorSetLayout>>{ *mEnvMapSetLayout },
 			std::vector<VkPushConstantRange>{ pcRange }
 		);
 
