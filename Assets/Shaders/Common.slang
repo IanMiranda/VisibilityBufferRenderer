@@ -21,6 +21,6 @@ public struct GlobalPassData
 [vk_binding(0, 0)] public ConstantBuffer<GlobalPassData> gPassData;
 
 [vk_binding(1, 0)] public SamplerCube gCubemap;
-[vk_binding(2, 0)] public Sampler2DShadow gDepthMap;
+[vk_binding(2, 0)] public Sampler2DShadow gShadowMap;
 
 [vk_binding(0, 1)] public Sampler2D gTextures[];

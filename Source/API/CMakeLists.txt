@@ -43,6 +43,9 @@ target_sources(
             GraphicsPipeline.h
             GraphicsPipeline.cpp
 
+            DescriptorPool.h
+            DescriptorPool.cpp
+
             BindlessSet.h
             BindlessSet.cpp
 )

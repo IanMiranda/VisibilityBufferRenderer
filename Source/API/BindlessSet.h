@@ -4,13 +4,13 @@
 #include <unordered_map>
 
 #include "Common.h"
+#include "DescriptorPool.h"
 #include "DescriptorSetLayout.h"
 
 namespace im
 {
 	class Device;
 	class Texture2D;
-	class DescriptorSetLayout;
 	
 	class BindlessSet
 	{
@@ -27,7 +27,7 @@ namespace im
 		Device& mDevice;
 		const uint32_t mMaxTextures;
 
-		VkDescriptorPool mBindlessPool;
+		DescriptorPool mBindlessPool;
 		DescriptorSetLayout mBindlessSetLayout;
 		VkDescriptorSet mBindlessSet;
 

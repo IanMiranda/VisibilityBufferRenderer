@@ -100,6 +100,6 @@ float4 FSMain(VSOutput input) : SV_Target0
     float3 shadowCoord = input.posLight.xyz / input.posLight.w;
     shadowCoord = float3(shadowCoord.xy * 0.5 + 0.5, shadowCoord.z);
     float bias = 0.015;
-    float recordedDepth = gDepthMap.SampleCmp(shadowCoord.xy, shadowCoord.z - bias);
+    float recordedDepth = gShadowMap.SampleCmp(shadowCoord.xy, shadowCoord.z - bias);
     return ambient + (diffuse + specular + envColor) * recordedDepth;
 }

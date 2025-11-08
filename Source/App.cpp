@@ -44,41 +44,9 @@ namespace im
 	{
 		mDevice->WaitIdle();
 
-		mShadowPass.reset();
-
-		mEnvMapPipe.reset();
-		mEnvMapPipeLayout.reset();
-		mEnvMapSetLayout.reset();
-
-		mEnvMap.reset();
-		mDiffuseMap.reset();
-		mNormalMap.reset();
-
-		mMeshes.clear();
-		mUniformBuffers.clear();
-
 		ImGui_ImplVulkan_Shutdown();
 		ImGui_ImplGlfw_Shutdown();
 		ImGui::DestroyContext();
-
-		mRenderFences.clear();
-		mRenderSemaphores.clear();
-		mAcquireSemaphores.clear();
-
-		vkDestroyDescriptorPool(mDevice->Get(), mGlobalPool, nullptr);
-
-		mPipe.reset();
-		mPipeLayout.reset();
-		mGlobalLayout.reset();
-
-		mDepthImage.reset();
-
-		mCommandBuffers.clear();
-		mImmediatePool.reset();
-		mCommandPool.reset();
-
-		mBindlessSet.reset();
-		mDevice.reset();
 
 		glfwTerminate();
 	}
@@ -584,27 +552,27 @@ namespace im
 	{
 		const auto dev = mDevice->Get();
 
-		VkDescriptorPoolSize globalSizes[]{
-			{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, MaxFramesInFlight },
-			{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2 * MaxFramesInFlight }, // UBOs
-			{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1 } }; // Cubemap pass
-
-		VkDescriptorPoolCreateInfo poolInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO };
-		poolInfo.maxSets = MaxFramesInFlight + 1;
-		poolInfo.poolSizeCount = std::size(globalSizes);
-		poolInfo.pPoolSizes = globalSizes;
-		VK_CHECK(vkCreateDescriptorPool(dev, &poolInfo, nullptr, &mGlobalPool));
+		mGlobalPool = std::make_unique<DescriptorPool>(
+			*mDevice,
+			std::vector<VkDescriptorPoolSize>
+			{
+				{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, MaxFramesInFlight },
+				{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2 * MaxFramesInFlight }, // UBOs
+				{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1 }
+			},
+			MaxFramesInFlight + 1
+		);
 
 		mGlobalSets.resize(MaxFramesInFlight);
 		VkDescriptorSetLayout globalLayouts[]{ mGlobalLayout->Get(), mGlobalLayout->Get() };
 		VkDescriptorSetAllocateInfo allocInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO };
-		allocInfo.descriptorPool = mGlobalPool;
+		allocInfo.descriptorPool = mGlobalPool->Get();
 		allocInfo.descriptorSetCount = std::size(globalLayouts);
 		allocInfo.pSetLayouts = globalLayouts;
 		VK_CHECK(vkAllocateDescriptorSets(dev, &allocInfo, mGlobalSets.data()));
 
 		VkDescriptorSetLayout cubemapLayouts[]{ mEnvMapSetLayout->Get()};
-		allocInfo.descriptorPool = mGlobalPool;
+		allocInfo.descriptorPool = mGlobalPool->Get();
 		allocInfo.descriptorSetCount = std::size(cubemapLayouts);
 		allocInfo.pSetLayouts = cubemapLayouts;
 		VK_CHECK(vkAllocateDescriptorSets(dev, &allocInfo, &mEnvMapSet));
