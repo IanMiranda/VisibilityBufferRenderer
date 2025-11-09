@@ -204,11 +204,7 @@ namespace im
 
 	void CommandBuffer::Copy(Buffer& src, Buffer& dst)
 	{
-		VkBufferCopy copy{};
-		copy.size = src.GetSize();
-		copy.srcOffset = 0;
-		copy.dstOffset = 0;
-		vkCmdCopyBuffer(mCmdBuf, src.Get(), dst.Get(), 1, &copy);
+		Copy(src, dst, src.GetSize());
 	}
 
 	void CommandBuffer::Copy(Buffer& src, Buffer& dst, VkDeviceSize size)

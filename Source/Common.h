@@ -52,6 +52,7 @@ namespace im
 	{
 		glm::mat4 model;
 		uint32_t diffuseMapHandle;
+		uint32_t specularMapHandle;
 		uint32_t normalMapHandle;
 	};
 
@@ -79,6 +80,7 @@ namespace im
 	struct Material
 	{
 		std::shared_ptr<Texture2D> diffuseMap;
+		std::shared_ptr<Texture2D> specularMap;
 		std::shared_ptr<Texture2D> normalMap;
 	};
 

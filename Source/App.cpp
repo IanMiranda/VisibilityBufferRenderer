@@ -39,6 +39,8 @@ namespace im
 		// InitShadowResources();
 		InitDescriptors();
 
+		mGBuffer = std::make_unique<GBuffer>(*mDevice);
+
 		srand(time(nullptr));
 		mPointLights.resize(4);
 	}
@@ -149,9 +151,10 @@ namespace im
     void App::UpdateLights()
     {
 		float offset = 0.0f;
+		float distance = 3.0f * sin(glfwGetTime()) + 4.0f;
 		for (auto& light : mPointLights)
 		{
-			light.position = glm::vec3(10.0f * sin(glfwGetTime() + offset), 1.0f, -10.0f * cos(glfwGetTime() + offset));
+			light.position = glm::vec3(distance * sin(glfwGetTime() + offset), 1.0f, -distance * cos(glfwGetTime() + offset));
 			offset += (2 * 3.14159) / mPointLights.size();
 		}
     }
@@ -222,6 +225,7 @@ namespace im
 		{
 			pushConsts.model = mesh.transform;
 			pushConsts.diffuseMapHandle = mBindlessSet->GetOrCreateId(mesh.material.diffuseMap, mDevice->GetSamplers().TrilinearColor());
+			pushConsts.specularMapHandle = mBindlessSet->GetOrCreateId(mesh.material.specularMap, mDevice->GetSamplers().TrilinearColor());
 			pushConsts.normalMapHandle = mBindlessSet->GetOrCreateId(mesh.material.normalMap, mDevice->GetSamplers().TrilinearColor());
 
 			commandBuffer.PushConstants(*mPipeLayout,
@@ -429,13 +433,17 @@ namespace im
 	{
 		// Load texture image
 		mDiffuseMap = std::shared_ptr<Texture2D>(CreateAndStageTexture("./Assets/Textures/brickwall.jpg", VK_FORMAT_R8G8B8A8_SRGB, false));
+		mSpecularMap = std::shared_ptr<Texture2D>(CreateAndStageTexture("./Assets/Textures/brickwall.jpg", VK_FORMAT_R8G8B8A8_SRGB, false));
 		mNormalMap = std::shared_ptr<Texture2D>(CreateAndStageTexture("./Assets/Textures/brickwall_normal.jpg", VK_FORMAT_R8G8B8A8_UNORM, false));
 
 		{
 			auto [duckVertices, duckIndices] = utils::LoadModel("./Assets/Models/Duck.gltf");
 			glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -1.0f, 0.0f));
 			model = glm::scale(model, glm::vec3(0.01f));
-			mMeshes.emplace_back(UploadMesh(duckVertices, duckIndices, { mDiffuseMap, mNormalMap }, model));
+			mMeshes.emplace_back(UploadMesh(
+				duckVertices, duckIndices,
+				{ mDiffuseMap, mSpecularMap, mNormalMap },
+				model));
 		}
 
 		{
@@ -455,7 +463,10 @@ namespace im
 
 			glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -1.0f, 0.0f));
 			model = glm::scale(model, glm::vec3(5.0f));
-			mMeshes.emplace_back(UploadMesh(planeVertices, planeIndices, { mDiffuseMap, mNormalMap }, model));
+			mMeshes.emplace_back(UploadMesh(
+				planeVertices, planeIndices,
+				{ mDiffuseMap, mSpecularMap, mNormalMap },
+				model));
 		}
 	}
 
@@ -728,6 +739,7 @@ namespace im
 			VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, 0);
 		res.indexCount = indices.size();
 		res.material.diffuseMap = material.diffuseMap;
+		res.material.specularMap = material.specularMap;
 		res.material.normalMap = material.normalMap;
 		res.transform = transform;
 		RunImmediateCommands([this, &stagingVerts, &stagingIdxs, &res](CommandBuffer& cmds)

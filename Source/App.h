@@ -23,6 +23,7 @@
 #include "API/DescriptorSet.h"
 #include "API/BindlessSet.h"
 #include "ShadowPass.h"
+#include "GBuffer.h"
 #include "Light.h"
 
 namespace im
@@ -106,6 +107,7 @@ namespace im
 		std::vector<std::unique_ptr<Buffer>> mLightBuffers;
 
 		std::shared_ptr<Texture2D> mDiffuseMap;
+		std::shared_ptr<Texture2D> mSpecularMap;
 		std::shared_ptr<Texture2D> mNormalMap;
 
 		std::unique_ptr<TextureCube> mEnvMap;
@@ -116,6 +118,8 @@ namespace im
 		std::unique_ptr<DescriptorSet> mEnvMapSet;
 
 		std::unique_ptr<ShadowPass> mShadowPass;
+
+		std::unique_ptr<GBuffer> mGBuffer;
 
 		std::vector<std::unique_ptr<CommandBuffer>> mCommandBuffers;
 		std::vector<std::unique_ptr<Semaphore>> mAcquireSemaphores;

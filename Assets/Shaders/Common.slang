@@ -5,7 +5,8 @@ public static const int gNumLights = 1024;
 public struct ObjectData
 {
     public float4x4 model;
-    public uint textureIndex;
+    public uint diffuseMapIndex;
+    public uint specularMapIndex;
     public uint normalMapIndex;
 };
 

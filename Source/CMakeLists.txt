@@ -15,6 +15,9 @@ target_sources(
             ShadowPass.h
             ShadowPass.cpp
 
+            GBuffer.h
+            GBuffer.cpp
+
             Common.h
             Common.cpp
 )
