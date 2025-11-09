@@ -24,15 +24,7 @@ namespace im
 
 	std::unique_ptr<CommandBuffer> CommandPool::Allocate()
 	{
-		VkCommandBufferAllocateInfo allocInfo{ VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO };
-		allocInfo.commandBufferCount = 1;
-		allocInfo.commandPool = mPool;
-		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-
-		VkCommandBuffer commandBuffer;
-		VK_CHECK(vkAllocateCommandBuffers(mDevice.Get(), &allocInfo, &commandBuffer));
-
-		return std::make_unique<CommandBuffer>(*this, commandBuffer);
+		return std::move(Allocate(1).back());
 	}
 
 	std::vector<std::unique_ptr<CommandBuffer>> CommandPool::Allocate(size_t count)
