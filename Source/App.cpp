@@ -162,6 +162,8 @@ namespace im
 		}
     }
 
+#define DEFERRED_SHADING 0
+
     void App::DrawScene(CommandBuffer& commandBuffer)
     {
 		const Swapchain& swapchain = mDevice->GetSwapchain();
@@ -192,11 +194,15 @@ namespace im
 		glm::mat4 view = mCamera.GetViewMatrix();
 		glm::mat4 proj = glm::perspective(glm::radians(75.0f), static_cast<float>(swapExtent.width) / swapExtent.height, 0.1f, 100.0f);
 
-		//DrawSkybox(commandBuffer, view, proj);
+#if !DEFERRED_SHADING
+		commandBuffer.BeginRendering(
+			{ utils::ColorAttachment(swapchain.GetViews()[swapchain.GetImageIndex()], VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE) },
+			utils::DepthAttachment(mDepthImage->GetView(), VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_DONT_CARE),
+			utils::Scissor(swapExtent)
+		);
 
-		GeometryPass(commandBuffer, view, proj);
-		LightingPass(commandBuffer, view);
-		/*
+		DrawSkybox(commandBuffer, view, proj);
+
 		// Forward pass
 		GlobalPassData passData{};
 		passData.view = view;
@@ -229,20 +235,25 @@ namespace im
 			commandBuffer.BindVertexBuffer(*mesh.vertexBuffer);
 			commandBuffer.BindIndexBuffer(*mesh.indexBuffer);
 			commandBuffer.DrawIndexed(mesh.indexCount);
-		}*/
+		}
+#else
+
+		GeometryPass(commandBuffer, view, proj);
+		LightingPass(commandBuffer, view);
 
 		commandBuffer.BeginRendering(
 			{ utils::ColorAttachment(swapchain.GetViews()[swapchain.GetImageIndex()], VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE) },
-			utils::DepthAttachment(mDepthImage->GetView(), VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_DONT_CARE),
+			utils::DepthAttachment(mDepthImage->GetView(), VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_DONT_CARE),
 			utils::Scissor(swapExtent)
 		);
+#endif
 
 		DrawUI();
 		ImGui::Render();
 		ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer.Get());
-		
-		commandBuffer.EndRendering();
 
+		commandBuffer.EndRendering();
+		
 		commandBuffer.BarrierSwapchainImage(
 			swapchain.GetImages()[swapchain.GetImageIndex()],
 			VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
