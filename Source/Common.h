@@ -74,6 +74,14 @@ namespace im
 		glm::mat4 viewProj;
 	};
 
+	struct LightingPassData
+	{
+		uint32_t lightCount;
+		uint32_t _pad0;
+		uint32_t _pad1;
+		uint32_t _pad2;
+	};
+
 	struct CubemapData
 	{
 		glm::mat4 viewProjInverse;

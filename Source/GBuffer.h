@@ -15,6 +15,11 @@ namespace im
         void Begin(CommandBuffer& cmd);
         void End(CommandBuffer& cmd);
 
+        Texture2D& GetPositionBuffer() { return mPositionBuffer; }
+        Texture2D& GetNormaBuffer() { return mNormalBuffer; }
+        Texture2D& GetAlbedoBuffer() { return mAlbedoBuffer; }
+        Texture2D& GetSpecularBuffer() { return mSpecularBuffer; }
+
     private:
         Texture2D CreateAttachment(VkFormat format, VkImageUsageFlags usage);
 

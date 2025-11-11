@@ -14,6 +14,17 @@ namespace im
 		}
 
 		{
+			{
+			auto nearestColor = GetDefaultSamplerInfo();
+			nearestColor.minFilter = VK_FILTER_NEAREST;
+			nearestColor.magFilter = VK_FILTER_NEAREST;
+			nearestColor.compareEnable = VK_FALSE;
+			nearestColor.compareOp = VK_COMPARE_OP_ALWAYS;
+			VK_CHECK(vkCreateSampler(mDevice.Get(), &nearestColor, nullptr, &mNearestColor));
+		}
+		}
+
+		{
 			auto shadowInfo = GetDefaultSamplerInfo();
 			shadowInfo.compareEnable = VK_TRUE;
 			shadowInfo.compareOp = VK_COMPARE_OP_LESS;
@@ -25,6 +36,7 @@ namespace im
 	{
 		mDevice.WaitIdle();
 		vkDestroySampler(mDevice.Get(), mTrilinearColor, nullptr);
+		vkDestroySampler(mDevice.Get(), mNearestColor, nullptr);
 		vkDestroySampler(mDevice.Get(), mShadow, nullptr);
 	}
 

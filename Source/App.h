@@ -55,6 +55,7 @@ namespace im
 		void DrawUI();
 
 		void GeometryPass(CommandBuffer& commandBuffer, const glm::mat4& view, const glm::mat4& proj);
+		void LightingPass(CommandBuffer& commandBuffer, const glm::mat4& view);
 
 	private:
 		void InitWindow();
@@ -104,8 +105,12 @@ namespace im
 		std::unique_ptr<DescriptorSetLayout> mGeomDescLayout;
 		std::unique_ptr<PipelineLayout> mGeomPipeLayout;
 		std::unique_ptr<GraphicsPipeline> mGeomPipe;
-		std::unique_ptr<DescriptorPool> mGeomDescPool;
+		std::unique_ptr<DescriptorPool> mDeferredDescPool;
 		std::vector<std::unique_ptr<DescriptorSet>> mGeomSets;
+		std::unique_ptr<DescriptorSetLayout> mLightDescLayout;
+		std::unique_ptr<PipelineLayout> mLightPipeLayout;
+		std::unique_ptr<GraphicsPipeline> mLightPipe;
+		std::vector<std::unique_ptr<DescriptorSet>> mLightSets;
 		
 		std::unique_ptr<DescriptorPool> mGlobalPool;
 		std::vector<std::unique_ptr<DescriptorSet>> mGlobalSets;
@@ -115,6 +120,7 @@ namespace im
 		std::vector<std::unique_ptr<Buffer>> mGlobalPassBuffers;
 		std::vector<std::unique_ptr<Buffer>> mLightBuffers;
 		std::vector<std::unique_ptr<Buffer>> mGeomPassBuffers;
+		std::vector<std::unique_ptr<Buffer>> mLightPassBuffers;
 
 		std::shared_ptr<Texture2D> mDiffuseMap;
 		std::shared_ptr<Texture2D> mSpecularMap;
@@ -129,7 +135,7 @@ namespace im
 
 		std::unique_ptr<ShadowPass> mShadowPass;
 
-		std::unique_ptr<GBuffer> mGBuffer;
+		std::vector<std::unique_ptr<GBuffer>> mGBuffers;
 
 		std::vector<std::unique_ptr<CommandBuffer>> mCommandBuffers;
 		std::vector<std::unique_ptr<Semaphore>> mAcquireSemaphores;

@@ -37,12 +37,15 @@ namespace im
 		InitUniformBuffers();
 		InitCubemap();
 		// InitShadowResources();
+
+		mGBuffers.reserve(MaxFramesInFlight);
+		for (int i = 0; i < MaxFramesInFlight; ++i)
+			mGBuffers.emplace_back(std::make_unique<GBuffer>(*mDevice));
+		
 		InitDescriptors();
 
-		mGBuffer = std::make_unique<GBuffer>(*mDevice);
-
 		srand(time(nullptr));
-		mPointLights.resize(4);
+		mPointLights.resize(8);
 	}
 
 	App::~App()
@@ -186,18 +189,13 @@ namespace im
 
 		commandBuffer.SetViewportAndScissor(swapExtent);
 
-		/*commandBuffer.BeginRendering(
-			{ utils::ColorAttachment(swapchain.GetViews()[swapchain.GetImageIndex()], VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE) },
-			utils::DepthAttachment(mDepthImage->GetView(), VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_DONT_CARE),
-			utils::Scissor(swapExtent)
-		);*/
-
 		glm::mat4 view = mCamera.GetViewMatrix();
 		glm::mat4 proj = glm::perspective(glm::radians(75.0f), static_cast<float>(swapExtent.width) / swapExtent.height, 0.1f, 100.0f);
 
 		//DrawSkybox(commandBuffer, view, proj);
 
 		GeometryPass(commandBuffer, view, proj);
+		LightingPass(commandBuffer, view);
 		/*
 		// Forward pass
 		GlobalPassData passData{};
@@ -231,14 +229,19 @@ namespace im
 			commandBuffer.BindVertexBuffer(*mesh.vertexBuffer);
 			commandBuffer.BindIndexBuffer(*mesh.indexBuffer);
 			commandBuffer.DrawIndexed(mesh.indexCount);
-		}
+		}*/
+
+		commandBuffer.BeginRendering(
+			{ utils::ColorAttachment(swapchain.GetViews()[swapchain.GetImageIndex()], VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE) },
+			utils::DepthAttachment(mDepthImage->GetView(), VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_DONT_CARE),
+			utils::Scissor(swapExtent)
+		);
 
 		DrawUI();
-		*/
 		ImGui::Render();
 		ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer.Get());
 		
-		/*commandBuffer.EndRendering();*/
+		commandBuffer.EndRendering();
 
 		commandBuffer.BarrierSwapchainImage(
 			swapchain.GetImages()[swapchain.GetImageIndex()],
@@ -300,9 +303,8 @@ namespace im
 
     void App::GeometryPass(CommandBuffer& commandBuffer, const glm::mat4& view, const glm::mat4& proj)
     {
-		mGBuffer->Begin(commandBuffer);
+		mGBuffers[mFrameIndex]->Begin(commandBuffer);
 
-		// Forward pass
 		GeomPassData passData{};
 		passData.view = view;
 		passData.viewProj = proj * view;
@@ -328,7 +330,31 @@ namespace im
 			commandBuffer.DrawIndexed(mesh.indexCount);
 		}
 
-		mGBuffer->End(commandBuffer);
+		mGBuffers[mFrameIndex]->End(commandBuffer);
+    }
+
+    void App::LightingPass(CommandBuffer& commandBuffer, const glm::mat4& view)
+    {
+		const auto& swapchain = mDevice->GetSwapchain();
+		commandBuffer.BeginRendering(
+			{ utils::ColorAttachment(swapchain.GetViews()[swapchain.GetImageIndex()], VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE) },
+			utils::DepthAttachment(mDepthImage->GetView(), VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_DONT_CARE),
+			utils::Scissor(swapchain.GetExtent())
+		);
+
+		LightData lightData{};
+		for (int i = 0; i < mPointLights.size(); ++i)
+			lightData.lights[i] = { glm::vec3(view * glm::vec4(mPointLights[i].position, 1.0f)), 0, mPointLights[i].i };
+		mLightPassBuffers[mFrameIndex]->SetData(&lightData, sizeof(lightData));
+
+		commandBuffer.BindGraphicsPipeline(*mLightPipe);
+		commandBuffer.BindGraphicsDescriptorSets(*mLightPipeLayout, 0, { *(mLightSets[mFrameIndex]) });
+		LightingPassData lightPassData{};
+		lightPassData.lightCount = mPointLights.size();
+		commandBuffer.PushConstants(*mLightPipeLayout, VK_SHADER_STAGE_FRAGMENT_BIT, lightPassData);
+		commandBuffer.Draw(3);
+
+		commandBuffer.EndRendering();
     }
 
     void App::InitWindow()
@@ -440,6 +466,41 @@ namespace im
 			.AddColorAttachment(VK_FORMAT_R8G8B8A8_UNORM) // Specular
 			.SetDepthAttachment(mDepthImage->GetFormat(), true)
 			.Commit();
+
+		mLightDescLayout = std::make_unique<DescriptorSetLayout>(
+			*mDevice,
+			std::vector<VkDescriptorSetLayoutBinding>
+			{
+				DescriptorSetLayout::Binding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT),
+				DescriptorSetLayout::Binding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+				DescriptorSetLayout::Binding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+				DescriptorSetLayout::Binding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+				DescriptorSetLayout::Binding(4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+			}
+		);
+
+		VkPushConstantRange lightPushRange{};
+		lightPushRange.offset = 0;
+		lightPushRange.size = sizeof(LightingPassData);
+		lightPushRange.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+		mLightPipeLayout = std::make_unique<PipelineLayout>(
+			*mDevice,
+			std::vector<std::reference_wrapper<DescriptorSetLayout>>{ *mLightDescLayout },
+			std::vector<VkPushConstantRange>{ lightPushRange }
+		);
+
+		Shader lightShader(*mDevice, "./Assets/Shaders/LightingPass.spv");
+		lightShader.AddStage(VK_SHADER_STAGE_VERTEX_BIT, "VSMain")
+			.AddStage(VK_SHADER_STAGE_FRAGMENT_BIT, "FSMain");
+		mLightPipe = std::make_unique<GraphicsPipeline>(*mDevice, *mLightPipeLayout, lightShader);
+		mLightPipe->SetVertexInput({}, {})
+			.SetPrimitiveTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
+			.SetRasterizer(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE, VK_POLYGON_MODE_FILL)
+			.SetMsaaSamples(VK_SAMPLE_COUNT_1_BIT)
+			.AddColorAttachment(mDevice->GetSwapchain().GetFormat())
+			.SetDepthAttachment(mDepthImage->GetFormat(), true)
+			.Commit();
 		
 	}
 
@@ -547,6 +608,7 @@ namespace im
 		mGlobalPassBuffers.reserve(MaxFramesInFlight);
 		mLightBuffers.reserve(MaxFramesInFlight);
 		mGeomPassBuffers.reserve(MaxFramesInFlight);
+		mLightPassBuffers.reserve(MaxFramesInFlight);
 		for (int i = 0; i < MaxFramesInFlight; ++i)
 		{
 			mGlobalPassBuffers.emplace_back(
@@ -559,6 +621,10 @@ namespace im
 			);
 			mGeomPassBuffers.emplace_back(
 				std::make_unique<Buffer>(*mDevice, sizeof(GeomPassData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+					VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT)
+			);
+			mLightPassBuffers.emplace_back(
+				std::make_unique<Buffer>(*mDevice, sizeof(LightData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
 					VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT)
 			);
 		}
@@ -711,20 +777,36 @@ namespace im
 				.Update();
 		}
 
-		mGeomDescPool = std::make_unique<DescriptorPool>(
+		mDeferredDescPool = std::make_unique<DescriptorPool>(
 			*mDevice,
 			std::vector<VkDescriptorPoolSize>
 			{
+				// Geometry pass
 				{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, MaxFramesInFlight },
 				{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, MaxFramesInFlight },
+
+				// Lighting pass
+				{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, MaxFramesInFlight },
+				{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4 * MaxFramesInFlight }
 			},
-			MaxFramesInFlight
+			MaxFramesInFlight * 2
 		);
 
-		mGeomSets = mGeomDescPool->Allocate({ *mGeomDescLayout, *mGeomDescLayout });
+		mGeomSets = mDeferredDescPool->Allocate({ *mGeomDescLayout, *mGeomDescLayout });
 		for (int i = 0; i < mGeomSets.size(); ++i)
 		{
 			mGeomSets[i]->PushWrite(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, *(mGeomPassBuffers[i])).Update();
+		}
+
+		mLightSets = mDeferredDescPool->Allocate({ *mLightDescLayout, *mLightDescLayout });
+		for (int i = 0; i < mLightSets.size(); ++i)
+		{
+			mLightSets[i]->PushWrite(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, *(mLightPassBuffers[i]))
+				.PushWrite(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &mGBuffers[mFrameIndex]->GetPositionBuffer(), &mDevice->GetSamplers().NearestColor(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+				.PushWrite(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &mGBuffers[mFrameIndex]->GetNormaBuffer(), &mDevice->GetSamplers().NearestColor(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+				.PushWrite(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &mGBuffers[mFrameIndex]->GetAlbedoBuffer(), &mDevice->GetSamplers().NearestColor(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+				.PushWrite(4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &mGBuffers[mFrameIndex]->GetSpecularBuffer(), &mDevice->GetSamplers().NearestColor(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+				.Update();
 		}
 	}
 
