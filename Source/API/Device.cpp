@@ -275,7 +275,7 @@ namespace im
 			VkPhysicalDeviceFeatures2 features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2 };
 			features.pNext = &dynamicRenderFeatures;
 
-			if (InstanceExtensionSupported(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME))
+			if (InstanceExtensionSupported("VK_KHR_portability_subset"))
 			{
 				deviceExtensions.emplace_back("VK_KHR_portability_subset");
 			}
