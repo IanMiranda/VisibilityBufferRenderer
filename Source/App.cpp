@@ -308,8 +308,8 @@ namespace im
 		passData.viewProj = proj * view;
 		mGeomPassBuffers[mFrameIndex]->SetData(&passData, sizeof(passData));
 
-		commandBuffer.BindGraphicsPipeline(*mPipe);
-		commandBuffer.BindGraphicsDescriptorSets(*mPipeLayout, 0, { *(mGlobalSets[mFrameIndex]), mBindlessSet->Get() });
+		commandBuffer.BindGraphicsPipeline(*mGeomPipe);
+		commandBuffer.BindGraphicsDescriptorSets(*mGeomPipeLayout, 0, { *(mGeomSets[mFrameIndex]), mBindlessSet->Get() });
 
 		ObjectData pushConsts{};
 		for (const auto& mesh : mMeshes)
@@ -319,7 +319,7 @@ namespace im
 			pushConsts.specularMapHandle = mBindlessSet->GetOrCreateId(mesh.material.specularMap, mDevice->GetSamplers().TrilinearColor());
 			pushConsts.normalMapHandle = mBindlessSet->GetOrCreateId(mesh.material.normalMap, mDevice->GetSamplers().TrilinearColor());
 
-			commandBuffer.PushConstants(*mPipeLayout,
+			commandBuffer.PushConstants(*mGeomPipeLayout,
 				VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
 				pushConsts
 			);
@@ -420,17 +420,17 @@ namespace im
 			}
 		);
 
-		mPipeLayout = std::make_unique<PipelineLayout>(
+		mGeomPipeLayout = std::make_unique<PipelineLayout>(
 			*mDevice,
-			std::vector<std::reference_wrapper<DescriptorSetLayout>>{ *mGlobalLayout, mBindlessSet->GetSetLayout() },
+			std::vector<std::reference_wrapper<DescriptorSetLayout>>{ *mGeomDescLayout, mBindlessSet->GetSetLayout() },
 			std::vector<VkPushConstantRange>{ pcRange }
 		);
 
 		Shader geomShader(*mDevice, "./Assets/Shaders/GeometryPass.spv");
 		geomShader.AddStage(VK_SHADER_STAGE_VERTEX_BIT, "VSMain")
 			.AddStage(VK_SHADER_STAGE_FRAGMENT_BIT, "FSMain");
-		mPipe = std::make_unique<GraphicsPipeline>(*mDevice, *mPipeLayout, geomShader);
-		mPipe->SetVertexInput({ utils::InputBinding(0, VK_VERTEX_INPUT_RATE_VERTEX, sizeof(Vertex) )}, Vertex::GetInputAttributes())
+		mGeomPipe = std::make_unique<GraphicsPipeline>(*mDevice, *mGeomPipeLayout, geomShader);
+		mGeomPipe->SetVertexInput({ utils::InputBinding(0, VK_VERTEX_INPUT_RATE_VERTEX, sizeof(Vertex) )}, Vertex::GetInputAttributes())
 			.SetPrimitiveTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
 			.SetRasterizer(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE, VK_POLYGON_MODE_FILL)
 			.SetMsaaSamples(VK_SAMPLE_COUNT_1_BIT)
