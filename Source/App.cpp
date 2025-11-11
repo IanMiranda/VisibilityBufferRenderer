@@ -16,6 +16,8 @@
 
 #include "Utils.h"
 
+#define DEFERRED_SHADING 0
+
 namespace im
 {
 	static constexpr uint32_t gMaxTextures = 512;
@@ -45,7 +47,7 @@ namespace im
 		InitDescriptors();
 
 		srand(time(nullptr));
-		mPointLights.resize(8);
+		mPointLights.resize(32);
 	}
 
 	App::~App()
@@ -62,6 +64,8 @@ namespace im
 	void App::Run()
 	{
 		float lastTime = glfwGetTime();
+		float fpsLast = glfwGetTime();
+		int frames = 0;
 		while (!glfwWindowShouldClose(mWindow))
 		{
 			glfwPollEvents();
@@ -70,6 +74,13 @@ namespace im
 
 			Update(deltaTime);
 			Render();
+			++frames;
+			if (glfwGetTime() - fpsLast >= 1.0)
+			{
+				std::cerr << "FPS: " << frames << "\n";
+				fpsLast = glfwGetTime();
+				frames = 0;
+			}
 
 			lastTime = currentTime;
 		}
@@ -161,8 +172,6 @@ namespace im
 			offset += (2 * 3.14159) / mPointLights.size();
 		}
     }
-
-#define DEFERRED_SHADING 0
 
     void App::DrawScene(CommandBuffer& commandBuffer)
     {
