@@ -53,6 +53,11 @@ namespace im
         );
     }
 
+    void GBuffer::End(CommandBuffer& cmd)
+    {
+        cmd.EndRendering();
+    }
+
     Texture2D GBuffer::CreateAttachment(VkFormat format, VkImageUsageFlags usage)
     {
         return Texture2D(

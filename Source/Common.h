@@ -68,6 +68,12 @@ namespace im
 		uint32_t _pad2;
 	};
 
+	struct GeomPassData
+	{
+		glm::mat4 view;
+		glm::mat4 viewProj;
+	};
+
 	struct CubemapData
 	{
 		glm::mat4 viewProjInverse;

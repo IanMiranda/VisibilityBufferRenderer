@@ -1,6 +1,7 @@
 #extension GL_EXT_nonuniform_qualifier : require
 
 import Common;
+import Lighting;
 
 struct VSInput
 {
@@ -22,6 +23,21 @@ struct VSOutput
     float4 posLight : POSITION1;
     float3x3 tbn : TBN;
 };
+
+public struct GlobalPassData
+{
+    public float4x4 view;
+    public float4x4 viewProj;
+    public float4x4 viewProjLight;
+    public float4x4 viewInverse;
+    public uint lightCount;
+    uint _pad0;
+    uint _pad1;
+    uint _pad2;
+};
+
+[push_constant] ConstantBuffer<ObjectData> gObjectData;
+[vk_binding(0, 0)] ConstantBuffer<GlobalPassData> gPassData;
 
 [shader("vertex")]
 VSOutput VSMain(VSInput input)
@@ -75,6 +91,10 @@ float4 Specular(float3 N, float3 W, float3 V, float4 Ks, float4 I, float alpha)
     float recordedDepth = gShadowMap.SampleCmp(shadowCoord.xy, shadowCoord.z - bias);
     return recordedDepth;
 }*/
+
+[vk_binding(1, 0)] ConstantBuffer<LightData> gLightData;
+[vk_binding(2, 0)] SamplerCube gCubemap;
+// [vk_binding(3, 0)] Sampler2DShadow gShadowMap;
 
 [shader("fragment")]
 float4 FSMain(VSOutput input) : SV_Target0

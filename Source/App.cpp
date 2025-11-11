@@ -159,7 +159,7 @@ namespace im
 		}
     }
 
-    void App::DrawScene(CommandBuffer &commandBuffer)
+    void App::DrawScene(CommandBuffer& commandBuffer)
     {
 		const Swapchain& swapchain = mDevice->GetSwapchain();
 		const auto swapExtent = swapchain.GetExtent();
@@ -192,16 +192,12 @@ namespace im
 			utils::Scissor(swapExtent)
 		);
 
-		CubemapData cubemapData{};
 		glm::mat4 view = mCamera.GetViewMatrix();
 		glm::mat4 proj = glm::perspective(glm::radians(75.0f), static_cast<float>(swapExtent.width) / swapExtent.height, 0.1f, 100.0f);
-		cubemapData.viewProjInverse = glm::inverse(proj * glm::mat4(glm::mat3(view))); // Remove translations
 
-		// Cubemap pass
-		commandBuffer.BindGraphicsPipeline(*mEnvMapPipe);
-		commandBuffer.BindGraphicsDescriptorSets(*mEnvMapPipeLayout, 0, { *mEnvMapSet });
-		commandBuffer.PushConstants(*mEnvMapPipeLayout, VK_SHADER_STAGE_VERTEX_BIT, cubemapData);
-		commandBuffer.Draw(3);
+		DrawSkybox(commandBuffer, view, proj);
+
+		// GeometryPass(commandBuffer, view, proj);
 
 		// Forward pass
 		GlobalPassData passData{};
@@ -253,7 +249,20 @@ namespace im
 			VK_ACCESS_2_NONE);
 	}
 
-	void App::DrawShadowMap(CommandBuffer& commandBuffer, const glm::mat4& lightView, const glm::mat4& lightProj)
+    void App::DrawSkybox(CommandBuffer& commandBuffer, const glm::mat4& view, const glm::mat4& proj)
+    {
+		auto swapExtent = mDevice->GetSwapchain().GetExtent();
+
+		CubemapData cubemapData{};
+		cubemapData.viewProjInverse = glm::inverse(proj * glm::mat4(glm::mat3(view))); // Remove translations
+
+		commandBuffer.BindGraphicsPipeline(*mEnvMapPipe);
+		commandBuffer.BindGraphicsDescriptorSets(*mEnvMapPipeLayout, 0, { *mEnvMapSet });
+		commandBuffer.PushConstants(*mEnvMapPipeLayout, VK_SHADER_STAGE_VERTEX_BIT, cubemapData);
+		commandBuffer.Draw(3);
+    }
+
+    void App::DrawShadowMap(CommandBuffer& commandBuffer, const glm::mat4& lightView, const glm::mat4& lightProj)
 	{
 		mShadowPass->Begin(commandBuffer);
 
@@ -286,6 +295,35 @@ namespace im
 				lightNumber++;
 			}
 			ImGui::End();
+		}
+    }
+
+    void App::GeometryPass(CommandBuffer& commandBuffer, const glm::mat4& view, const glm::mat4& proj)
+    {
+		// Forward pass
+		GeomPassData passData{};
+		passData.view = view;
+		passData.viewProj = proj * view;
+		mGeomPassBuffers[mFrameIndex]->SetData(&passData, sizeof(passData));
+
+		commandBuffer.BindGraphicsPipeline(*mPipe);
+		commandBuffer.BindGraphicsDescriptorSets(*mPipeLayout, 0, { *(mGlobalSets[mFrameIndex]), mBindlessSet->Get() });
+
+		ObjectData pushConsts{};
+		for (const auto& mesh : mMeshes)
+		{
+			pushConsts.model = mesh.transform;
+			pushConsts.diffuseMapHandle = mBindlessSet->GetOrCreateId(mesh.material.diffuseMap, mDevice->GetSamplers().TrilinearColor());
+			pushConsts.specularMapHandle = mBindlessSet->GetOrCreateId(mesh.material.specularMap, mDevice->GetSamplers().TrilinearColor());
+			pushConsts.normalMapHandle = mBindlessSet->GetOrCreateId(mesh.material.normalMap, mDevice->GetSamplers().TrilinearColor());
+
+			commandBuffer.PushConstants(*mPipeLayout,
+				VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+				pushConsts
+			);
+			commandBuffer.BindVertexBuffer(*mesh.vertexBuffer);
+			commandBuffer.BindIndexBuffer(*mesh.indexBuffer);
+			commandBuffer.DrawIndexed(mesh.indexCount);
 		}
     }
 

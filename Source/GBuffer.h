@@ -13,6 +13,7 @@ namespace im
         ~GBuffer();
 
         void Begin(CommandBuffer& cmd);
+        void End(CommandBuffer& cmd);
 
     private:
         Texture2D CreateAttachment(VkFormat format, VkImageUsageFlags usage);

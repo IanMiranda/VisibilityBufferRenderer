@@ -50,8 +50,11 @@ namespace im
 		void UpdateLights();
 
 		void DrawScene(CommandBuffer& commandBuffer);
+		void DrawSkybox(CommandBuffer& commandBuffer, const glm::mat4& view, const glm::mat4& proj);
 		void DrawShadowMap(CommandBuffer& commandBuffer, const glm::mat4& lightView, const glm::mat4& lightProj);
 		void DrawUI();
+
+		void GeometryPass(CommandBuffer& commandBuffer, const glm::mat4& view, const glm::mat4& proj);
 
 	private:
 		void InitWindow();
@@ -105,6 +108,7 @@ namespace im
 
 		std::vector<std::unique_ptr<Buffer>> mGlobalPassBuffers;
 		std::vector<std::unique_ptr<Buffer>> mLightBuffers;
+		std::vector<std::unique_ptr<Buffer>> mGeomPassBuffers;
 
 		std::shared_ptr<Texture2D> mDiffuseMap;
 		std::shared_ptr<Texture2D> mSpecularMap;
