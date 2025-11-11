@@ -100,6 +100,12 @@ namespace im
 		std::unique_ptr<DescriptorSetLayout> mGlobalLayout;
 		std::unique_ptr<PipelineLayout> mPipeLayout;
 		std::unique_ptr<GraphicsPipeline> mPipe;
+
+		std::unique_ptr<DescriptorSetLayout> mGeomDescLayout;
+		std::unique_ptr<PipelineLayout> mGeomPipeLayout;
+		std::unique_ptr<GraphicsPipeline> mGeomPipe;
+		std::unique_ptr<DescriptorPool> mGeomDescPool;
+		std::vector<std::unique_ptr<DescriptorSet>> mGeomSets;
 		
 		std::unique_ptr<DescriptorPool> mGlobalPool;
 		std::vector<std::unique_ptr<DescriptorSet>> mGlobalSets;

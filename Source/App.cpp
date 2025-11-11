@@ -186,19 +186,19 @@ namespace im
 
 		commandBuffer.SetViewportAndScissor(swapExtent);
 
-		commandBuffer.BeginRendering(
+		/*commandBuffer.BeginRendering(
 			{ utils::ColorAttachment(swapchain.GetViews()[swapchain.GetImageIndex()], VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE) },
 			utils::DepthAttachment(mDepthImage->GetView(), VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_DONT_CARE),
 			utils::Scissor(swapExtent)
-		);
+		);*/
 
 		glm::mat4 view = mCamera.GetViewMatrix();
 		glm::mat4 proj = glm::perspective(glm::radians(75.0f), static_cast<float>(swapExtent.width) / swapExtent.height, 0.1f, 100.0f);
 
-		DrawSkybox(commandBuffer, view, proj);
+		//DrawSkybox(commandBuffer, view, proj);
 
-		// GeometryPass(commandBuffer, view, proj);
-
+		GeometryPass(commandBuffer, view, proj);
+		/*
 		// Forward pass
 		GlobalPassData passData{};
 		passData.view = view;
@@ -234,11 +234,11 @@ namespace im
 		}
 
 		DrawUI();
-
+		*/
 		ImGui::Render();
 		ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer.Get());
-
-		commandBuffer.EndRendering();
+		
+		/*commandBuffer.EndRendering();*/
 
 		commandBuffer.BarrierSwapchainImage(
 			swapchain.GetImages()[swapchain.GetImageIndex()],
@@ -300,6 +300,8 @@ namespace im
 
     void App::GeometryPass(CommandBuffer& commandBuffer, const glm::mat4& view, const glm::mat4& proj)
     {
+		mGBuffer->Begin(commandBuffer);
+
 		// Forward pass
 		GeomPassData passData{};
 		passData.view = view;
@@ -325,6 +327,8 @@ namespace im
 			commandBuffer.BindIndexBuffer(*mesh.indexBuffer);
 			commandBuffer.DrawIndexed(mesh.indexCount);
 		}
+
+		mGBuffer->End(commandBuffer);
     }
 
     void App::InitWindow()
@@ -407,6 +411,36 @@ namespace im
 			.AddColorAttachment(mDevice->GetSwapchain().GetFormat())
 			.SetDepthAttachment(mDepthImage->GetFormat(), true)
 			.Commit();
+
+		mGeomDescLayout = std::make_unique<DescriptorSetLayout>(
+			*mDevice,
+			std::vector<VkDescriptorSetLayoutBinding>
+			{
+				DescriptorSetLayout::Binding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT),
+			}
+		);
+
+		mPipeLayout = std::make_unique<PipelineLayout>(
+			*mDevice,
+			std::vector<std::reference_wrapper<DescriptorSetLayout>>{ *mGlobalLayout, mBindlessSet->GetSetLayout() },
+			std::vector<VkPushConstantRange>{ pcRange }
+		);
+
+		Shader geomShader(*mDevice, "./Assets/Shaders/GeometryPass.spv");
+		geomShader.AddStage(VK_SHADER_STAGE_VERTEX_BIT, "VSMain")
+			.AddStage(VK_SHADER_STAGE_FRAGMENT_BIT, "FSMain");
+		mPipe = std::make_unique<GraphicsPipeline>(*mDevice, *mPipeLayout, geomShader);
+		mPipe->SetVertexInput({ utils::InputBinding(0, VK_VERTEX_INPUT_RATE_VERTEX, sizeof(Vertex) )}, Vertex::GetInputAttributes())
+			.SetPrimitiveTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
+			.SetRasterizer(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE, VK_POLYGON_MODE_FILL)
+			.SetMsaaSamples(VK_SAMPLE_COUNT_1_BIT)
+			.AddColorAttachment(VK_FORMAT_R16G16B16A16_SFLOAT) // Pos
+			.AddColorAttachment(VK_FORMAT_R16G16B16A16_SFLOAT) // Normal
+			.AddColorAttachment(VK_FORMAT_R8G8B8A8_UNORM) // Albedo
+			.AddColorAttachment(VK_FORMAT_R8G8B8A8_UNORM) // Specular
+			.SetDepthAttachment(mDepthImage->GetFormat(), true)
+			.Commit();
+		
 	}
 
 	void App::InitCommandBuffers()
@@ -512,6 +546,7 @@ namespace im
 	{
 		mGlobalPassBuffers.reserve(MaxFramesInFlight);
 		mLightBuffers.reserve(MaxFramesInFlight);
+		mGeomPassBuffers.reserve(MaxFramesInFlight);
 		for (int i = 0; i < MaxFramesInFlight; ++i)
 		{
 			mGlobalPassBuffers.emplace_back(
@@ -520,6 +555,10 @@ namespace im
 			);
 			mLightBuffers.emplace_back(
 				std::make_unique<Buffer>(*mDevice, sizeof(LightData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+					VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT)
+			);
+			mGeomPassBuffers.emplace_back(
+				std::make_unique<Buffer>(*mDevice, sizeof(GeomPassData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
 					VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT)
 			);
 		}
@@ -670,6 +709,22 @@ namespace im
 					&mShadowPass->GetMap(), &mDevice->GetSamplers().Shadow(),
 					VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL)*/
 				.Update();
+		}
+
+		mGeomDescPool = std::make_unique<DescriptorPool>(
+			*mDevice,
+			std::vector<VkDescriptorPoolSize>
+			{
+				{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, MaxFramesInFlight },
+				{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, MaxFramesInFlight },
+			},
+			MaxFramesInFlight
+		);
+
+		mGeomSets = mGeomDescPool->Allocate({ *mGeomDescLayout, *mGeomDescLayout });
+		for (int i = 0; i < mGeomSets.size(); ++i)
+		{
+			mGeomSets[i]->PushWrite(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, *(mGeomPassBuffers[i])).Update();
 		}
 	}
 
