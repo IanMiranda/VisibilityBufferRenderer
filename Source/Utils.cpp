@@ -192,10 +192,10 @@ namespace im::utils
 		return { vertices, indices };
 	}
 
-	VkRenderingAttachmentInfo ColorAttachment(VkImageView view, VkAttachmentLoadOp load, VkAttachmentStoreOp store)
+	VkRenderingAttachmentInfo ColorAttachment(VkImageView view, VkAttachmentLoadOp load, VkAttachmentStoreOp store, VkClearValue clear)
 	{
 		VkRenderingAttachmentInfo colorAttach{ VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO };
-		colorAttach.clearValue = ClearColor();
+		colorAttach.clearValue = clear;
 		colorAttach.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 		colorAttach.imageView = view;
 		colorAttach.loadOp = load;
@@ -203,10 +203,10 @@ namespace im::utils
 		return colorAttach;
 	}
 
-	VkRenderingAttachmentInfo DepthAttachment(VkImageView view, VkAttachmentLoadOp load, VkAttachmentStoreOp store)
+	VkRenderingAttachmentInfo DepthAttachment(VkImageView view, VkAttachmentLoadOp load, VkAttachmentStoreOp store, VkClearValue clear)
 	{
 		VkRenderingAttachmentInfo depthAttach{ VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO };
-		depthAttach.clearValue = ClearDepth();
+		depthAttach.clearValue = clear;
 		depthAttach.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 		depthAttach.imageView = view;
 		depthAttach.loadOp = load;

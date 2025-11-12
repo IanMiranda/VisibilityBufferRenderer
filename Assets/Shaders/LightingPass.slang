@@ -4,7 +4,18 @@ struct VSOutput
 {
     float4 svPosition : SV_Position;
     float2 uv : TEXCOORD;
+    float3 viewDir : VIEWDIR;
 }
+
+struct LightingPassData
+{
+    float4x4 viewInverse;
+    float4x4 viewProjInverse;
+    uint lightCount;
+    uint _pad0;
+    uint _pad1;
+    uint _pad2;
+};
 
 [shader("vertex")]
 VSOutput VSMain(uint vertexIndex: SV_VertexID)
@@ -12,16 +23,9 @@ VSOutput VSMain(uint vertexIndex: SV_VertexID)
     VSOutput output = (VSOutput)0;
     output.svPosition = float4(-1.0 + ((vertexIndex & 0x2) * 4.0), -1.0 + (vertexIndex % 2) * 4.0, 0.01, 1.0);
     output.uv = float2((vertexIndex == 2) * 4, 2 - (vertexIndex == 1) * 2);
+    output.viewDir = mul(gPassData.viewProjInverse, output.svPosition).xyz;
     return output;
 }
-
-struct LightingPassData
-{
-    uint lightCount;
-    uint _pad0;
-    uint _pad1;
-    uint _pad2;
-};
 
 [push_constant] ConstantBuffer<LightingPassData> gPassData;
 [vk_binding(0, 0)] ConstantBuffer<LightData> gLightData;
@@ -29,6 +33,7 @@ struct LightingPassData
 [vk_binding(2, 0)] Sampler2D gNormalMap;
 [vk_binding(3, 0)] Sampler2D gAlbedoMap;
 [vk_binding(4, 0)] Sampler2D gSpecularMap;
+[vk_binding(5, 0)] SamplerCube gCubemap;
 
 float4 Diffuse(float3 N, float3 W, float4 Kd, float4 I, float dist)
 {
@@ -67,6 +72,11 @@ float4 FSMain(VSOutput input) : SV_Target0
 
     float3 posView = gPositionMap.Sample(pos.xy).xyz;
 
+    if (Ks.w == 0.0)
+    {
+        return gCubemap.Sample(input.viewDir);
+    }
+
     float4 finalColor = 0;
     for (int i = 0; i < gPassData.lightCount; ++i)
     {
@@ -80,12 +90,12 @@ float4 FSMain(VSOutput input) : SV_Target0
         float4 ambient = Kd * Ia;
 
         // Environment reflections
-        /*float3 Wr = normalize(reflect(-V, N));
+        float3 Wr = normalize(reflect(-V, N));
         float4 Kr = Ks * 0.1;
-        float4 envColor = Kr * gCubemap.Sample(mul(gPassData.viewInverse, float4(Wr, 1.0)).xyz);*/
+        float4 envColor = Kr * gCubemap.Sample(mul(gPassData.viewInverse, float4(Wr, 1.0)).xyz);
 
         // float recordedDepth = GetRecordedDepth(input.posLight);
-        finalColor += ambient + (diffuse + specular/* + envColor*/); // * recordedDepth;
+        finalColor += ambient + (diffuse + specular + envColor); // * recordedDepth;
     }
 
     return finalColor;

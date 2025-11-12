@@ -55,7 +55,7 @@ namespace im
 		void DrawUI();
 
 		void GeometryPass(CommandBuffer& commandBuffer, const glm::mat4& view, const glm::mat4& proj);
-		void LightingPass(CommandBuffer& commandBuffer, const glm::mat4& view);
+		void LightingPass(CommandBuffer& commandBuffer, const glm::mat4& view, const glm::mat4& proj);
 
 	private:
 		void InitWindow();

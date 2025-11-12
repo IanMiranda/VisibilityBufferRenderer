@@ -86,7 +86,7 @@ namespace im
                 utils::ColorAttachment(mPositionBuffer.GetView(), VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE),
                 utils::ColorAttachment(mNormalBuffer.GetView(), VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE),
                 utils::ColorAttachment(mAlbedoBuffer.GetView(), VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE),
-                utils::ColorAttachment(mSpecularBuffer.GetView(), VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE),
+                utils::ColorAttachment(mSpecularBuffer.GetView(), VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, utils::ClearColor(glm::vec4(0.0f, 0.0f, 0.0f, 0.0f))),
             },
             utils::DepthAttachment(mDepthBuffer.GetView(), VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE),
             utils::Scissor(mDevice.GetSwapchain().GetExtent())

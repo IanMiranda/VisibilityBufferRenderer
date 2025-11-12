@@ -76,6 +76,8 @@ namespace im
 
 	struct LightingPassData
 	{
+		glm::mat4 viewInverse;
+		glm::mat4 viewProjInverse;
 		uint32_t lightCount;
 		uint32_t _pad0;
 		uint32_t _pad1;

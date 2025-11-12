@@ -14,10 +14,10 @@ namespace im::utils
 	std::vector<char> ReadFile(const std::filesystem::path& path);
 
 	std::pair<std::vector<Vertex>, std::vector<uint32_t>> LoadModel(const std::filesystem::path& path);
-
-	VkRenderingAttachmentInfo ColorAttachment(VkImageView view, VkAttachmentLoadOp load, VkAttachmentStoreOp store);
-	VkRenderingAttachmentInfo DepthAttachment(VkImageView view, VkAttachmentLoadOp load, VkAttachmentStoreOp store);
-
+	
 	VkClearValue ClearColor(const glm::vec4& value = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
 	VkClearValue ClearDepth(float depth = 1.0f, uint32_t stencil = 0);
+
+	VkRenderingAttachmentInfo ColorAttachment(VkImageView view, VkAttachmentLoadOp load, VkAttachmentStoreOp store, VkClearValue clear = ClearColor());
+	VkRenderingAttachmentInfo DepthAttachment(VkImageView view, VkAttachmentLoadOp load, VkAttachmentStoreOp store, VkClearValue clear = ClearDepth());
 }

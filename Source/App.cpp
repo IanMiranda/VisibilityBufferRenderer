@@ -16,7 +16,7 @@
 
 #include "Utils.h"
 
-#define DEFERRED_SHADING 0
+#define DEFERRED_SHADING 1
 
 namespace im
 {
@@ -47,7 +47,7 @@ namespace im
 		InitDescriptors();
 
 		srand(time(nullptr));
-		mPointLights.resize(32);
+		mPointLights.resize(4);
 	}
 
 	App::~App()
@@ -248,7 +248,7 @@ namespace im
 #else
 
 		GeometryPass(commandBuffer, view, proj);
-		LightingPass(commandBuffer, view);
+		LightingPass(commandBuffer, view, proj);
 
 		commandBuffer.BeginRendering(
 			{ utils::ColorAttachment(swapchain.GetViews()[swapchain.GetImageIndex()], VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE) },
@@ -353,7 +353,7 @@ namespace im
 		mGBuffers[mFrameIndex]->End(commandBuffer);
     }
 
-    void App::LightingPass(CommandBuffer& commandBuffer, const glm::mat4& view)
+    void App::LightingPass(CommandBuffer& commandBuffer, const glm::mat4& view, const glm::mat4& proj)
     {
 		const auto& swapchain = mDevice->GetSwapchain();
 		commandBuffer.BeginRendering(
@@ -370,8 +370,10 @@ namespace im
 		commandBuffer.BindGraphicsPipeline(*mLightPipe);
 		commandBuffer.BindGraphicsDescriptorSets(*mLightPipeLayout, 0, { *(mLightSets[mFrameIndex]) });
 		LightingPassData lightPassData{};
+		lightPassData.viewInverse = glm::inverse(view);
+		lightPassData.viewProjInverse = glm::inverse(proj * glm::mat4(glm::mat3(view)));
 		lightPassData.lightCount = mPointLights.size();
-		commandBuffer.PushConstants(*mLightPipeLayout, VK_SHADER_STAGE_FRAGMENT_BIT, lightPassData);
+		commandBuffer.PushConstants(*mLightPipeLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, lightPassData);
 		commandBuffer.Draw(3);
 
 		commandBuffer.EndRendering();
@@ -496,13 +498,14 @@ namespace im
 				DescriptorSetLayout::Binding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
 				DescriptorSetLayout::Binding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
 				DescriptorSetLayout::Binding(4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+				DescriptorSetLayout::Binding(5, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
 			}
 		);
 
 		VkPushConstantRange lightPushRange{};
 		lightPushRange.offset = 0;
 		lightPushRange.size = sizeof(LightingPassData);
-		lightPushRange.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+		lightPushRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
 
 		mLightPipeLayout = std::make_unique<PipelineLayout>(
 			*mDevice,
@@ -807,7 +810,8 @@ namespace im
 
 				// Lighting pass
 				{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, MaxFramesInFlight },
-				{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4 * MaxFramesInFlight }
+				{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4 * MaxFramesInFlight },
+				{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2 * MaxFramesInFlight },
 			},
 			MaxFramesInFlight * 2
 		);
@@ -826,6 +830,7 @@ namespace im
 				.PushWrite(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &mGBuffers[mFrameIndex]->GetNormaBuffer(), &mDevice->GetSamplers().NearestColor(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
 				.PushWrite(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &mGBuffers[mFrameIndex]->GetAlbedoBuffer(), &mDevice->GetSamplers().NearestColor(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
 				.PushWrite(4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &mGBuffers[mFrameIndex]->GetSpecularBuffer(), &mDevice->GetSamplers().NearestColor(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+				.PushWrite(5, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, mEnvMap.get(), &mDevice->GetSamplers().TrilinearColor(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
 				.Update();
 		}
 	}
