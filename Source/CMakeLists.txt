@@ -20,6 +20,8 @@ target_sources(
 
             Common.h
             Common.cpp
+
+            Geometry.h
 )
 
 add_subdirectory(API)

@@ -16,7 +16,7 @@
 
 #include "Utils.h"
 
-#define DEFERRED_SHADING 1
+#define DEFERRED_SHADING 0
 
 namespace im
 {
@@ -47,7 +47,7 @@ namespace im
 		InitDescriptors();
 
 		srand(time(nullptr));
-		mPointLights.resize(4);
+		mPointLights.resize(96);
 	}
 
 	App::~App()
@@ -165,7 +165,7 @@ namespace im
     void App::UpdateLights()
     {
 		float offset = 0.0f;
-		float distance = 3.0f * sin(glfwGetTime()) + 4.0f;
+		float distance = 20.0f * sin(glfwGetTime()) + 21.0f;
 		for (auto& light : mPointLights)
 		{
 			light.position = glm::vec3(distance * sin(glfwGetTime() + offset), 1.0f, -distance * cos(glfwGetTime() + offset));
@@ -594,12 +594,19 @@ namespace im
 
 		{
 			auto [duckVertices, duckIndices] = utils::LoadModel("./Assets/Models/Duck.gltf");
-			glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -1.0f, 0.0f));
-			model = glm::scale(model, glm::vec3(0.01f));
-			mMeshes.emplace_back(UploadMesh(
-				duckVertices, duckIndices,
-				{ mDiffuseMap, mSpecularMap, mNormalMap },
-				model));
+			for (float x = -10; x < 10; ++x)
+			{
+				for (float z = -10; z < 10; ++z)
+				{
+					glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -1.0f, 0.0f));
+					model = glm::translate(model, glm::vec3(x * 2, 0.0f, z * 2));
+					model = glm::scale(model, glm::vec3(0.01f));
+					mMeshes.emplace_back(UploadMesh(
+						duckVertices, duckIndices,
+						{ mDiffuseMap, mSpecularMap, mNormalMap },
+						model));
+				}
+			}
 		}
 
 		{
@@ -618,7 +625,7 @@ namespace im
 			};
 
 			glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -1.0f, 0.0f));
-			model = glm::scale(model, glm::vec3(5.0f));
+			model = glm::scale(model, glm::vec3(42.0f));
 			mMeshes.emplace_back(UploadMesh(
 				planeVertices, planeIndices,
 				{ mDiffuseMap, mSpecularMap, mNormalMap },
@@ -827,7 +834,7 @@ namespace im
 		{
 			mLightSets[i]->PushWrite(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, *(mLightPassBuffers[i]))
 				.PushWrite(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &mGBuffers[mFrameIndex]->GetPositionBuffer(), &mDevice->GetSamplers().NearestColor(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-				.PushWrite(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &mGBuffers[mFrameIndex]->GetNormaBuffer(), &mDevice->GetSamplers().NearestColor(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+				.PushWrite(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &mGBuffers[mFrameIndex]->GetNormalBuffer(), &mDevice->GetSamplers().NearestColor(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
 				.PushWrite(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &mGBuffers[mFrameIndex]->GetAlbedoBuffer(), &mDevice->GetSamplers().NearestColor(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
 				.PushWrite(4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &mGBuffers[mFrameIndex]->GetSpecularBuffer(), &mDevice->GetSamplers().NearestColor(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
 				.PushWrite(5, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, mEnvMap.get(), &mDevice->GetSamplers().TrilinearColor(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
