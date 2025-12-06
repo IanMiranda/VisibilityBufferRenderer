@@ -47,7 +47,7 @@ namespace im
 		InitDescriptors();
 
 		srand(time(nullptr));
-		mPointLights.resize(96);
+		mPointLights.resize(32);
 	}
 
 	App::~App()

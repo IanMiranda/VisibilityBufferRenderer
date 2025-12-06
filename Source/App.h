@@ -21,7 +21,7 @@
 #include "API/GraphicsPipeline.h"
 #include "API/DescriptorPool.h"
 #include "API/DescriptorSet.h"
-#include "API/BindlessSet.h"
+#include "BindlessSet.h"
 #include "ShadowPass.h"
 #include "GBuffer.h"
 #include "Light.h"

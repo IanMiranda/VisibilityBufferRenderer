@@ -22,6 +22,9 @@ target_sources(
             Common.cpp
 
             Geometry.h
+
+            BindlessSet.h
+            BindlessSet.cpp
 )
 
 add_subdirectory(API)

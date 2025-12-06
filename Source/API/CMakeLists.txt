@@ -48,7 +48,4 @@ target_sources(
 
             DescriptorSet.h
             DescriptorSet.cpp
-
-            BindlessSet.h
-            BindlessSet.cpp
 )
