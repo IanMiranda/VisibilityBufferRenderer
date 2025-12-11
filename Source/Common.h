@@ -10,6 +10,8 @@
 #include <GLFW/glfw3.h>
 #include <vk_mem_alloc.h>
 #include <glm/glm.hpp>
+#include <fmt/base.h>
+#include <fmt/std.h>
 
 #define VK_CHECK(x) \
 	do \
@@ -17,7 +19,7 @@
 		VkResult _result = (x); \
 		if (_result != VK_SUCCESS) \
 		{ \
-			std::cerr << "Error at line " << __LINE__ << " in file " << __FILE__ << ": " << _result << '\n'; \
+			fmt::println(stderr, "Error at line {} in file {}: {}", __LINE__, __FILE__, static_cast<uint32_t>(_result)); \
 		} \
 	} while(0)
 

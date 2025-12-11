@@ -37,13 +37,18 @@ FetchContent_Declare(
     GIT_TAG 81bd50c1062fdb956e878efa2a9234b2b9ec91ec
 )
 
+FetchContent_Declare(
+    fmt
+    GIT_REPOSITORY https://github.com/fmtlib/fmt
+)
+
 # FetchContent_Declare(
 #     ktx
 #     GIT_REPOSITORY https://github.com/KhronosGroup/KTX-Software
 #     GIT_TAG beef80159525d9fb7abb8645ea85f4c4f6842e8f
 # )
 
-FetchContent_MakeAvailable(glfw3 glm VulkanMemoryAllocator imgui TinyGLTF)
+FetchContent_MakeAvailable(glfw3 glm VulkanMemoryAllocator imgui TinyGLTF fmt)
 
 add_executable(VulkanApp)
 
@@ -106,6 +111,7 @@ target_link_libraries(
             imgui
             tinygltf
             # ktx
+            fmt::fmt
 )
 
 add_custom_target(CopyAssets

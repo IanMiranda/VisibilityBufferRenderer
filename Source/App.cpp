@@ -77,7 +77,7 @@ namespace im
 			++frames;
 			if (glfwGetTime() - fpsLast >= 1.0)
 			{
-				std::cerr << "FPS: " << frames << "\n";
+				fmt::println("FPS: {}", frames);
 				fpsLast = glfwGetTime();
 				frames = 0;
 			}
@@ -389,7 +389,7 @@ namespace im
 		mWindow = glfwCreateWindow(defaultWindowWidth, defaultWindowHeight, "VulkanApp", nullptr, nullptr);
 		if (!mWindow)
 		{
-			std::cerr << "Failed to create window!\n";
+			fmt::println(stderr, "Failed to create window!");
 			return;
 		}
 
@@ -674,7 +674,7 @@ namespace im
 			stbi_uc* data = stbi_load(paths[i].string().c_str(), &width, &height, &channels, STBI_rgb_alpha);
 			if (!data)
 			{
-				std::cerr << "Failed to load cubemap!\n";
+				fmt::println(stderr, "Failed to load cubemap!");
 			}
 
 			cubemapData[i] = data;
@@ -893,7 +893,7 @@ namespace im
 		stbi_uc* data = stbi_load(path.string().c_str(), &width, &height, &channels, STBI_rgb_alpha);
 		if (!data)
 		{
-			std::cerr << "Failed to load image from " << path << "!\n";
+			fmt::println(stderr, "Failed to load image from {}!", path);
 			return nullptr;
 		}
 
