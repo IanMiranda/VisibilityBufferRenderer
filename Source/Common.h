@@ -4,6 +4,8 @@
 #include <vector>
 #include <array>
 #include <string>
+#include <utility>
+#include <memory>
 
 #include <GLFW/glfw3.h>
 #include <vk_mem_alloc.h>

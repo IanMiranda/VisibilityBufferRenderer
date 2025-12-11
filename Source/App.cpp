@@ -9,7 +9,7 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <stb_image.h>
-#include <ktx.h>
+// #include <ktx.h>
 #include <imgui.h>
 #include <backends/imgui_impl_vulkan.h>
 #include <backends/imgui_impl_glfw.h>
