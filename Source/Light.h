@@ -4,7 +4,7 @@
 
 namespace im
 {
-	inline constexpr uint32_t gMaxLights = 1024;
+	inline constexpr uint32_t gMaxLights = 256;
 
 	struct PointLight
 	{

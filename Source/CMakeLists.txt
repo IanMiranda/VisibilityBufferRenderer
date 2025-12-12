@@ -6,6 +6,9 @@ target_sources(
             App.h
             App.cpp
 
+            Window.h
+            Window.cpp
+
             Camera.h
             Camera.cpp
 

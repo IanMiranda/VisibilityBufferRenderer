@@ -214,6 +214,15 @@ namespace im::utils
 		return depthAttach;
 	}
 
+	VkPushConstantRange PushConstantRange(VkShaderStageFlags stages, uint32_t size, uint32_t offset)
+	{
+		VkPushConstantRange pushRange{};
+		pushRange.stageFlags = stages;
+		pushRange.size = size;
+		pushRange.offset = offset;
+		return pushRange;
+	}
+
 	VkClearValue ClearColor(const glm::vec4& value)
 	{
 		VkClearValue res{};

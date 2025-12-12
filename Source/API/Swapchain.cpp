@@ -27,7 +27,7 @@ namespace im
 
 	VkResult Swapchain::Present(const Semaphore& presentedSemaphore)
 	{
-		VkSemaphore ps = presentedSemaphore.Get();
+		const VkSemaphore ps = presentedSemaphore.Get();
 		VkPresentInfoKHR presentInfo{ VK_STRUCTURE_TYPE_PRESENT_INFO_KHR };
 		presentInfo.pImageIndices = &mLastImageIndex;
 		presentInfo.waitSemaphoreCount = 1;
@@ -50,9 +50,9 @@ namespace im
 		const auto gpu = mDevice.GetGpu();
 		const auto surf = mDevice.GetSurface();
 
-		auto format = ChooseSurfaceFormat();
-		auto presentMode = ChoosePresentMode();
-		auto extent = ChooseSurfaceExtent();
+		const auto format = ChooseSurfaceFormat();
+		const auto presentMode = ChoosePresentMode();
+		const auto extent = ChooseSurfaceExtent();
 
 		VkSurfaceCapabilitiesKHR caps{};
 		VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(gpu, surf, &caps));
@@ -147,7 +147,7 @@ namespace im
 		assert(modeCount > 0 && "GPU has no present modes available");
 		std::vector<VkPresentModeKHR> modes(modeCount);
 		VK_CHECK(vkGetPhysicalDeviceSurfacePresentModesKHR(gpu, surf, &modeCount, nullptr));
-		auto it = std::find(modes.begin(), modes.end(), VK_PRESENT_MODE_IMMEDIATE_KHR);
+		const auto it = std::find(modes.cbegin(), modes.cend(), VK_PRESENT_MODE_IMMEDIATE_KHR);
 		if (it != modes.end())
 			return *it;
 		else

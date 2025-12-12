@@ -57,7 +57,7 @@ namespace im
 
         std::vector<std::unique_ptr<DescriptorSet>> res;
         res.reserve(descriptorSets.size());
-        for (auto set : descriptorSets)
+        for (const auto set : descriptorSets)
             res.emplace_back(std::make_unique<DescriptorSet>(*this, set));
         return res;
     }

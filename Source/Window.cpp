@@ -1,0 +1,26 @@
+#include "Window.h"
+
+namespace im
+{
+	Window::Window(uint32_t width, uint32_t height, const char* title)
+	{
+		glfwInit();
+		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+		mWindow = glfwCreateWindow(width, height, title, nullptr, nullptr);
+		if (!mWindow)
+		{
+			fmt::println(stderr, "Failed to create window!");
+			return;
+		}
+	}
+
+	Window::~Window()
+	{
+		glfwTerminate();
+	}
+
+	bool Window::ShouldClose() const
+	{
+		return glfwWindowShouldClose(mWindow) == GLFW_TRUE;
+	}
+}

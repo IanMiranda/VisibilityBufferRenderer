@@ -6,6 +6,7 @@
 #include <vk_mem_alloc.h>
 
 #include "Common.h"
+#include "Window.h"
 #include "Camera.h"
 #include "API/Device.h"
 #include "API/CommandPool.h"
@@ -47,7 +48,7 @@ namespace im
 		void Render();
 
 	private:
-		void UpdateLights();
+		void UpdateLightPositions();
 
 		void DrawScene(CommandBuffer& commandBuffer);
 		void DrawSkybox(CommandBuffer& commandBuffer, const glm::mat4& view, const glm::mat4& proj);
@@ -59,7 +60,6 @@ namespace im
 
 	private:
 		void InitWindow();
-		void InitCommandPool();
 		void InitDepthBuffer();
 		void InitPipeline();
 		void InitCommandBuffers();
@@ -90,13 +90,13 @@ namespace im
 	private:
 		static constexpr int MaxFramesInFlight = 2;
 
-		GLFWwindow* mWindow;
+		Window mWindow;
 
-		std::unique_ptr<Device> mDevice;
-		std::unique_ptr<BindlessSet> mBindlessSet;
+		Device mDevice;
+		BindlessSet mBindlessSet;
 
-		std::unique_ptr<CommandPool> mCommandPool;
-		std::unique_ptr<CommandPool> mImmediatePool;
+		CommandPool mCommandPool;
+		CommandPool mImmediatePool;
 
 		std::unique_ptr<DescriptorSetLayout> mGlobalLayout;
 		std::unique_ptr<PipelineLayout> mPipeLayout;

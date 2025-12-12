@@ -154,7 +154,7 @@ namespace im
 		vkGetPhysicalDeviceFormatProperties(mPool.GetDevice().GetGpu(), texture.GetFormat(), &props);
 		if (!(props.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT))
 		{
-			std::cerr << "Failed to generate mipmaps, image does not support linear blit!\n";
+			fmt::println(stderr, "Failed to generate mipmaps, image does not support linear blit!");
 			return;
 		}
 

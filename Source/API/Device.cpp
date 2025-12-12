@@ -40,13 +40,13 @@ namespace im
 
 		if constexpr (gEnableValidationLayers)
 		{
-			if (auto destroy = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(
+			if (const auto destroy = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(
 					vkGetInstanceProcAddr(mInstance, "vkDestroyDebugUtilsMessengerEXT")
 				);
 				destroy)
 				destroy(mInstance, mDebugMessenger, nullptr);
 			else
-				std::cerr << "Failed to load vkDestroyDebugUtilsMessengerEXT!\n";
+				fmt::println(stderr, "Failed to load vkDestroyDebugUtilsMessengerEXT!");
 		}
 
 		vkDestroyInstance(mInstance, nullptr);
@@ -54,18 +54,18 @@ namespace im
 
 	void Device::Submit(CommandBuffer& cmd, Semaphore* waitSemaphore, VkPipelineStageFlags waitDstStage, Semaphore* signalSemaphore, Fence* fence)
 	{
-		VkCommandBuffer cmds[] = { cmd.Get() };
-		VkSemaphore waitSems[] = { waitSemaphore ? waitSemaphore->Get() : nullptr };
-		VkSemaphore signalSems[] = { signalSemaphore ? signalSemaphore->Get() : nullptr };
+		const std::array cmds{ cmd.Get() };
+		const std::array waitSems{ waitSemaphore ? waitSemaphore->Get() : nullptr };
+		const std::array signalSems{ signalSemaphore ? signalSemaphore->Get() : nullptr };
 
 		VkSubmitInfo submitInfo{ VK_STRUCTURE_TYPE_SUBMIT_INFO };
-		submitInfo.commandBufferCount = std::size(cmds);
-		submitInfo.pCommandBuffers = cmds;
+		submitInfo.commandBufferCount = cmds.size();
+		submitInfo.pCommandBuffers = cmds.data();
 		submitInfo.waitSemaphoreCount = waitSemaphore ? 1 : 0;
-		submitInfo.pWaitSemaphores = waitSems;
+		submitInfo.pWaitSemaphores = waitSems.data();
 		submitInfo.pWaitDstStageMask = &waitDstStage;
 		submitInfo.signalSemaphoreCount = signalSemaphore ? 1 : 0;
-		submitInfo.pSignalSemaphores = signalSems;
+		submitInfo.pSignalSemaphores = signalSems.data();
 
 		VK_CHECK(vkQueueSubmit(mGraphicsQueue, 1, &submitInfo, (fence ? fence->Get() : nullptr)));
 	}
@@ -83,7 +83,7 @@ namespace im
 
     VkFormat Device::GetSupportedFormat(const std::initializer_list<VkFormat>& formats, VkImageTiling tiling, VkFormatFeatureFlags flags) const
 	{
-		for (auto fmt : formats)
+		for (const auto fmt : formats)
 		{
 			VkFormatProperties props{};
 			vkGetPhysicalDeviceFormatProperties(mGpu, fmt, &props);
@@ -94,7 +94,7 @@ namespace im
 				return fmt;
 		}
 
-		std::cerr << "Failed to find supported format!\n";
+		fmt::println(stderr, "Failed to find supported format!");
 		return VK_FORMAT_UNDEFINED;
 	}
 
@@ -133,7 +133,7 @@ namespace im
 		{
 			if (!InstanceExtensionSupported(extension))
 			{
-				std::cerr << "Error: Extension " << extension << " not supported\n";
+				fmt::println(stderr, "Error: Extension {} not supported", extension);
 				return;
 			}
 		}
@@ -150,7 +150,7 @@ namespace im
 			// instanceLayers.emplace_back("VK_LAYER_LUNARG_monitor");
 		}
 
-		auto debugInfo = GetDebugInfo();
+		const auto debugInfo = GetDebugInfo();
 
 		VkInstanceCreateInfo instanceInfo{ VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO };
 		if (InstanceExtensionSupported(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME))
@@ -172,7 +172,7 @@ namespace im
 
 		if constexpr (gEnableValidationLayers)
 		{
-			if (auto create = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(
+			if (const auto create = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(
 				vkGetInstanceProcAddr(mInstance, "vkCreateDebugUtilsMessengerEXT"));
 				create)
 			{
@@ -180,7 +180,7 @@ namespace im
 			}
 			else
 			{
-				std::cerr << "Failed to load vkCreateDebugUtilsMessengerEXT!\n";
+				fmt::println(stderr, "Failed to load vkCreateDebugUtilsMessengerEXT!");
 			}
 		}
 	}
@@ -197,7 +197,7 @@ namespace im
 		assert(gpuCount > 0 && "No GPUs with Vulkan detected!");
 		std::vector<VkPhysicalDevice> gpus(gpuCount);
 		VK_CHECK(vkEnumeratePhysicalDevices(mInstance, &gpuCount, gpus.data()));
-		for (auto gpu : gpus)
+		for (const auto gpu : gpus)
 		{
 			VkPhysicalDeviceProperties props;
 			vkGetPhysicalDeviceProperties(gpu, &props);
@@ -236,7 +236,7 @@ namespace im
 			};
 
 			bool supportsExtensions = true;
-			for (auto& extension : deviceExtensions)
+			for (const auto& extension : deviceExtensions)
 			{
 				if (!DeviceExtensionSupported(gpu, extension))
 				{
@@ -304,7 +304,7 @@ namespace im
 			return;
 		}
 
-		std::cerr << "Failed to find a suitable GPU!\n";
+		fmt::println(stderr, "Failed to find a suitable GPU!");
 	}
 
 	void Device::InitPipelineCache()
@@ -320,9 +320,9 @@ namespace im
 		std::vector<VkExtensionProperties> extensions(extensionCount);
 		VK_CHECK(vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, extensions.data()));
 
-		auto it = std::find_if(
-			extensions.begin(),
-			extensions.end(),
+		const auto it = std::find_if(
+			extensions.cbegin(),
+			extensions.cend(),
 			[name](const VkExtensionProperties& ext)
 			{
 				return std::strcmp(name, ext.extensionName) == 0;
@@ -339,9 +339,9 @@ namespace im
 		std::vector<VkExtensionProperties> extensions(extensionCount);
 		VK_CHECK(vkEnumerateDeviceExtensionProperties(gpu, nullptr, &extensionCount, extensions.data()));
 
-		auto it = std::find_if(
-			extensions.begin(),
-			extensions.end(),
+		const auto it = std::find_if(
+			extensions.cbegin(),
+			extensions.cend(),
 			[name](const VkExtensionProperties& ext)
 			{
 				return std::strcmp(name, ext.extensionName) == 0;
@@ -369,16 +369,16 @@ namespace im
 		switch (severity)
 		{
 		case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
-			std::cout << "[Vulkan] Debug: " << data->pMessage << '\n';
+			fmt::println("[Vulkan] Debug: {}", data->pMessage);
 			break;
 		case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
-			std::cout << "[Vulkan] Info: " << data->pMessage << '\n';
+			fmt::println("[Vulkan] Info: {}", data->pMessage);
 			break;
 		case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
-			std::cerr << "[Vulkan] Warning: " << data->pMessage << '\n';
+			fmt::println(stderr, "[Vulkan] Warning: {}", data->pMessage);
 			break;
 		case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
-			std::cerr << "[Vulkan] Error: " << data->pMessage << '\n';
+			fmt::println(stderr, "[Vulkan] Error: {}", data->pMessage);
 			break;
 		default:
 			break;
