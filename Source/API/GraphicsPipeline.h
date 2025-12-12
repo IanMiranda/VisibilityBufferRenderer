@@ -14,6 +14,9 @@ namespace im
 		GraphicsPipeline(Device& device, PipelineLayout& layout, Shader& shader);
 		~GraphicsPipeline();
 
+		GraphicsPipeline(const GraphicsPipeline& other) = delete;
+		GraphicsPipeline& operator=(const GraphicsPipeline& other) = delete;
+
 		GraphicsPipeline& SetVertexInput(
 			const std::vector<VkVertexInputBindingDescription>& bindings,
 			const std::vector<VkVertexInputAttributeDescription>& attributes);

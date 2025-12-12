@@ -33,12 +33,7 @@ namespace im
         bufferInfo->range = buffer.GetSize();
         mBufferWrites.emplace_back(std::move(bufferInfo));
 
-        VkWriteDescriptorSet write{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
-        write.descriptorCount = 1;
-        write.descriptorType = type;
-        write.dstArrayElement = arrayIndex;
-        write.dstBinding = binding;
-        write.dstSet = mSet;
+        auto write = MakeWrite(type, arrayIndex, binding);
         write.pBufferInfo = mBufferWrites.back().get();
         mWrites.emplace_back(write);
         return *this;
@@ -58,12 +53,7 @@ namespace im
         imageInfo->sampler = (sampler ? (*sampler) : VK_NULL_HANDLE);
         mImageWrites.emplace_back(std::move(imageInfo));
 
-        VkWriteDescriptorSet write{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
-        write.descriptorCount = 1;
-        write.descriptorType = type;
-        write.dstArrayElement = arrayIndex;
-        write.dstBinding = binding;
-        write.dstSet = mSet;
+        auto write = MakeWrite(type, arrayIndex, binding);
         write.pImageInfo = mImageWrites.back().get();
         mWrites.emplace_back(write);
         return *this;
@@ -83,12 +73,7 @@ namespace im
         imageInfo->sampler = (sampler ? (*sampler) : VK_NULL_HANDLE);
         mImageWrites.emplace_back(std::move(imageInfo));
 
-        VkWriteDescriptorSet write{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
-        write.descriptorCount = 1;
-        write.descriptorType = type;
-        write.dstArrayElement = arrayIndex;
-        write.dstBinding = binding;
-        write.dstSet = mSet;
+        auto write = MakeWrite(type, arrayIndex, binding);
         write.pImageInfo = mImageWrites.back().get();
         mWrites.emplace_back(write);
         return *this;
@@ -100,5 +85,16 @@ namespace im
         mWrites.clear();
         mBufferWrites.clear();
         mImageWrites.clear();
+    }
+
+    VkWriteDescriptorSet DescriptorSet::MakeWrite(VkDescriptorType type, uint32_t arrayIndex, uint32_t binding) const
+    {
+        VkWriteDescriptorSet write{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
+        write.descriptorCount = 1;
+        write.descriptorType = type;
+        write.dstArrayElement = arrayIndex;
+        write.dstBinding = binding;
+        write.dstSet = mSet;
+        return write;
     }
 }

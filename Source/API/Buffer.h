@@ -23,6 +23,12 @@ namespace im
 		void Unmap();
 		void SetData(const void* data, size_t dataSize);
 
+		template <typename T>
+		void SetData(const T& data)
+		{
+			SetData(&data, sizeof(data));
+		}
+
 	private:
 		Device& mDevice;
 

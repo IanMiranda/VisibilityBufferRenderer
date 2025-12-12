@@ -7,8 +7,8 @@ namespace im
 {
 	PipelineLayout::PipelineLayout(
 		Device& device,
-		const std::vector<std::reference_wrapper<DescriptorSetLayout>>& setLayouts,
-		const std::vector<VkPushConstantRange>& pushConstantRanges)
+		std::initializer_list<std::reference_wrapper<DescriptorSetLayout>> setLayouts,
+		std::initializer_list<VkPushConstantRange> pushConstantRanges)
 		: mDevice(device)
 	{
 		std::vector<VkDescriptorSetLayout> vulkanSetLayouts;
@@ -20,7 +20,7 @@ namespace im
 		layoutInfo.setLayoutCount = vulkanSetLayouts.size();
 		layoutInfo.pSetLayouts = vulkanSetLayouts.data();
 		layoutInfo.pushConstantRangeCount = pushConstantRanges.size();
-		layoutInfo.pPushConstantRanges = pushConstantRanges.data();
+		layoutInfo.pPushConstantRanges = pushConstantRanges.begin();
 		
 		VK_CHECK(vkCreatePipelineLayout(mDevice.Get(), &layoutInfo, nullptr, &mLayout));
 	}

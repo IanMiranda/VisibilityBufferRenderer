@@ -13,6 +13,9 @@ namespace im
 		CommandPool(Device& device, uint32_t queueFamilyIndex, VkCommandPoolCreateFlags flags);
 		~CommandPool();
 
+		CommandPool(const CommandPool& other) = delete;
+		CommandPool& operator=(const CommandPool& other) = delete;
+
 		std::unique_ptr<CommandBuffer> Allocate();
 		std::vector<std::unique_ptr<CommandBuffer>> Allocate(size_t count);
 

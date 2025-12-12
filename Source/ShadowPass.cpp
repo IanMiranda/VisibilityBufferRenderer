@@ -28,8 +28,8 @@ namespace im
 
 		mShadowPipeLayout = std::make_unique<PipelineLayout>(
 			mDevice,
-			std::vector<std::reference_wrapper<DescriptorSetLayout>>{},
-			std::vector<VkPushConstantRange>{ passDataRange }
+			std::initializer_list<std::reference_wrapper<DescriptorSetLayout>>{},
+			std::initializer_list{ passDataRange }
 		);
 
 		mShadowPipe = std::make_unique<GraphicsPipeline>(mDevice, *mShadowPipeLayout, shader);

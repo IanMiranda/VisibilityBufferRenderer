@@ -45,7 +45,7 @@ namespace im
 
 	void Buffer::SetData(const void* data, size_t dataSize)
 	{
-		void* address = Map();
+		void* const address = Map();
 		std::memcpy(address, data, dataSize);
 		Unmap();
 	}

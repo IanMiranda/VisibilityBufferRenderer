@@ -8,7 +8,7 @@ namespace im
 {
     DescriptorPool::DescriptorPool(
         Device& device,
-        const std::vector<VkDescriptorPoolSize>& poolSizes,
+        std::initializer_list<VkDescriptorPoolSize> poolSizes,
         uint32_t maxSets,
         VkDescriptorPoolCreateFlags flags)
         : mDevice(device)
@@ -17,7 +17,7 @@ namespace im
         poolInfo.flags = flags;
         poolInfo.maxSets = maxSets;
         poolInfo.poolSizeCount = poolSizes.size();
-        poolInfo.pPoolSizes = poolSizes.data();
+        poolInfo.pPoolSizes = poolSizes.begin();
         VK_CHECK(vkCreateDescriptorPool(mDevice.Get(), &poolInfo, nullptr, &mPool));
     }
 
@@ -38,7 +38,7 @@ namespace im
     }
 
     std::vector<std::unique_ptr<DescriptorSet>> DescriptorPool::Allocate(
-        const std::vector<std::reference_wrapper<DescriptorSetLayout>>& layouts,
+        std::initializer_list<std::reference_wrapper<DescriptorSetLayout>> layouts,
         void* pNext)
     {
         std::vector<VkDescriptorSetLayout> vulkanLayouts;

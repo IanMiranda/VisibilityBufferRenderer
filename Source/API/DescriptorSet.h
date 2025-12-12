@@ -15,6 +15,9 @@ namespace im
         DescriptorSet(DescriptorPool& pool, VkDescriptorSet set);
         ~DescriptorSet();
 
+        DescriptorSet(const DescriptorSet& other) = delete;
+        DescriptorSet& operator=(const DescriptorSet& other) = delete;
+
         DescriptorSet& PushWrite(
             uint32_t binding,
             VkDescriptorType type,
@@ -43,6 +46,9 @@ namespace im
         void Update();
 
         VkDescriptorSet Get() const { return mSet; }
+
+    private:
+        VkWriteDescriptorSet MakeWrite(VkDescriptorType type, uint32_t arrayIndex, uint32_t binding) const;
 
     private:
         DescriptorPool& mPool;

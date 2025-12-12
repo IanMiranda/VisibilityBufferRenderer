@@ -13,15 +13,15 @@ namespace im
 		, mMaxTextures(maxTextures)
 		, mBindlessPool(
 			mDevice,
-			std::vector<VkDescriptorPoolSize>{ { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, mMaxTextures } },
+			std::initializer_list<VkDescriptorPoolSize>{ { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, mMaxTextures } },
 			1, VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT
 		)
 		, mBindlessSetLayout(
 			mDevice,
-			std::vector<VkDescriptorSetLayoutBinding>{
+			{
 				DescriptorSetLayout::Binding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, mMaxTextures)
 			},
-			std::vector<VkDescriptorBindingFlags>{
+			{
 				VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT |
 				VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT |
 				VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT |
@@ -44,14 +44,15 @@ namespace im
 
 	uint32_t BindlessSet::GetOrCreateId(std::shared_ptr<Texture2D> texture, VkSampler sampler)
 	{
-		if (mTexMap.find(texture) != mTexMap.end())
+		if (const auto it = mTexMap.find(texture);
+			it != mTexMap.end())
 		{
-			return mTexMap[texture];
+			return it->second;
 		}
 		else
 		{
 			assert(!mTexFreeList.empty() && "No more textures left!");
-			auto idx = mTexFreeList.front();
+			const auto idx = mTexFreeList.front();
 
 			mBindlessSet->PushWrite(
 				0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,

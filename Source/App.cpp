@@ -219,12 +219,12 @@ namespace im
 		// passData.viewProjLight = lightProj * lightView;
 		passData.viewInverse = glm::inverse(view);
 		passData.lightCount = mPointLights.size();
-		mGlobalPassBuffers[mFrameIndex]->SetData(&passData, sizeof(passData));
+		mGlobalPassBuffers[mFrameIndex]->SetData(passData);
 
 		LightData lightData{};
 		for (int i = 0; i < mPointLights.size(); ++i)
 			lightData.lights[i] = { glm::vec3(view * glm::vec4(mPointLights[i].position, 1.0f)), 0, mPointLights[i].i };
-		mLightBuffers[mFrameIndex]->SetData(&lightData, sizeof(lightData));
+		mLightBuffers[mFrameIndex]->SetData(lightData);
 
 		commandBuffer.BindGraphicsPipeline(*mPipe);
 		commandBuffer.BindGraphicsDescriptorSets(*mPipeLayout, 0, { *(mGlobalSets[mFrameIndex]), mBindlessSet->Get() });
@@ -328,7 +328,7 @@ namespace im
 		GeomPassData passData{};
 		passData.view = view;
 		passData.viewProj = proj * view;
-		mGeomPassBuffers[mFrameIndex]->SetData(&passData, sizeof(passData));
+		mGeomPassBuffers[mFrameIndex]->SetData(passData);
 
 		commandBuffer.BindGraphicsPipeline(*mGeomPipe);
 		commandBuffer.BindGraphicsDescriptorSets(*mGeomPipeLayout, 0, { *(mGeomSets[mFrameIndex]), mBindlessSet->Get() });
@@ -363,9 +363,9 @@ namespace im
 		);
 
 		LightData lightData{};
-		for (int i = 0; i < mPointLights.size(); ++i)
+		for (auto i = 0z; i < mPointLights.size(); ++i)
 			lightData.lights[i] = { glm::vec3(view * glm::vec4(mPointLights[i].position, 1.0f)), 0, mPointLights[i].i };
-		mLightPassBuffers[mFrameIndex]->SetData(&lightData, sizeof(lightData));
+		mLightPassBuffers[mFrameIndex]->SetData(lightData);
 
 		commandBuffer.BindGraphicsPipeline(*mLightPipe);
 		commandBuffer.BindGraphicsDescriptorSets(*mLightPipeLayout, 0, { *(mLightSets[mFrameIndex]) });
@@ -427,8 +427,7 @@ namespace im
 	{
 		mGlobalLayout = std::make_unique<DescriptorSetLayout>(
 			*mDevice,
-			std::vector<VkDescriptorSetLayoutBinding>
-			{
+			std::initializer_list{
 				DescriptorSetLayout::Binding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
 					VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT),
 				DescriptorSetLayout::Binding(1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT),
@@ -444,8 +443,8 @@ namespace im
 
 		mPipeLayout = std::make_unique<PipelineLayout>(
 			*mDevice,
-			std::vector<std::reference_wrapper<DescriptorSetLayout>>{ *mGlobalLayout, mBindlessSet->GetSetLayout() },
-			std::vector<VkPushConstantRange>{ pcRange }
+			std::initializer_list{ std::ref(*mGlobalLayout), std::ref(mBindlessSet->GetSetLayout()) },
+			std::initializer_list{ pcRange }
 		);
 
 		Shader shader(*mDevice, "./Assets/Shaders/Basic.spv");
@@ -462,7 +461,7 @@ namespace im
 
 		mGeomDescLayout = std::make_unique<DescriptorSetLayout>(
 			*mDevice,
-			std::vector<VkDescriptorSetLayoutBinding>
+			std::initializer_list
 			{
 				DescriptorSetLayout::Binding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT),
 			}
@@ -470,8 +469,8 @@ namespace im
 
 		mGeomPipeLayout = std::make_unique<PipelineLayout>(
 			*mDevice,
-			std::vector<std::reference_wrapper<DescriptorSetLayout>>{ *mGeomDescLayout, mBindlessSet->GetSetLayout() },
-			std::vector<VkPushConstantRange>{ pcRange }
+			std::initializer_list{ std::ref(*mGeomDescLayout), std::ref(mBindlessSet->GetSetLayout()) },
+			std::initializer_list{ pcRange }
 		);
 
 		Shader geomShader(*mDevice, "./Assets/Shaders/GeometryPass.spv");
@@ -491,7 +490,7 @@ namespace im
 
 		mLightDescLayout = std::make_unique<DescriptorSetLayout>(
 			*mDevice,
-			std::vector<VkDescriptorSetLayoutBinding>
+			std::initializer_list
 			{
 				DescriptorSetLayout::Binding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT),
 				DescriptorSetLayout::Binding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
@@ -509,8 +508,8 @@ namespace im
 
 		mLightPipeLayout = std::make_unique<PipelineLayout>(
 			*mDevice,
-			std::vector<std::reference_wrapper<DescriptorSetLayout>>{ *mLightDescLayout },
-			std::vector<VkPushConstantRange>{ lightPushRange }
+			std::initializer_list{ std::ref(*mLightDescLayout) },
+			std::initializer_list{ lightPushRange }
 		);
 
 		Shader lightShader(*mDevice, "./Assets/Shaders/LightingPass.spv");
@@ -732,8 +731,7 @@ namespace im
 		// Create environment pipeline
 		mEnvMapSetLayout = std::make_unique<DescriptorSetLayout>(
 			*mDevice,
-			std::vector<VkDescriptorSetLayoutBinding>
-			{
+			std::initializer_list{
 				DescriptorSetLayout::Binding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
 			}
 		);
@@ -745,8 +743,8 @@ namespace im
 
 		mEnvMapPipeLayout = std::make_unique<PipelineLayout>(
 			*mDevice,
-			std::vector<std::reference_wrapper<DescriptorSetLayout>>{ *mEnvMapSetLayout },
-			std::vector<VkPushConstantRange>{ pcRange }
+			std::initializer_list{ std::ref(*mEnvMapSetLayout) },
+			std::initializer_list{ pcRange }
 		);
 
 		Shader shader(*mDevice, "./Assets/Shaders/Cubemap.spv");
@@ -771,7 +769,7 @@ namespace im
 	{
 		mGlobalPool = std::make_unique<DescriptorPool>(
 			*mDevice,
-			std::vector<VkDescriptorPoolSize>
+			std::initializer_list<VkDescriptorPoolSize>
 			{
 				{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, MaxFramesInFlight },
 				{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, MaxFramesInFlight },
@@ -809,7 +807,7 @@ namespace im
 
 		mDeferredDescPool = std::make_unique<DescriptorPool>(
 			*mDevice,
-			std::vector<VkDescriptorPoolSize>
+			std::initializer_list<VkDescriptorPoolSize>
 			{
 				// Geometry pass
 				{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, MaxFramesInFlight },

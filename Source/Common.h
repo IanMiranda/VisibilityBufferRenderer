@@ -67,9 +67,9 @@ namespace im
 		glm::mat4 viewProjLight;
 		glm::mat4 viewInverse;
 		uint32_t lightCount;
-		uint32_t _pad0;
-		uint32_t _pad1;
-		uint32_t _pad2;
+		uint32_t pad0;
+		uint32_t pad1;
+		uint32_t pad2;
 	};
 
 	struct GeomPassData
@@ -83,9 +83,9 @@ namespace im
 		glm::mat4 viewInverse;
 		glm::mat4 viewProjInverse;
 		uint32_t lightCount;
-		uint32_t _pad0;
-		uint32_t _pad1;
-		uint32_t _pad2;
+		uint32_t pad0;
+		uint32_t pad1;
+		uint32_t pad2;
 	};
 
 	struct CubemapData

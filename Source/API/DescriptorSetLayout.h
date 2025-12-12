@@ -9,13 +9,16 @@ namespace im
 	class DescriptorSetLayout
 	{
 	public:
-		DescriptorSetLayout(Device& device, const std::vector<VkDescriptorSetLayoutBinding>& bindings);
+		DescriptorSetLayout(Device& device, std::initializer_list<VkDescriptorSetLayoutBinding> bindings);
 		DescriptorSetLayout(
 			Device& device,
-			const std::vector<VkDescriptorSetLayoutBinding>& bindings,
-			const std::vector<VkDescriptorBindingFlags>& flags
+			std::initializer_list<VkDescriptorSetLayoutBinding> bindings,
+			std::initializer_list<VkDescriptorBindingFlags> flags
 		);
 		~DescriptorSetLayout();
+
+		DescriptorSetLayout(const DescriptorSetLayout& other) = delete;
+		DescriptorSetLayout& operator=(const DescriptorSetLayout& other) = delete;
 
 		static VkDescriptorSetLayoutBinding Binding(
 			uint32_t index,

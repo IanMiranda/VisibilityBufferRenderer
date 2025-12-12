@@ -4,31 +4,31 @@
 
 namespace im
 {
-	DescriptorSetLayout::DescriptorSetLayout(Device& device, const std::vector<VkDescriptorSetLayoutBinding>& bindings)
+	DescriptorSetLayout::DescriptorSetLayout(Device& device, std::initializer_list<VkDescriptorSetLayoutBinding> bindings)
 		: mDevice(device)
 	{
 		VkDescriptorSetLayoutCreateInfo setLayoutInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
 		setLayoutInfo.bindingCount = bindings.size();
-		setLayoutInfo.pBindings = bindings.data();
+		setLayoutInfo.pBindings = bindings.begin();
 
 		VK_CHECK(vkCreateDescriptorSetLayout(mDevice.Get(), &setLayoutInfo, nullptr, &mLayout));
 	}
 
     DescriptorSetLayout::DescriptorSetLayout(
 		Device& device,
-		const std::vector<VkDescriptorSetLayoutBinding>& bindings,
-		const std::vector<VkDescriptorBindingFlags>& flags)
+		std::initializer_list<VkDescriptorSetLayoutBinding> bindings,
+		std::initializer_list<VkDescriptorBindingFlags> flags)
 		: mDevice(device)
     {
 		VkDescriptorSetLayoutBindingFlagsCreateInfo flagsInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO };
 		flagsInfo.bindingCount = flags.size();
-		flagsInfo.pBindingFlags = flags.data();
+		flagsInfo.pBindingFlags = flags.begin();
 		
 		VkDescriptorSetLayoutCreateInfo setLayoutInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
 		setLayoutInfo.pNext = &flagsInfo;
 		setLayoutInfo.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT; // Assume UAB
 		setLayoutInfo.bindingCount = bindings.size();
-		setLayoutInfo.pBindings = bindings.data();
+		setLayoutInfo.pBindings = bindings.begin();
 
 		VK_CHECK(vkCreateDescriptorSetLayout(mDevice.Get(), &setLayoutInfo, nullptr, &mLayout));
     }

@@ -13,7 +13,7 @@ namespace im
     public:
         DescriptorPool(
             Device& device,
-            const std::vector<VkDescriptorPoolSize>& poolSizes,
+            std::initializer_list<VkDescriptorPoolSize> poolSizes,
             uint32_t maxSets,
             VkDescriptorPoolCreateFlags flags = 0);
         ~DescriptorPool();
@@ -27,7 +27,7 @@ namespace im
 		std::unique_ptr<DescriptorSet> Allocate(DescriptorSetLayout& layout, void* pNext = nullptr);
         
 		std::vector<std::unique_ptr<DescriptorSet>> Allocate(
-            const std::vector<std::reference_wrapper<DescriptorSetLayout>>& layouts, void* pNext = nullptr);
+            std::initializer_list<std::reference_wrapper<DescriptorSetLayout>> layouts, void* pNext = nullptr);
 
     private:
         Device& mDevice;
