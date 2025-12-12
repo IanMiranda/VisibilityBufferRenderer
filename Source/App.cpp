@@ -447,7 +447,7 @@ namespace im
 			std::initializer_list{ pcRange }
 		);
 
-		Shader shader(*mDevice, "./Assets/Shaders/Basic.spv");
+		Shader shader(*mDevice, "./Assets/Shaders/Bin/Basic.spv");
 		shader.AddStage(VK_SHADER_STAGE_VERTEX_BIT, "VSMain")
 			.AddStage(VK_SHADER_STAGE_FRAGMENT_BIT, "FSMain");
 		mPipe = std::make_unique<GraphicsPipeline>(*mDevice, *mPipeLayout, shader);
@@ -473,7 +473,7 @@ namespace im
 			std::initializer_list{ pcRange }
 		);
 
-		Shader geomShader(*mDevice, "./Assets/Shaders/GeometryPass.spv");
+		Shader geomShader(*mDevice, "./Assets/Shaders/Bin/GeometryPass.spv");
 		geomShader.AddStage(VK_SHADER_STAGE_VERTEX_BIT, "VSMain")
 			.AddStage(VK_SHADER_STAGE_FRAGMENT_BIT, "FSMain");
 		mGeomPipe = std::make_unique<GraphicsPipeline>(*mDevice, *mGeomPipeLayout, geomShader);
@@ -512,7 +512,7 @@ namespace im
 			std::initializer_list{ lightPushRange }
 		);
 
-		Shader lightShader(*mDevice, "./Assets/Shaders/LightingPass.spv");
+		Shader lightShader(*mDevice, "./Assets/Shaders/Bin/LightingPass.spv");
 		lightShader.AddStage(VK_SHADER_STAGE_VERTEX_BIT, "VSMain")
 			.AddStage(VK_SHADER_STAGE_FRAGMENT_BIT, "FSMain");
 		mLightPipe = std::make_unique<GraphicsPipeline>(*mDevice, *mLightPipeLayout, lightShader);
@@ -747,7 +747,7 @@ namespace im
 			std::initializer_list{ pcRange }
 		);
 
-		Shader shader(*mDevice, "./Assets/Shaders/Cubemap.spv");
+		Shader shader(*mDevice, "./Assets/Shaders/Bin/Cubemap.spv");
 		shader.AddStage(VK_SHADER_STAGE_VERTEX_BIT, "VSMain")
 			.AddStage(VK_SHADER_STAGE_FRAGMENT_BIT, "FSMain");
 		mEnvMapPipe = std::make_unique<GraphicsPipeline>(*mDevice, *mEnvMapPipeLayout, shader);
