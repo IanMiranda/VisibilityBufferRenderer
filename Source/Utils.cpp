@@ -56,7 +56,7 @@ namespace im::utils
 		std::ifstream file(path, std::ios::binary | std::ios::ate);
 		if (!file.is_open())
 		{
-			std::cerr << "Error: failed to open file with path '" << path << "\'\n";
+			fmt::println(stderr, "Error: failed to open file with path '{}'!", path);
 			return {};
 		}
 
@@ -80,18 +80,14 @@ namespace im::utils
 
 		bool res = loader.LoadASCIIFromFile(&model, &error, &warn, path.string().c_str());
 		if (!warn.empty())
-		{
-			std::cerr << "GLTF warning: " << warn << '\n';
-		}
+			fmt::println(stderr, "GLTF warning: {}", warn);
 
 		if (!error.empty())
-		{
-			std::cerr << "GLTF error: " << error << '\n';
-		}
+			fmt::println(stderr, "GLTF error: {}", error);
 
 		if (!res)
 		{
-			std::cerr << "Failed to load model from path " << path << "!\n";
+			fmt::println("Failed to load model from path {}!", path);
 			return {};
 		}
 
