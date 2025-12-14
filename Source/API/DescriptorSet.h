@@ -6,6 +6,7 @@ namespace im
 {
     class DescriptorPool;
     class Buffer;
+    class Texture;
     class Texture2D;
     class TextureCube;
 
@@ -28,18 +29,25 @@ namespace im
         DescriptorSet& PushWrite(
             uint32_t binding,
             VkDescriptorType type,
-            Texture2D* texture = nullptr,
-            VkSampler* sampler = nullptr,
-            VkImageLayout imageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+            const Texture& texture,
+            VkImageLayout imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
             uint32_t arrayIndex = 0
         );
 
         DescriptorSet& PushWrite(
             uint32_t binding,
             VkDescriptorType type,
-            TextureCube* texture = nullptr,
-            VkSampler* sampler = nullptr,
-            VkImageLayout imageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+            VkSampler sampler,
+            VkImageLayout imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            uint32_t arrayIndex = 0
+        );
+
+        DescriptorSet& PushWrite(
+            uint32_t binding,
+            VkDescriptorType type,
+            const Texture& texture,
+            VkSampler sampler,
+            VkImageLayout imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
             uint32_t arrayIndex = 0
         );
         

@@ -255,7 +255,11 @@ namespace im
 			queueInfo.queueCount = 1;
 			queueInfo.queueFamilyIndex = graphicsIndex.value();
 
+			VkPhysicalDeviceVulkan11Features vulkan11Features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES };
+			vulkan11Features.shaderDrawParameters = VK_TRUE;
+
 			VkPhysicalDeviceVulkan12Features vulkan12Features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES };
+			vulkan12Features.pNext = &vulkan11Features;
 			vulkan12Features.descriptorIndexing								= VK_TRUE;
 			vulkan12Features.descriptorBindingPartiallyBound				= VK_TRUE;
 			vulkan12Features.descriptorBindingSampledImageUpdateAfterBind	= VK_TRUE;

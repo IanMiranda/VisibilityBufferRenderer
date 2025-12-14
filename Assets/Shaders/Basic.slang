@@ -111,10 +111,10 @@ float4 FSMain(VSOutput input) : SV_Target0
 
     float4 Ia = float4(0.01, 0.01, 0.01, 1.0);
 
-    float4 Kd = gTextures[gObjectData.diffuseMapIndex].Sample(input.uv);
-    float4 Ks = gTextures[gObjectData.specularMapIndex].Sample(input.uv);
+    float4 Kd = gTextures[gObjectData.diffuseMapIndex].Sample(gTrilinearColor, input.uv);
+    float4 Ks = gTextures[gObjectData.specularMapIndex].Sample(gTrilinearColor, input.uv);
 
-    float3 N = gTextures[gObjectData.normalMapIndex].Sample(input.uv).rgb;
+    float3 N = gTextures[gObjectData.normalMapIndex].Sample(gTrilinearColor, input.uv).rgb;
     N = N * 2.0 - 1.0;
     N = normalize(mul(input.tbn, N));
 

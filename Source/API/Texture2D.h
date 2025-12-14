@@ -1,14 +1,13 @@
 #pragma once
 
-#include <filesystem>
-
 #include "Common.h"
+#include "Texture.h"
 
 namespace im
 {
 	class Device;
 
-	class Texture2D
+	class Texture2D : public Texture
 	{
 	public:
 		Texture2D(Device& device, VkFormat format, VkImageUsageFlags usage, uint32_t width, uint32_t height, bool supportMipmaps);
@@ -17,13 +16,13 @@ namespace im
 		Texture2D(const Texture2D& other) = delete;
 		Texture2D& operator=(const Texture2D& other) = delete;
 
-		VkImage Get() const				{ return mImage; }
-		VkImageView GetView() const		{ return mView; }
-		VkFormat GetFormat() const		{ return mFormat; }
-		uint32_t GetWidth() const		{ return mWidth; }
-		uint32_t GetHeight() const		{ return mHeight; }
-		VkExtent2D GetExtent() const	{ return { mWidth, mHeight }; }
-		uint32_t GetMipLevels() const	{ return mMipLevelCount; }
+		VkImage Get() const { return mImage; }
+		VkImageView GetView() const override { return mView; }
+		VkFormat GetFormat() const { return mFormat; }
+		uint32_t GetWidth() const { return mWidth; }
+		uint32_t GetHeight() const { return mHeight; }
+		VkExtent2D GetExtent() const { return { mWidth, mHeight }; }
+		uint32_t GetMipLevels() const { return mMipLevelCount; }
 
 		VkImageAspectFlags GetAspect() const;
 

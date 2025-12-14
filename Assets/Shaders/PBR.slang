@@ -115,12 +115,12 @@ float SmithGGX(float roughness, float3 W, float3 V, float3 N)
 [shader("fragment")]
 float4 FSMain(VSOutput input) : SV_Target0
 {
-    float3 albedo = gTextures[NonUniformResourceIndex(gObjectData.albedoMapIndex)].Sample(input.uv).rgb;
-    float metallic = gTextures[NonUniformResourceIndex(gObjectData.metallicMapIndex)].Sample(input.uv).r;
-    float roughness = gTextures[NonUniformResourceIndex(gObjectData.roughnessMapIndex)].Sample(input.uv).r;
-    float ao = gTextures[NonUniformResourceIndex(gObjectData.aoMapIndex)].Sample(input.uv).r;
+    float3 albedo = gTextures[NonUniformResourceIndex(gObjectData.albedoMapIndex)].Sample(gTrilinearColor, input.uv).rgb;
+    float metallic = gTextures[NonUniformResourceIndex(gObjectData.metallicMapIndex)].Sample(gTrilinearColor, input.uv).r;
+    float roughness = gTextures[NonUniformResourceIndex(gObjectData.roughnessMapIndex)].Sample(gTrilinearColor, input.uv).r;
+    float ao = gTextures[NonUniformResourceIndex(gObjectData.aoMapIndex)].Sample(gTrilinearColor, input.uv).r;
 
-    float3 N = gTextures[NonUniformResourceIndex(gObjectData.normalMapIndex)].Sample(input.uv).rgb;
+    float3 N = gTextures[NonUniformResourceIndex(gObjectData.normalMapIndex)].Sample(gTrilinearColor, input.uv).rgb;
     N = N * 2.0 - 1.0;
     N = normalize(mul(input.tbn, N));
 

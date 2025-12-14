@@ -1,5 +1,7 @@
 #pragma once
 
+#include <span>
+
 #include "Common.h"
 
 namespace im
@@ -24,8 +26,9 @@ namespace im
 			uint32_t index,
 			VkDescriptorType type,
 			VkShaderStageFlags stages,
-			uint32_t count = 1);
-		
+			uint32_t count = 1,
+			VkSampler* immutableSampler = nullptr);
+
 		VkDescriptorSetLayout Get() const { return mLayout; }
 
 	private:

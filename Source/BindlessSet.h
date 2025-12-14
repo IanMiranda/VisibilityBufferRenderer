@@ -22,7 +22,7 @@ namespace im
 		DescriptorSetLayout& GetSetLayout() { return mBindlessSetLayout; }
 		DescriptorSet& Get() { return *mBindlessSet; }
 
-		uint32_t GetOrCreateId(std::shared_ptr<Texture2D> texture, VkSampler sampler);
+		uint32_t GetOrCreateId(std::shared_ptr<Texture2D> texture);
 
 	private:
 		Device& mDevice;

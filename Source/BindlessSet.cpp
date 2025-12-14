@@ -14,15 +14,21 @@ namespace im
 		, mMaxTextures(maxTextures)
 		, mBindlessPool(
 			mDevice,
-			std::initializer_list<VkDescriptorPoolSize>{ { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, mMaxTextures } },
+			std::initializer_list<VkDescriptorPoolSize>{
+				{ VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, mMaxTextures },
+				{ VK_DESCRIPTOR_TYPE_SAMPLER, 1 }
+			},
 			1, VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT
 		)
 		, mBindlessSetLayout(
 			mDevice,
 			{
-				DescriptorSetLayout::Binding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, mMaxTextures)
+				DescriptorSetLayout::Binding(0, VK_DESCRIPTOR_TYPE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1,
+					&mDevice.GetSamplers().TrilinearColor()),
+				DescriptorSetLayout::Binding(1, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, VK_SHADER_STAGE_FRAGMENT_BIT, mMaxTextures),
 			},
 			{
+				0,
 				VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT |
 				VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT |
 				VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT |
@@ -44,7 +50,7 @@ namespace im
 	{
 	}
 
-	uint32_t BindlessSet::GetOrCreateId(std::shared_ptr<Texture2D> texture, VkSampler sampler)
+	uint32_t BindlessSet::GetOrCreateId(std::shared_ptr<Texture2D> texture)
 	{
 		if (const auto it = mTexMap.find(texture);
 			it != mTexMap.end())
@@ -57,9 +63,9 @@ namespace im
 			const auto idx = mTexFreeList.front();
 
 			mBindlessSet->PushWrite(
-				0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-				texture.get(), &sampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-				idx).Update();
+				1, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+				*texture, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, idx)
+				.Update();
 
 			mTexMap[texture] = idx;
 			mTexFreeList.pop_front();

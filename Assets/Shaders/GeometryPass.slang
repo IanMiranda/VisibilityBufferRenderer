@@ -69,14 +69,14 @@ struct PSOutput
 [shader("fragment")]
 PSOutput FSMain(VSOutput input)
 {
-    float3 N = gTextures[gObjectData.normalMapIndex].Sample(input.uv).rgb;
+    float3 N = gTextures[gObjectData.normalMapIndex].Sample(gTrilinearColor, input.uv).rgb;
     N = N * 2.0 - 1.0;
     N = normalize(mul(input.tbn, N));
 
     PSOutput output = (PSOutput)0;
     output.position = float4(input.posView, 1.0);
     output.normal = float4(N, 0.0);
-    output.albedo = gTextures[gObjectData.diffuseMapIndex].Sample(input.uv);
-    output.specular = gTextures[gObjectData.specularMapIndex].Sample(input.uv);
+    output.albedo = gTextures[gObjectData.diffuseMapIndex].Sample(gTrilinearColor, input.uv);
+    output.specular = gTextures[gObjectData.specularMapIndex].Sample(gTrilinearColor, input.uv);
     return output;
 }

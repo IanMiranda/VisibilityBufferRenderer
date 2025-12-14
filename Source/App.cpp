@@ -234,9 +234,9 @@ namespace im
 		for (const auto& mesh : mMeshes)
 		{
 			pushConsts.model = mesh.transform;
-			pushConsts.diffuseMapHandle = mBindlessSet.GetOrCreateId(mesh.material.diffuseMap, mDevice.GetSamplers().TrilinearColor());
-			pushConsts.specularMapHandle = mBindlessSet.GetOrCreateId(mesh.material.specularMap, mDevice.GetSamplers().TrilinearColor());
-			pushConsts.normalMapHandle = mBindlessSet.GetOrCreateId(mesh.material.normalMap, mDevice.GetSamplers().TrilinearColor());
+			pushConsts.diffuseMapHandle = mBindlessSet.GetOrCreateId(mesh.material.diffuseMap);
+			pushConsts.specularMapHandle = mBindlessSet.GetOrCreateId(mesh.material.specularMap);
+			pushConsts.normalMapHandle = mBindlessSet.GetOrCreateId(mesh.material.normalMap);
 
 			commandBuffer.PushConstants(*mPipeLayout,
 				VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
@@ -338,9 +338,9 @@ namespace im
 		for (const auto& mesh : mMeshes)
 		{
 			pushConsts.model = mesh.transform;
-			pushConsts.diffuseMapHandle = mBindlessSet.GetOrCreateId(mesh.material.diffuseMap, mDevice.GetSamplers().TrilinearColor());
-			pushConsts.specularMapHandle = mBindlessSet.GetOrCreateId(mesh.material.specularMap, mDevice.GetSamplers().TrilinearColor());
-			pushConsts.normalMapHandle = mBindlessSet.GetOrCreateId(mesh.material.normalMap, mDevice.GetSamplers().TrilinearColor());
+			pushConsts.diffuseMapHandle = mBindlessSet.GetOrCreateId(mesh.material.diffuseMap);
+			pushConsts.specularMapHandle = mBindlessSet.GetOrCreateId(mesh.material.specularMap);
+			pushConsts.normalMapHandle = mBindlessSet.GetOrCreateId(mesh.material.normalMap);
 
 			commandBuffer.PushConstants(*mGeomPipeLayout,
 				VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
@@ -753,7 +753,7 @@ namespace im
 
 		mEnvMapSet->PushWrite(
 			0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-			mEnvMap.get(), &mDevice.GetSamplers().TrilinearColor(),
+			*mEnvMap, mDevice.GetSamplers().TrilinearColor(),
 			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
 			.Update();
 
@@ -765,7 +765,7 @@ namespace im
 					1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, *(mLightBuffers[i]))
 				.PushWrite(
 					2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-					mEnvMap.get(), &mDevice.GetSamplers().TrilinearColor(),
+					*mEnvMap, mDevice.GetSamplers().TrilinearColor(),
 					VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
 				/*.PushWrite(
 					2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
@@ -800,11 +800,11 @@ namespace im
 		for (int i = 0; i < mLightSets.size(); ++i)
 		{
 			mLightSets[i]->PushWrite(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, *(mLightPassBuffers[i]))
-				.PushWrite(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &mGBuffers[mFrameIndex]->GetPositionBuffer(), &mDevice.GetSamplers().NearestColor(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-				.PushWrite(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &mGBuffers[mFrameIndex]->GetNormalBuffer(), &mDevice.GetSamplers().NearestColor(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-				.PushWrite(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &mGBuffers[mFrameIndex]->GetAlbedoBuffer(), &mDevice.GetSamplers().NearestColor(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-				.PushWrite(4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &mGBuffers[mFrameIndex]->GetSpecularBuffer(), &mDevice.GetSamplers().NearestColor(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-				.PushWrite(5, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, mEnvMap.get(), &mDevice.GetSamplers().TrilinearColor(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+				.PushWrite(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, mGBuffers[mFrameIndex]->GetPositionBuffer(), mDevice.GetSamplers().NearestColor(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+				.PushWrite(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, mGBuffers[mFrameIndex]->GetNormalBuffer(), mDevice.GetSamplers().NearestColor(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+				.PushWrite(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, mGBuffers[mFrameIndex]->GetAlbedoBuffer(), mDevice.GetSamplers().NearestColor(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+				.PushWrite(4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, mGBuffers[mFrameIndex]->GetSpecularBuffer(), mDevice.GetSamplers().NearestColor(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+				.PushWrite(5, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, *mEnvMap, mDevice.GetSamplers().TrilinearColor(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
 				.Update();
 		}
 	}

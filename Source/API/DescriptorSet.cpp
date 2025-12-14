@@ -42,15 +42,14 @@ namespace im
     DescriptorSet& DescriptorSet::PushWrite(
         uint32_t binding,
         VkDescriptorType type,
-        Texture2D* texture,
-        VkSampler* sampler,
+        const Texture& texture,
         VkImageLayout imageLayout,
         uint32_t arrayIndex)
     {
         auto imageInfo = std::make_unique<VkDescriptorImageInfo>();
         imageInfo->imageLayout = imageLayout;
-        imageInfo->imageView = (texture ? texture->GetView() : VK_NULL_HANDLE);
-        imageInfo->sampler = (sampler ? (*sampler) : VK_NULL_HANDLE);
+        imageInfo->imageView = texture.GetView();
+        imageInfo->sampler = VK_NULL_HANDLE;
         mImageWrites.emplace_back(std::move(imageInfo));
 
         auto write = MakeWrite(type, arrayIndex, binding);
@@ -62,15 +61,33 @@ namespace im
     DescriptorSet& DescriptorSet::PushWrite(
         uint32_t binding,
         VkDescriptorType type,
-        TextureCube* texture,
-        VkSampler* sampler,
+        VkSampler sampler,
         VkImageLayout imageLayout,
         uint32_t arrayIndex)
     {
         auto imageInfo = std::make_unique<VkDescriptorImageInfo>();
         imageInfo->imageLayout = imageLayout;
-        imageInfo->imageView = (texture ? texture->GetView() : VK_NULL_HANDLE);
-        imageInfo->sampler = (sampler ? (*sampler) : VK_NULL_HANDLE);
+        imageInfo->sampler = sampler;
+        mImageWrites.emplace_back(std::move(imageInfo));
+
+        auto write = MakeWrite(type, arrayIndex, binding);
+        write.pImageInfo = mImageWrites.back().get();
+        mWrites.emplace_back(write);
+        return *this;
+    }
+
+    DescriptorSet& DescriptorSet::PushWrite(
+        uint32_t binding,
+        VkDescriptorType type,
+        const Texture& texture,
+        VkSampler sampler,
+        VkImageLayout imageLayout,
+        uint32_t arrayIndex)
+    {
+        auto imageInfo = std::make_unique<VkDescriptorImageInfo>();
+        imageInfo->imageLayout = imageLayout;
+        imageInfo->imageView = texture.GetView();
+        imageInfo->sampler = sampler;
         mImageWrites.emplace_back(std::move(imageInfo));
 
         auto write = MakeWrite(type, arrayIndex, binding);

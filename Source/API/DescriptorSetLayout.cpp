@@ -43,13 +43,15 @@ namespace im
 		uint32_t index,
 		VkDescriptorType type,
 		VkShaderStageFlags stages,
-		uint32_t count)
+		uint32_t count,
+		VkSampler* immutableSampler)
 	{
 		VkDescriptorSetLayoutBinding binding{};
 		binding.binding = index;
 		binding.descriptorCount = count;
 		binding.descriptorType = type;
 		binding.stageFlags = stages;
+		binding.pImmutableSamplers = immutableSampler;
 		return binding;
 	}
 }
