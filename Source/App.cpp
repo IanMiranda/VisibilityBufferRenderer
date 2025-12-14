@@ -710,15 +710,10 @@ namespace im
 			}
 		);
 
-		VkPushConstantRange pcRange{};
-		pcRange.offset = 0;
-		pcRange.size = sizeof(CubemapData);
-		pcRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-
 		mEnvMapPipeLayout = std::make_unique<PipelineLayout>(
 			mDevice,
 			std::initializer_list{ std::ref(*mEnvMapSetLayout) },
-			std::initializer_list{ pcRange }
+			std::initializer_list{ utils::PushConstantRange(VK_SHADER_STAGE_VERTEX_BIT, sizeof(CubemapData)) }
 		);
 
 		Shader shader(mDevice, "./Assets/Shaders/Bin/Cubemap.spv");

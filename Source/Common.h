@@ -16,10 +16,10 @@
 #define VK_CHECK(x) \
 	do \
 	{ \
-		VkResult _result = (x); \
-		if (_result != VK_SUCCESS) \
+		VkResult result = (x); \
+		if (result != VK_SUCCESS) \
 		{ \
-			fmt::println(stderr, "Error at line {} in file {}: {}", __LINE__, __FILE__, static_cast<uint32_t>(_result)); \
+			fmt::println(stderr, "Error at line {} in file {}: {}", __LINE__, __FILE__, static_cast<uint32_t>(result)); \
 		} \
 	} while(0)
 
@@ -93,7 +93,6 @@ namespace im
 		glm::mat4 viewProjInverse;
 	};
 
-	class Device;
 	class Buffer;
 	class Texture2D;
 

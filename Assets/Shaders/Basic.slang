@@ -36,6 +36,14 @@ public struct GlobalPassData
     uint _pad2;
 };
 
+struct ObjectData
+{
+    float4x4 model;
+    uint diffuseMapIndex;
+    uint specularMapIndex;
+    uint normalMapIndex;
+};
+
 [push_constant] ConstantBuffer<ObjectData> gObjectData;
 [vk_binding(0, 0)] ConstantBuffer<GlobalPassData> gPassData;
 

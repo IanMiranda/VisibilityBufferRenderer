@@ -9,7 +9,7 @@ namespace im
 	struct PointLight
 	{
 		glm::vec3 position;
-		float _pad0;
+		float pad0;
 		glm::vec4 i = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
 	};
 

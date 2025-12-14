@@ -1,6 +1,7 @@
 #include "BindlessSet.h"
 
 #include <cassert>
+#include <numeric>
 
 #include "API/Device.h"
 #include "API/Texture2D.h"
@@ -28,14 +29,15 @@ namespace im
 				VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT
 			}
 		)
+		, mTexFreeList(mMaxTextures)
 	{
 		VkDescriptorSetVariableDescriptorCountAllocateInfo variableDescInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO };
 		variableDescInfo.descriptorSetCount = 1;
 		variableDescInfo.pDescriptorCounts = &mMaxTextures;
 
 		mBindlessSet = mBindlessPool.Allocate({ mBindlessSetLayout }, &variableDescInfo);
-		for (uint32_t i = 0; i < mMaxTextures; ++i)
-			mTexFreeList.emplace_back(i);
+
+		std::iota(mTexFreeList.begin(), mTexFreeList.end(), 0);
 	}
 
 	BindlessSet::~BindlessSet()
@@ -58,7 +60,7 @@ namespace im
 				0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 				texture.get(), &sampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
 				idx).Update();
-			
+
 			mTexMap[texture] = idx;
 			mTexFreeList.pop_front();
 			return idx;
