@@ -93,6 +93,8 @@ namespace im
 		BindlessSet mBindlessSet;
 		CommandPool mCommandPool;
 
+		std::unique_ptr<Texture2D> mDepthImage;
+
 		std::unique_ptr<DescriptorSetLayout> mGlobalLayout;
 		std::unique_ptr<PipelineLayout> mPipeLayout;
 		std::unique_ptr<GraphicsPipeline> mPipe;
@@ -110,16 +112,12 @@ namespace im
 		std::unique_ptr<DescriptorPool> mGlobalPool;
 		std::vector<std::unique_ptr<DescriptorSet>> mGlobalSets;
 
-		std::unique_ptr<Texture2D> mDepthImage;
-
 		std::vector<std::unique_ptr<Buffer>> mGlobalPassBuffers;
 		std::vector<std::unique_ptr<Buffer>> mLightBuffers;
 		std::vector<std::unique_ptr<Buffer>> mGeomPassBuffers;
 		std::vector<std::unique_ptr<Buffer>> mLightPassBuffers;
 
-		std::shared_ptr<Texture2D> mDiffuseMap;
-		std::shared_ptr<Texture2D> mSpecularMap;
-		std::shared_ptr<Texture2D> mNormalMap;
+		Material mMaterial;
 
 		std::unique_ptr<Skybox> mSkybox;
 

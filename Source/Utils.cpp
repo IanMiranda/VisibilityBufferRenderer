@@ -1,7 +1,7 @@
 #include "Utils.h"
 
 #include <fstream>
-
+#include <algorithm>
 #include <tiny_gltf.h>
 
 #include "API/Buffer.h"
@@ -91,6 +91,7 @@ namespace im::utils
 			return {};
 		}
 
+		static std::size_t maxVertexIndex = 0;
 		std::unordered_map<Vertex, uint32_t> uniqueVertices;
 		for (const auto& mesh : model.meshes)
 		{
@@ -115,10 +116,6 @@ namespace im::utils
 				const tinygltf::Accessor& normalAccessor = model.accessors[prim.attributes.at("NORMAL")];
 				const tinygltf::BufferView& normalBufferView = model.bufferViews[normalAccessor.bufferView];
 				const tinygltf::Buffer& normalBuffer = model.buffers[normalBufferView.buffer];
-
-				/*const tinygltf::Accessor& tangentAccessor = model.accessors[prim.attributes.at("TANGENT")];
-				const tinygltf::BufferView& tangentBufferView = model.bufferViews[tangentAccessor.bufferView];
-				const tinygltf::Buffer& tangentBuffer = model.buffers[tangentBufferView.buffer];*/
 
 				if (hasTexCoord)
 				{
@@ -145,24 +142,21 @@ namespace im::utils
 					v.normal = { normal[0], normal[1], normal[2] };
 
 					//const float* tangent = reinterpret_cast<const float*>(&tangentBuffer.data[tangentBufferView.byteOffset + tangentAccessor.byteOffset + i * 16]);
-					v.tangent = glm::vec3(1.0f, 0.0f, 0.0f); //{ tangent[0], tangent[1], tangent[2] };
-					v.bitangent = glm::vec3(0.0f, 1.0f, 0.0f); //glm::cross(v.normal, v.tangent) * tangent[3]; // https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html
+					v.tangent = { 1.0f, 0.0f, 0.0f };
+					v.bitangent = glm::cross(v.normal, v.tangent) * 1.0f; // https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html
 
-					if (uniqueVertices.find(v) == uniqueVertices.end())
-					{
-						uniqueVertices[v] = static_cast<uint32_t>(vertices.size());
-						vertices.push_back(v);
-					}
+					uniqueVertices[v] = static_cast<uint32_t>(vertices.size());
+					vertices.push_back(v);
 				}
 
-				const uint8_t* indexData = &indexBuffer.data[indexBufferView.byteOffset + indexAccessor.byteOffset];
+				const void* indexData = &indexBuffer.data[indexBufferView.byteOffset + indexAccessor.byteOffset];
 				if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT)
 				{
 					const uint16_t* indexPtr = reinterpret_cast<const uint16_t*>(indexData);
 					for (size_t i = 0; i < indexAccessor.count; ++i)
 					{
 						Vertex v = vertices[indexPtr[i]];
-						indices.emplace_back(uniqueVertices[v]);
+						indices.push_back(uniqueVertices[v]);
 					}
 				}
 				else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT)
@@ -176,9 +170,10 @@ namespace im::utils
 				}
 				else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE)
 				{
+					const uint8_t* indexPtr = reinterpret_cast<const uint8_t*>(indexData);
 					for (size_t i = 0; i < indexAccessor.count; ++i)
 					{
-						Vertex v = vertices[indexData[i]];
+						Vertex v = vertices[indexPtr[i]];
 						indices.emplace_back(uniqueVertices[v]);
 					}
 				}

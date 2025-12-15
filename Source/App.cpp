@@ -33,10 +33,10 @@ namespace im
 		InitWindow();
 
 		InitDepthBuffer();
-		InitPipeline();
-		InitCommandBuffers();
-		InitSyncPrimitives();
 		InitImGui();
+		InitSyncPrimitives();
+		InitCommandBuffers();
+		InitPipeline();
 		InitMeshes();
 		InitUniformBuffers();
 		// InitShadowResources();
@@ -59,7 +59,7 @@ namespace im
 		InitDescriptors();
 
 		srand(time(nullptr));
-		mPointLights.resize(32);
+		mPointLights.resize(8);
 	}
 
 	App::~App()
@@ -243,9 +243,12 @@ namespace im
 		for (const auto& mesh : mMeshes)
 		{
 			pushConsts.model = mesh.transform;
-			pushConsts.diffuseMapHandle = mBindlessSet.GetOrCreateId(mesh.material.diffuseMap);
-			pushConsts.specularMapHandle = mBindlessSet.GetOrCreateId(mesh.material.specularMap);
-			pushConsts.normalMapHandle = mBindlessSet.GetOrCreateId(mesh.material.normalMap);
+			pushConsts.albedoMapIndex = mBindlessSet.GetOrCreateId(mesh.material.albedoMap);
+			pushConsts.metallicMapIndex = mBindlessSet.GetOrCreateId(mesh.material.metallicMap);
+			pushConsts.roughnessMapIndex = mBindlessSet.GetOrCreateId(mesh.material.roughnessMap);
+			pushConsts.normalMapIndex = mBindlessSet.GetOrCreateId(mesh.material.normalMap);
+			pushConsts.aoMapIndex = mBindlessSet.GetOrCreateId(mesh.material.aoMap);
+			pushConsts.emissiveMapIndex = mBindlessSet.GetOrCreateId(mesh.material.emissiveMap);
 
 			commandBuffer.PushConstants(*mPipeLayout,
 				VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
@@ -322,10 +325,7 @@ namespace im
     {
 		mGBuffers[mFrameIndex]->Begin(commandBuffer);
 
-		GeomPassData passData{};
-		passData.view = view;
-		passData.viewProj = proj * view;
-		mGeomPassBuffers[mFrameIndex]->SetData(passData);
+		mGeomPassBuffers[mFrameIndex]->SetData(GeomPassData(view, proj));
 
 		commandBuffer.BindGraphicsPipeline(*mGeomPipe);
 		commandBuffer.BindGraphicsDescriptorSets(*mGeomPipeLayout, 0, { *(mGeomSets[mFrameIndex]), mBindlessSet.Get() });
@@ -334,9 +334,12 @@ namespace im
 		for (const auto& mesh : mMeshes)
 		{
 			pushConsts.model = mesh.transform;
-			pushConsts.diffuseMapHandle = mBindlessSet.GetOrCreateId(mesh.material.diffuseMap);
-			pushConsts.specularMapHandle = mBindlessSet.GetOrCreateId(mesh.material.specularMap);
-			pushConsts.normalMapHandle = mBindlessSet.GetOrCreateId(mesh.material.normalMap);
+			pushConsts.albedoMapIndex = mBindlessSet.GetOrCreateId(mesh.material.albedoMap);
+			pushConsts.metallicMapIndex = mBindlessSet.GetOrCreateId(mesh.material.metallicMap);
+			pushConsts.roughnessMapIndex = mBindlessSet.GetOrCreateId(mesh.material.roughnessMap);
+			pushConsts.normalMapIndex = mBindlessSet.GetOrCreateId(mesh.material.normalMap);
+			pushConsts.aoMapIndex = mBindlessSet.GetOrCreateId(mesh.material.aoMap);
+			pushConsts.emissiveMapIndex = mBindlessSet.GetOrCreateId(mesh.material.emissiveMap);
 
 			commandBuffer.PushConstants(*mGeomPipeLayout,
 				VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
@@ -422,7 +425,7 @@ namespace im
 			std::initializer_list{ pcRange }
 		);
 
-		Shader shader(mDevice, "./Assets/Shaders/Bin/Basic.spv");
+		Shader shader(mDevice, "./Assets/Shaders/Bin/PBR.spv");
 		shader.AddStage(VK_SHADER_STAGE_VERTEX_BIT, "VSMain")
 			.AddStage(VK_SHADER_STAGE_FRAGMENT_BIT, "FSMain");
 		mPipe = std::make_unique<GraphicsPipeline>(mDevice, *mPipeLayout, shader);
@@ -533,7 +536,7 @@ namespace im
 		VkPipelineRenderingCreateInfo renderingInfo{ VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO };
 		renderingInfo.colorAttachmentCount = 1;
 		renderingInfo.pColorAttachmentFormats = &format;
-		renderingInfo.depthAttachmentFormat = mDepthImage->GetFormat();
+		renderingInfo.depthAttachmentFormat = mDevice.GetDepthFormat();
 
 		ImGui_ImplVulkan_InitInfo imguiVulkanInfo{};
 		imguiVulkanInfo.ApiVersion = VK_API_VERSION_1_4;
@@ -556,28 +559,23 @@ namespace im
 	void App::InitMeshes()
 	{
 		// Load texture image
-		mDiffuseMap = std::shared_ptr<Texture2D>(CreateAndStageTexture("./Assets/Textures/brickwall.jpg", VK_FORMAT_R8G8B8A8_SRGB, false));
-		mSpecularMap = std::shared_ptr<Texture2D>(CreateAndStageTexture("./Assets/Textures/brickwall.jpg", VK_FORMAT_R8G8B8A8_SRGB, false));
-		mNormalMap = std::shared_ptr<Texture2D>(CreateAndStageTexture("./Assets/Textures/brickwall_normal.jpg", VK_FORMAT_R8G8B8A8_UNORM, false));
+		mMaterial = Material{
+			CreateAndStageTexture("./Assets/Models/Helmet/Default_albedo.jpg", VK_FORMAT_R8G8B8A8_SRGB, false),
+			CreateAndStageTexture("./Assets/Models/Helmet/Default_metalRoughness.jpg", VK_FORMAT_R8G8B8A8_SRGB, false),
+			CreateAndStageTexture("./Assets/Models/Helmet/Default_metalRoughness.jpg", VK_FORMAT_R8G8B8A8_SRGB, false),
+			CreateAndStageTexture("./Assets/Models/Helmet/Default_normal.jpg", VK_FORMAT_R8G8B8A8_SRGB, false),
+			CreateAndStageTexture("./Assets/Models/Helmet/Default_AO.jpg", VK_FORMAT_R8G8B8A8_SRGB, false),
+			CreateAndStageTexture("./Assets/Models/Helmet/Default_emissive.jpg", VK_FORMAT_R8G8B8A8_SRGB, false),
+		};
 
 		{
-			auto [duckVertices, duckIndices] = utils::LoadModel("./Assets/Models/Duck.gltf");
-			for (float x = -10; x < 10; ++x)
-			{
-				for (float z = -10; z < 10; ++z)
-				{
-					glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -1.0f, 0.0f));
-					model = glm::translate(model, glm::vec3(x * 2, 0.0f, z * 2));
-					model = glm::scale(model, glm::vec3(0.01f));
-					mMeshes.emplace_back(UploadMesh(
-						duckVertices, duckIndices,
-						{ mDiffuseMap, mSpecularMap, mNormalMap },
-						model));
-				}
-			}
+			auto [duckVertices, duckIndices] = utils::LoadModel("./Assets/Models/Helmet/DamagedHelmet.gltf");
+			glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -1.0f, 0.0f));
+			model = glm::scale(model, glm::vec3(2.0f));
+			mMeshes.emplace_back(UploadMesh(duckVertices, duckIndices, mMaterial, model));
 		}
 
-		{
+		/*{
 			const std::vector<Vertex> planeVertices
 			{
 				{ { -0.5f, 0.0f, 0.5f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 0.0f, 1.0f }, { 0.0f, 1.0f, 0.0f }, { 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 1.0f } },
@@ -594,11 +592,8 @@ namespace im
 
 			glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -1.0f, 0.0f));
 			model = glm::scale(model, glm::vec3(42.0f));
-			mMeshes.emplace_back(UploadMesh(
-				planeVertices, planeIndices,
-				{ mDiffuseMap, mSpecularMap, mNormalMap },
-				model));
-		}
+			mMeshes.emplace_back(UploadMesh(planeVertices, planeIndices, mMaterial, model));
+		}*/
 	}
 
 	void App::InitUniformBuffers()
@@ -643,7 +638,7 @@ namespace im
 				{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, MaxFramesInFlight },
 				{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2 * MaxFramesInFlight },
 			},
-			MaxFramesInFlight + 1
+			MaxFramesInFlight
 		);
 
 		mGlobalSets = mGlobalPool->Allocate({ *mGlobalLayout, *mGlobalLayout });
@@ -658,10 +653,6 @@ namespace im
 					2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 					mSkybox->Get(), mDevice.GetSamplers().TrilinearColor(),
 					VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-				/*.PushWrite(
-					2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-					&mShadowPass->GetMap(), &mDevice.GetSamplers().Shadow(),
-					VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL)*/
 				.Update();
 		}
 
@@ -683,9 +674,7 @@ namespace im
 
 		mGeomSets = mDeferredDescPool->Allocate({ *mGeomDescLayout, *mGeomDescLayout });
 		for (int i = 0; i < mGeomSets.size(); ++i)
-		{
 			mGeomSets[i]->PushWrite(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, *(mGeomPassBuffers[i])).Update();
-		}
 
 		mLightSets = mDeferredDescPool->Allocate({ *mLightDescLayout, *mLightDescLayout });
 		for (int i = 0; i < mLightSets.size(); ++i)
@@ -777,8 +766,7 @@ namespace im
 			mDevice, stagingIdxs.GetSize(),
 			VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, 0);
 		res.indexCount = indices.size();
-		res.material.diffuseMap = material.diffuseMap;
-		res.material.specularMap = material.specularMap;
+		res.material = material;
 		res.material.normalMap = material.normalMap;
 		res.transform = transform;
 		mDevice.RunImmediateCommands([this, &stagingVerts, &stagingIdxs, &res](CommandBuffer& cmds)

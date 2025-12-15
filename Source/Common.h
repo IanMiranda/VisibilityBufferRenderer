@@ -9,6 +9,7 @@
 
 #include <GLFW/glfw3.h>
 #include <vk_mem_alloc.h>
+#include <glm/gtx/hash.hpp>
 #include <glm/glm.hpp>
 #include <fmt/base.h>
 #include <fmt/std.h>
@@ -34,15 +35,7 @@ namespace im
 		glm::vec3 tangent;
 		glm::vec3 bitangent;
 
-		bool operator==(const Vertex& other) const
-		{
-			return position == other.position
-				&& color == other.color
-				&& uv == other.uv
-				&& normal == other.normal
-				&& tangent == other.tangent
-				&& bitangent == other.bitangent;
-		}
+		bool operator<=>(const Vertex& other) const = default;
 
 		static std::vector<VkVertexInputAttributeDescription> GetInputAttributes();
 	};
@@ -55,9 +48,12 @@ namespace im
 	struct ObjectData
 	{
 		glm::mat4 model;
-		uint32_t diffuseMapHandle;
-		uint32_t specularMapHandle;
-		uint32_t normalMapHandle;
+		uint32_t albedoMapIndex;
+		uint32_t metallicMapIndex;
+		uint32_t roughnessMapIndex;
+		uint32_t normalMapIndex;
+		uint32_t aoMapIndex;
+		uint32_t emissiveMapIndex;
 	};
 
 	struct GlobalPassData
@@ -76,6 +72,11 @@ namespace im
 	{
 		glm::mat4 view;
 		glm::mat4 viewProj;
+
+		GeomPassData(const glm::mat4& view, const glm::mat4 proj)
+			: view(view), viewProj(proj* view)
+		{
+		}
 	};
 
 	struct LightingPassData
@@ -94,7 +95,8 @@ namespace im
 		
 		CubemapData(const glm::mat4& view, const glm::mat4& proj)
 			: viewProjInverse(glm::inverse(proj * glm::mat4(glm::mat3(view)))) // Remove translations
-		{}
+		{
+		}
 	};
 
 	class Buffer;
@@ -102,9 +104,12 @@ namespace im
 
 	struct Material
 	{
-		std::shared_ptr<Texture2D> diffuseMap;
-		std::shared_ptr<Texture2D> specularMap;
+		std::shared_ptr<Texture2D> albedoMap;
+		std::shared_ptr<Texture2D> metallicMap;
+		std::shared_ptr<Texture2D> roughnessMap;
 		std::shared_ptr<Texture2D> normalMap;
+		std::shared_ptr<Texture2D> aoMap;
+		std::shared_ptr<Texture2D> emissiveMap;
 	};
 
 	struct Mesh
@@ -123,7 +128,11 @@ namespace std
 	{
 		size_t operator()(const im::Vertex& vertex) const
 		{
-			return 0; // TODO: change for actual hash
+			return ((((hash<glm::vec3>()(vertex.position) ^
+				(hash<glm::vec4>()(vertex.color) << 1)) >> 1) ^
+				(hash<glm::vec2>()(vertex.uv) << 1) >> 1) ^
+				(hash<glm::vec3>()(vertex.normal) << 1) >> 1) ^
+				(hash<glm::vec3>()(vertex.tangent) << 1);
 		}
 	};
 }

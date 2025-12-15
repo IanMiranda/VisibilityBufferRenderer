@@ -46,6 +46,7 @@ struct PbrObjectData
     uint roughnessMapIndex;
     uint normalMapIndex;
     uint aoMapIndex;
+    uint emissiveMapIndex;
 };
 
 [push_constant] ConstantBuffer<PbrObjectData> gObjectData;
@@ -117,7 +118,7 @@ float4 FSMain(VSOutput input) : SV_Target0
 {
     float3 albedo = gTextures[NonUniformResourceIndex(gObjectData.albedoMapIndex)].Sample(gTrilinearColor, input.uv).rgb;
     float metallic = gTextures[NonUniformResourceIndex(gObjectData.metallicMapIndex)].Sample(gTrilinearColor, input.uv).r;
-    float roughness = gTextures[NonUniformResourceIndex(gObjectData.roughnessMapIndex)].Sample(gTrilinearColor, input.uv).r;
+    float roughness = gTextures[NonUniformResourceIndex(gObjectData.roughnessMapIndex)].Sample(gTrilinearColor, input.uv).g;
     float ao = gTextures[NonUniformResourceIndex(gObjectData.aoMapIndex)].Sample(gTrilinearColor, input.uv).r;
 
     float3 N = gTextures[NonUniformResourceIndex(gObjectData.normalMapIndex)].Sample(gTrilinearColor, input.uv).rgb;
@@ -157,7 +158,9 @@ float4 FSMain(VSOutput input) : SV_Target0
     }
 
     float3 ambient = float3(0.03) * albedo * ao;
-    float3 color = ambient + finalColor;
+    float3 emissive = gTextures[NonUniformResourceIndex(gObjectData.emissiveMapIndex)].Sample(gTrilinearColor, input.uv).rgb;
+
+    float3 color = ambient + finalColor + emissive;
     color = color / (color + float3(1.0));
     color = pow(color, float3(1.0 / 2.2));
     return float4(color, 1.0);
