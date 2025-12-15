@@ -4,6 +4,7 @@
 #include <cassert>
 
 #include "CommandBuffer.h"
+#include "CommandPool.h"
 #include "Fence.h"
 #include "Semaphore.h"
 
@@ -23,6 +24,7 @@ namespace im
 		InitPipelineCache();
 
 		mSwapchain = std::make_unique<Swapchain>(*this);
+		mImmediatePool = std::make_unique<CommandPool>(*this, GetGraphicsIndex(), VK_COMMAND_POOL_CREATE_TRANSIENT_BIT);
 		mSamplers = std::make_unique<Samplers>(*this);
 	}
 
@@ -31,6 +33,7 @@ namespace im
 		WaitIdle();
 
 		mSamplers.reset();
+		mImmediatePool.reset();
 		mSwapchain.reset();
 
 		vkDestroyPipelineCache(mDevice, mPipelineCache, nullptr);
@@ -110,6 +113,15 @@ namespace im
 			VK_IMAGE_TILING_OPTIMAL,
 			VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT
 		);
+	}
+
+	void Device::RunImmediateCommands(const std::function<void(CommandBuffer&)>& cmds)
+	{
+		auto cmdBuf = mImmediatePool->Allocate();
+		cmdBuf->Begin();
+		cmds(*cmdBuf);
+		cmdBuf->End();
+		SubmitAndFlush(*cmdBuf);
 	}
 
 	void Device::InitInstance()

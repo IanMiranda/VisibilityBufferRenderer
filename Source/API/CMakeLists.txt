@@ -22,6 +22,8 @@ target_sources(
             Buffer.h
             Buffer.cpp
 
+            Texture.h
+
             Texture2D.h
             Texture2D.cpp
 

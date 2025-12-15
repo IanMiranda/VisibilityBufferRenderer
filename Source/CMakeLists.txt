@@ -12,6 +12,9 @@ target_sources(
             Renderer.h
             Renderer.cpp
 
+            Skybox.h
+            Skybox.cpp
+
             Camera.h
             Camera.cpp
 

@@ -7,6 +7,7 @@
 namespace im
 {
 	class CommandBuffer;
+	class CommandPool;
 	class Fence;
 
 	class Device
@@ -45,6 +46,8 @@ namespace im
 		VkFormat GetSupportedFormat(const std::initializer_list<VkFormat>& formats, VkImageTiling tiling, VkFormatFeatureFlags flags) const;
 		VkFormat GetDepthFormat() const;
 
+		void RunImmediateCommands(const std::function<void(CommandBuffer&)>& cmds);
+
 	private:
 		void InitInstance();
 		void InitSurface();
@@ -81,6 +84,7 @@ namespace im
 		uint32_t mPresentIndex;
 
 		std::unique_ptr<Swapchain> mSwapchain;
+		std::unique_ptr<CommandPool> mImmediatePool;
 		std::unique_ptr<Samplers> mSamplers;
 	};
 }

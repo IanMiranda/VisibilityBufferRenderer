@@ -25,6 +25,7 @@
 #include "BindlessSet.h"
 #include "ShadowPass.h"
 #include "GBuffer.h"
+#include "Skybox.h"
 #include "Light.h"
 
 namespace im
@@ -51,7 +52,6 @@ namespace im
 		void UpdateLightPositions();
 
 		void DrawScene(CommandBuffer& commandBuffer);
-		void DrawSkybox(CommandBuffer& commandBuffer, const glm::mat4& view, const glm::mat4& proj);
 		void DrawShadowMap(CommandBuffer& commandBuffer, const glm::mat4& lightView, const glm::mat4& lightProj);
 		void DrawUI();
 
@@ -67,13 +67,10 @@ namespace im
 		void InitImGui();
 		void InitMeshes();
 		void InitUniformBuffers();
-		void InitCubemap();
 		void InitShadowResources();
 		void InitDescriptors();
 
 		void RecreateSwapchain();
-
-		void RunImmediateCommands(const std::function<void(CommandBuffer&)>& cmds);
 
 		std::unique_ptr<Texture2D> CreateAndStageTexture(
 			const std::filesystem::path& path,
@@ -94,9 +91,7 @@ namespace im
 
 		Device mDevice;
 		BindlessSet mBindlessSet;
-
 		CommandPool mCommandPool;
-		CommandPool mImmediatePool;
 
 		std::unique_ptr<DescriptorSetLayout> mGlobalLayout;
 		std::unique_ptr<PipelineLayout> mPipeLayout;
@@ -126,12 +121,7 @@ namespace im
 		std::shared_ptr<Texture2D> mSpecularMap;
 		std::shared_ptr<Texture2D> mNormalMap;
 
-		std::unique_ptr<TextureCube> mEnvMap;
-		std::unique_ptr<DescriptorSetLayout> mEnvMapSetLayout;
-		std::unique_ptr<PipelineLayout> mEnvMapPipeLayout;
-		std::unique_ptr<GraphicsPipeline> mEnvMapPipe;
-		std::unique_ptr<DescriptorPool> mEnvMapPool;
-		std::unique_ptr<DescriptorSet> mEnvMapSet;
+		std::unique_ptr<Skybox> mSkybox;
 
 		std::unique_ptr<ShadowPass> mShadowPass;
 

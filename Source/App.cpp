@@ -29,7 +29,6 @@ namespace im
 		, mDevice(mWindow.Get())
 		, mBindlessSet(mDevice, gMaxTextures)
 		, mCommandPool(mDevice, mDevice.GetGraphicsIndex(), VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT)
-		, mImmediatePool(mDevice, mDevice.GetGraphicsIndex(), VK_COMMAND_POOL_CREATE_TRANSIENT_BIT)
 	{
 		InitWindow();
 
@@ -40,12 +39,22 @@ namespace im
 		InitImGui();
 		InitMeshes();
 		InitUniformBuffers();
-		InitCubemap();
 		// InitShadowResources();
 
 		mGBuffers.reserve(MaxFramesInFlight);
 		for (int i = 0; i < MaxFramesInFlight; ++i)
 			mGBuffers.emplace_back(std::make_unique<GBuffer>(mDevice));
+
+		mSkybox = std::make_unique<Skybox>(mDevice,
+			std::array<std::filesystem::path, Skybox::Faces>{
+				"./Assets/Textures/Skybox/right.jpg",
+				"./Assets/Textures/Skybox/left.jpg",
+				"./Assets/Textures/Skybox/top.jpg",
+				"./Assets/Textures/Skybox/bottom.jpg",
+				"./Assets/Textures/Skybox/front.jpg",
+				"./Assets/Textures/Skybox/back.jpg",
+			}
+		);
 		
 		InitDescriptors();
 
@@ -211,7 +220,7 @@ namespace im
 			utils::Scissor(swapExtent)
 		);
 
-		DrawSkybox(commandBuffer, view, proj);
+		mSkybox->Draw(commandBuffer, view, proj);
 
 		// Forward pass
 		GlobalPassData passData{};
@@ -272,19 +281,6 @@ namespace im
 			VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
 			VK_ACCESS_2_NONE);
 	}
-
-    void App::DrawSkybox(CommandBuffer& commandBuffer, const glm::mat4& view, const glm::mat4& proj)
-    {
-		const auto swapExtent = mDevice.GetSwapchain().GetExtent();
-
-		CubemapData cubemapData{};
-		cubemapData.viewProjInverse = glm::inverse(proj * glm::mat4(glm::mat3(view))); // Remove translations
-
-		commandBuffer.BindGraphicsPipeline(*mEnvMapPipe);
-		commandBuffer.BindGraphicsDescriptorSets(*mEnvMapPipeLayout, 0, { *mEnvMapSet });
-		commandBuffer.PushConstants(*mEnvMapPipeLayout, VK_SHADER_STAGE_VERTEX_BIT, cubemapData);
-		commandBuffer.Draw(3);
-    }
 
     void App::DrawShadowMap(CommandBuffer& commandBuffer, const glm::mat4& lightView, const glm::mat4& lightProj)
 	{
@@ -396,7 +392,7 @@ namespace im
 		mDepthImage = std::make_unique<Texture2D>(mDevice, mDevice.GetDepthFormat(),
 			VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, swapExtent.width, swapExtent.height, false);
 
-		RunImmediateCommands([this](CommandBuffer& cmds)
+		mDevice.RunImmediateCommands([this](CommandBuffer& cmds)
 		{
 			cmds.Barrier(*mDepthImage,
 				VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
@@ -415,7 +411,6 @@ namespace im
 					VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT),
 				DescriptorSetLayout::Binding(1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT),
 				DescriptorSetLayout::Binding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-				// DescriptorSetLayout::Binding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
 			}
 		);
 
@@ -633,102 +628,6 @@ namespace im
 		}
 	}
 
-	static constexpr size_t gCubemapFaces = 6;
-	std::array<stbi_uc*, gCubemapFaces> LoadCubemap(
-		int& width,
-		int& height,
-		const std::array<std::filesystem::path, gCubemapFaces>& paths
-	)
-	{
-		int channels;
-		std::array<stbi_uc*, gCubemapFaces> cubemapData;
-		for (size_t i = 0; i < gCubemapFaces; ++i)
-		{
-			stbi_uc* data = stbi_load(paths[i].string().c_str(), &width, &height, &channels, STBI_rgb_alpha);
-			if (!data)
-			{
-				fmt::println(stderr, "Failed to load cubemap!");
-			}
-
-			cubemapData[i] = data;
-		}
-		return cubemapData;
-	}
-
-	void App::InitCubemap()
-	{
-		stbi_set_flip_vertically_on_load(false); // Reversing UV coords using vp^-1, so images will be loaded in correct orientation
-
-		const std::array<std::filesystem::path, gCubemapFaces> skyboxPaths
-		{
-			"./Assets/Textures/Skybox/right.jpg",
-			"./Assets/Textures/Skybox/left.jpg",
-			"./Assets/Textures/Skybox/top.jpg",
-			"./Assets/Textures/Skybox/bottom.jpg",
-			"./Assets/Textures/Skybox/front.jpg",
-			"./Assets/Textures/Skybox/back.jpg",
-		};
-
-		int width, height;
-		const auto cubemapData = LoadCubemap(width, height, skyboxPaths);
-
-		constexpr VkDeviceSize bytesPerPixel = 4;
-		const VkDeviceSize faceSize = width * height * bytesPerPixel;
-		const VkDeviceSize size = faceSize * gCubemapFaces;
-
-		Buffer staging(mDevice, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
-		stbi_uc* mappedData = reinterpret_cast<stbi_uc*>(staging.Map());
-		for (size_t i = 0; i < gCubemapFaces; ++i)
-			std::memcpy(mappedData + faceSize * i, cubemapData[i], faceSize);
-
-		staging.Unmap();
-
-		for (const auto& data : cubemapData)
-			stbi_image_free(data);
-
-		mEnvMap = std::make_unique<TextureCube>(mDevice, VK_FORMAT_R8G8B8A8_SRGB,
-			VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, width, height);
-
-		RunImmediateCommands([this, &staging](CommandBuffer& cmds)
-		{
-			cmds.Barrier(*mEnvMap,
-				VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-				VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE,
-				VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT);
-			cmds.Copy(staging, *mEnvMap);
-			cmds.Barrier(*mEnvMap,
-				VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-				VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
-				VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_READ_BIT_KHR);
-		});
-		
-		// Create environment pipeline
-		mEnvMapSetLayout = std::make_unique<DescriptorSetLayout>(
-			mDevice,
-			std::initializer_list{
-				DescriptorSetLayout::Binding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
-			}
-		);
-
-		mEnvMapPipeLayout = std::make_unique<PipelineLayout>(
-			mDevice,
-			std::initializer_list{ std::ref(*mEnvMapSetLayout) },
-			std::initializer_list{ utils::PushConstantRange(VK_SHADER_STAGE_VERTEX_BIT, sizeof(CubemapData)) }
-		);
-
-		Shader shader(mDevice, "./Assets/Shaders/Bin/Cubemap.spv");
-		shader.AddStage(VK_SHADER_STAGE_VERTEX_BIT, "VSMain")
-			.AddStage(VK_SHADER_STAGE_FRAGMENT_BIT, "FSMain");
-		mEnvMapPipe = std::make_unique<GraphicsPipeline>(mDevice, *mEnvMapPipeLayout, shader);
-		mEnvMapPipe->SetVertexInput({}, {})
-			.SetPrimitiveTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
-			.SetRasterizer(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE, VK_POLYGON_MODE_FILL)
-			.SetMsaaSamples(VK_SAMPLE_COUNT_1_BIT)
-			.AddColorAttachment(mDevice.GetSwapchain().GetFormat())
-			.SetDepthAttachment(mDepthImage->GetFormat(), false)
-			.Commit();
-	}
-
 	void App::InitShadowResources()
 	{
 		mShadowPass = std::make_unique<ShadowPass>(mDevice, sizeof(ShadowPassData), VkExtent2D{ 2048, 2048 });
@@ -743,19 +642,11 @@ namespace im
 				{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, MaxFramesInFlight },
 				{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, MaxFramesInFlight },
 				{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2 * MaxFramesInFlight },
-				{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1 }
 			},
 			MaxFramesInFlight + 1
 		);
 
 		mGlobalSets = mGlobalPool->Allocate({ *mGlobalLayout, *mGlobalLayout });
-		mEnvMapSet = mGlobalPool->Allocate(*mEnvMapSetLayout);
-
-		mEnvMapSet->PushWrite(
-			0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-			*mEnvMap, mDevice.GetSamplers().TrilinearColor(),
-			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-			.Update();
 
 		for (int i = 0; i < MaxFramesInFlight; ++i)
 		{
@@ -765,7 +656,7 @@ namespace im
 					1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, *(mLightBuffers[i]))
 				.PushWrite(
 					2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-					*mEnvMap, mDevice.GetSamplers().TrilinearColor(),
+					mSkybox->Get(), mDevice.GetSamplers().TrilinearColor(),
 					VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
 				/*.PushWrite(
 					2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
@@ -804,7 +695,7 @@ namespace im
 				.PushWrite(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, mGBuffers[mFrameIndex]->GetNormalBuffer(), mDevice.GetSamplers().NearestColor(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
 				.PushWrite(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, mGBuffers[mFrameIndex]->GetAlbedoBuffer(), mDevice.GetSamplers().NearestColor(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
 				.PushWrite(4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, mGBuffers[mFrameIndex]->GetSpecularBuffer(), mDevice.GetSamplers().NearestColor(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-				.PushWrite(5, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, *mEnvMap, mDevice.GetSamplers().TrilinearColor(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+				.PushWrite(5, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, mSkybox->Get(), mDevice.GetSamplers().TrilinearColor(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
 				.Update();
 		}
 	}
@@ -826,15 +717,6 @@ namespace im
 		InitDepthBuffer();
 	}
 
-	void App::RunImmediateCommands(const std::function<void(CommandBuffer&)>& cmds)
-	{
-		auto cmdBuf = mImmediatePool.Allocate();
-		cmdBuf->Begin();
-		cmds(*cmdBuf);
-		cmdBuf->End();
-		mDevice.SubmitAndFlush(*cmdBuf);
-	}
-
 	std::unique_ptr<Texture2D> App::CreateAndStageTexture(const std::filesystem::path& path, VkFormat format, bool generateMipmaps)
 	{
 		stbi_set_flip_vertically_on_load(true);
@@ -854,7 +736,7 @@ namespace im
 			format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
 			width, height, generateMipmaps);
 
-		RunImmediateCommands([&resTex, &stagingTex, generateMipmaps](CommandBuffer& cmds)
+		mDevice.RunImmediateCommands([&resTex, &stagingTex, generateMipmaps](CommandBuffer& cmds)
 		{
 			cmds.Barrier(*resTex,
 				VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
@@ -899,7 +781,7 @@ namespace im
 		res.material.specularMap = material.specularMap;
 		res.material.normalMap = material.normalMap;
 		res.transform = transform;
-		RunImmediateCommands([this, &stagingVerts, &stagingIdxs, &res](CommandBuffer& cmds)
+		mDevice.RunImmediateCommands([this, &stagingVerts, &stagingIdxs, &res](CommandBuffer& cmds)
 		{
 			cmds.Copy(stagingVerts, *res.vertexBuffer);
 			cmds.Copy(stagingIdxs, *res.indexBuffer);

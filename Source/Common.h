@@ -91,6 +91,10 @@ namespace im
 	struct CubemapData
 	{
 		glm::mat4 viewProjInverse;
+		
+		CubemapData(const glm::mat4& view, const glm::mat4& proj)
+			: viewProjInverse(glm::inverse(proj * glm::mat4(glm::mat3(view)))) // Remove translations
+		{}
 	};
 
 	class Buffer;
