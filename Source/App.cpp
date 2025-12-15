@@ -47,12 +47,12 @@ namespace im
 
 		mSkybox = std::make_unique<Skybox>(mDevice,
 			std::array<std::filesystem::path, Skybox::Faces>{
-				"./Assets/Textures/Skybox/right.jpg",
-				"./Assets/Textures/Skybox/left.jpg",
-				"./Assets/Textures/Skybox/top.jpg",
-				"./Assets/Textures/Skybox/bottom.jpg",
-				"./Assets/Textures/Skybox/front.jpg",
-				"./Assets/Textures/Skybox/back.jpg",
+				"./Assets/Textures/Stadium/px.png",
+				"./Assets/Textures/Stadium/nx.png",
+				"./Assets/Textures/Stadium/py.png",
+				"./Assets/Textures/Stadium/ny.png",
+				"./Assets/Textures/Stadium/pz.png",
+				"./Assets/Textures/Stadium/nz.png",
 			}
 		);
 		
