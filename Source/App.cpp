@@ -569,7 +569,7 @@ namespace im
 		};
 
 		{
-			auto [duckVertices, duckIndices] = utils::LoadModel("./Assets/Models/Helmet/DamagedHelmet.gltf");
+			auto [duckVertices, duckIndices] = utils::LoadModel("./Assets/Models/Helmet/DamagedHelmet2.gltf");
 			glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -1.0f, 0.0f));
 			model = glm::scale(model, glm::vec3(2.0f));
 			mMeshes.emplace_back(UploadMesh(duckVertices, duckIndices, mMaterial, model));

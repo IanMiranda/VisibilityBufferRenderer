@@ -117,6 +117,11 @@ namespace im::utils
 				const tinygltf::BufferView& normalBufferView = model.bufferViews[normalAccessor.bufferView];
 				const tinygltf::Buffer& normalBuffer = model.buffers[normalBufferView.buffer];
 
+				// Tangent
+				const tinygltf::Accessor& tangentAccessor = model.accessors[prim.attributes.at("TANGENT")];
+				const tinygltf::BufferView& tangentBufferView = model.bufferViews[tangentAccessor.bufferView];
+				const tinygltf::Buffer& tangentBuffer = model.buffers[tangentBufferView.buffer];
+
 				if (hasTexCoord)
 				{
 					texCoordAccessor = &model.accessors[prim.attributes.at("TEXCOORD_0")];
@@ -141,9 +146,9 @@ namespace im::utils
 					const float* normal = reinterpret_cast<const float*>(&normalBuffer.data[normalBufferView.byteOffset + normalAccessor.byteOffset + i * 12]);
 					v.normal = { normal[0], normal[1], normal[2] };
 
-					//const float* tangent = reinterpret_cast<const float*>(&tangentBuffer.data[tangentBufferView.byteOffset + tangentAccessor.byteOffset + i * 16]);
-					v.tangent = { 1.0f, 0.0f, 0.0f };
-					v.bitangent = glm::cross(v.normal, v.tangent) * 1.0f; // https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html
+					const float* tangent = reinterpret_cast<const float*>(&tangentBuffer.data[tangentBufferView.byteOffset + tangentAccessor.byteOffset + i * 16]);
+					v.tangent = { tangent[0], tangent[1], tangent[2] };
+					v.bitangent = glm::cross(v.normal, v.tangent) * tangent[3]; // https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html
 
 					uniqueVertices[v] = static_cast<uint32_t>(vertices.size());
 					vertices.push_back(v);
