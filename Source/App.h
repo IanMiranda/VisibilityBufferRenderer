@@ -52,11 +52,7 @@ namespace im
 		void UpdateLightPositions();
 
 		void DrawScene(CommandBuffer& commandBuffer);
-		void DrawShadowMap(CommandBuffer& commandBuffer, const glm::mat4& lightView, const glm::mat4& lightProj);
 		void DrawUI();
-
-		void GeometryPass(CommandBuffer& commandBuffer, const glm::mat4& view, const glm::mat4& proj);
-		void LightingPass(CommandBuffer& commandBuffer, const glm::mat4& view, const glm::mat4& proj);
 
 	private:
 		void InitWindow();
@@ -67,7 +63,6 @@ namespace im
 		void InitImGui();
 		void InitMeshes();
 		void InitUniformBuffers();
-		void InitShadowResources();
 		void InitDescriptors();
 
 		void RecreateSwapchain();
@@ -95,35 +90,19 @@ namespace im
 
 		std::unique_ptr<Texture2D> mDepthImage;
 
-		std::unique_ptr<DescriptorSetLayout> mGlobalLayout;
-		std::unique_ptr<PipelineLayout> mPipeLayout;
-		std::unique_ptr<GraphicsPipeline> mPipe;
-
-		std::unique_ptr<DescriptorSetLayout> mGeomDescLayout;
-		std::unique_ptr<PipelineLayout> mGeomPipeLayout;
-		std::unique_ptr<GraphicsPipeline> mGeomPipe;
-		std::unique_ptr<DescriptorPool> mDeferredDescPool;
-		std::vector<std::unique_ptr<DescriptorSet>> mGeomSets;
-		std::unique_ptr<DescriptorSetLayout> mLightDescLayout;
-		std::unique_ptr<PipelineLayout> mLightPipeLayout;
-		std::unique_ptr<GraphicsPipeline> mLightPipe;
-		std::vector<std::unique_ptr<DescriptorSet>> mLightSets;
+		std::unique_ptr<DescriptorSetLayout> mMainLayout;
+		std::unique_ptr<PipelineLayout> mMainPipeLayout;
+		std::unique_ptr<GraphicsPipeline> mMainPipe;
 		
-		std::unique_ptr<DescriptorPool> mGlobalPool;
-		std::vector<std::unique_ptr<DescriptorSet>> mGlobalSets;
+		std::unique_ptr<DescriptorPool> mMainDescPool;
+		std::vector<std::unique_ptr<DescriptorSet>> mMainDescSets;
 
-		std::vector<std::unique_ptr<Buffer>> mGlobalPassBuffers;
+		std::vector<std::unique_ptr<Buffer>> mMainPassBuffers;
 		std::vector<std::unique_ptr<Buffer>> mLightBuffers;
-		std::vector<std::unique_ptr<Buffer>> mGeomPassBuffers;
-		std::vector<std::unique_ptr<Buffer>> mLightPassBuffers;
 
 		Material mMaterial;
 
 		std::unique_ptr<Skybox> mSkybox;
-
-		std::unique_ptr<ShadowPass> mShadowPass;
-
-		std::vector<std::unique_ptr<GBuffer>> mGBuffers;
 
 		std::vector<std::unique_ptr<CommandBuffer>> mCommandBuffers;
 		std::vector<std::unique_ptr<Semaphore>> mAcquireSemaphores;

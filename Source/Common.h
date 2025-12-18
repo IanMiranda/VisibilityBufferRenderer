@@ -37,6 +37,7 @@ namespace im
 
 		bool operator<=>(const Vertex& other) const = default;
 
+		static VkVertexInputBindingDescription GetInputBinding(uint32_t binding);
 		static std::vector<VkVertexInputAttributeDescription> GetInputAttributes();
 	};
 
@@ -56,7 +57,7 @@ namespace im
 		uint32_t emissiveMapIndex;
 	};
 
-	struct GlobalPassData
+	struct MainPassData
 	{
 		glm::mat4 view;
 		glm::mat4 viewProj;

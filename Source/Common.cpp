@@ -4,6 +4,11 @@
 
 namespace im
 {
+	VkVertexInputBindingDescription Vertex::GetInputBinding(uint32_t binding)
+	{
+		return utils::InputBinding(binding, VK_VERTEX_INPUT_RATE_VERTEX, sizeof(Vertex));
+	}
+
 	std::vector<VkVertexInputAttributeDescription> Vertex::GetInputAttributes()
 	{
 		return {
