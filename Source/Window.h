@@ -20,6 +20,8 @@ namespace im
 
 		bool ShouldClose() const;
 
+		void WaitForNonMinimized();
+
 	private:
 		GLFWwindow* mWindow;
 	};

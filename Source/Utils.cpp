@@ -68,7 +68,7 @@ namespace im::utils
 		return res;
 	}
 
-	std::pair<std::vector<Vertex>, std::vector<uint32_t>> LoadModel(const std::filesystem::path& path)
+	std::pair<std::vector<Vertex>, std::vector<uint32_t>> LoadGltfModel(const std::filesystem::path& path)
 	{
 		tinygltf::Model model;
 		tinygltf::TinyGLTF loader;
@@ -87,7 +87,7 @@ namespace im::utils
 
 		if (!res)
 		{
-			fmt::println("Failed to load model from path {}!", path);
+			fmt::println(stderr, "Failed to load model from path {}!", path);
 			return {};
 		}
 

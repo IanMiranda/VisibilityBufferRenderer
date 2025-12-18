@@ -6,15 +6,21 @@
 
 namespace im
 {
-	static constexpr glm::vec3 gUpVector(0.0f, 1.0f, 0.0f);
-
-	Camera::Camera(const glm::vec3& position)
-		: position(position)
+	Camera::Camera(
+		float fov, float aspectRatio,
+		float nearDistance, float farDistance,
+		const glm::vec3& position
+	)
+		: fov(fov)
+		, aspectRatio(aspectRatio)
+		, nearDistance(nearDistance)
+		, farDistance(farDistance)
+		, position(position)
 	{
-		Update();
+		UpdateFrontVector();
 	}
 
-	void Camera::Update()
+	void Camera::UpdateFrontVector()
 	{
 		pitch = std::clamp(pitch, -89.9f, 89.9f);
 		yaw = std::fmodf(yaw, 360.0f);
@@ -31,7 +37,17 @@ namespace im
 		return glm::lookAt(
 			position,
 			position + front,
-			glm::vec3(0.0f, 1.0f, 0.0f));
+			WorldUpVector);
+	}
+
+	glm::mat4 Camera::GetProjectionMatrix() const
+	{
+		return glm::perspective(
+			glm::radians(fov),
+			aspectRatio,
+			nearDistance,
+			farDistance
+		);
 	}
 }
 

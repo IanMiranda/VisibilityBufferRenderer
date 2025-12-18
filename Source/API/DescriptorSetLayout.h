@@ -31,9 +31,13 @@ namespace im
 
 		VkDescriptorSetLayout Get() const { return mLayout; }
 
+		const std::unordered_map<VkDescriptorType, uint32_t>& GetBindings() const { return mBindingMap; }
+
 	private:
 		Device& mDevice;
 
 		VkDescriptorSetLayout mLayout{ VK_NULL_HANDLE };
+
+		std::unordered_map<VkDescriptorType, uint32_t> mBindingMap;
 	};
 }

@@ -2,6 +2,7 @@
 
 #include <stb_image.h>
 
+#include "Renderer.h"
 #include "API/Device.h"
 #include "API/Buffer.h"
 #include "API/Shader.h"
@@ -31,7 +32,7 @@ namespace im
 		return cubemapData;
 	}
 
-	Skybox::Skybox(Device& device, const std::array<std::filesystem::path, Faces>& skyboxPaths)
+	Skybox::Skybox(Renderer& renderer, const std::array<std::filesystem::path, Faces>& skyboxPaths)
 	{
 		stbi_set_flip_vertically_on_load(false); // Reversing UV coords using vp^-1, so images will be loaded in correct orientation
 
@@ -42,7 +43,7 @@ namespace im
 		const VkDeviceSize faceSize = width * height * bytesPerPixel;
 		const VkDeviceSize size = faceSize * Faces;
 
-		Buffer staging(device, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
+		Buffer staging(renderer.GetDevice(), size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
 		stbi_uc* mappedData = reinterpret_cast<stbi_uc*>(staging.Map());
 		for (size_t i = 0; i < Skybox::Faces; ++i)
 			std::memcpy(mappedData + faceSize * i, cubemapData[i], faceSize);
@@ -52,10 +53,10 @@ namespace im
 		for (const auto& data : cubemapData)
 			stbi_image_free(data);
 
-		mEnvMap = std::make_unique<TextureCube>(device, VK_FORMAT_R8G8B8A8_SRGB,
+		mEnvMap = std::make_unique<TextureCube>(renderer.GetDevice(), VK_FORMAT_R8G8B8A8_SRGB,
 			VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, width, height);
 
-		device.RunImmediateCommands([this, &staging](CommandBuffer& cmds)
+		renderer.GetDevice().RunImmediateCommands([this, &staging](CommandBuffer& cmds)
 			{
 				cmds.Barrier(*mEnvMap,
 					VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
@@ -70,47 +71,42 @@ namespace im
 
 		// Create environment pipeline
 		mEnvMapSetLayout = std::make_unique<DescriptorSetLayout>(
-			device,
+			renderer.GetDevice(),
 			std::initializer_list{
 				DescriptorSetLayout::Binding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
 			}
 		);
 
-		mEnvMapPool = std::make_unique<DescriptorPool>(
-			device,
-			std::initializer_list<VkDescriptorPoolSize>{
-				{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1 }
-			}, 1
-		);
-
 		mEnvMapPipeLayout = std::make_unique<PipelineLayout>(
-			device,
+			renderer.GetDevice(),
 			std::initializer_list{ std::ref(*mEnvMapSetLayout) },
 			std::initializer_list{ utils::PushConstantRange(VK_SHADER_STAGE_VERTEX_BIT, sizeof(CubemapData)) }
 		);
 
-		Shader shader(device, "./Assets/Shaders/Bin/Cubemap.spv");
+		Shader shader(renderer.GetDevice(), "./Assets/Shaders/Bin/Cubemap.spv");
 		shader.AddStage(VK_SHADER_STAGE_VERTEX_BIT, "VSMain")
 			.AddStage(VK_SHADER_STAGE_FRAGMENT_BIT, "FSMain");
-		mEnvMapPipe = std::make_unique<GraphicsPipeline>(device, *mEnvMapPipeLayout, shader);
-		mEnvMapPipe->SetVertexInput({}, {})
+		mEnvMapPipe = std::make_unique<GraphicsPipeline>(renderer.GetDevice(), *mEnvMapPipeLayout, shader);
+		mEnvMapPipe->
+			SetVertexInput({}, {})
 			.SetPrimitiveTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
 			.SetRasterizer(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE, VK_POLYGON_MODE_FILL)
 			.SetMsaaSamples(VK_SAMPLE_COUNT_1_BIT)
-			.AddColorAttachment(device.GetSwapchain().GetFormat())
-			.SetDepthAttachment(device.GetDepthFormat(), false)
+			.AddColorAttachment(renderer.GetDevice().GetSwapchain().GetFormat())
+			.SetDepthAttachment(renderer.GetDevice().GetDepthFormat(), false)
 			.Commit();
 
-		mEnvMapSet = mEnvMapPool->Allocate(*mEnvMapSetLayout);
+		mEnvMapSet = renderer.GetDescriptorSetAllocator().Allocate(*mEnvMapSetLayout);
 
-		mEnvMapSet->PushWrite(
-			0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-			*mEnvMap, device.GetSamplers().TrilinearColor(),
-			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+		mEnvMapSet->
+			PushWrite(
+				0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+				*mEnvMap, renderer.GetDevice().GetSamplers().TrilinearColor(),
+				VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
 			.Update();
 	}
 
-	void Skybox::Draw(CommandBuffer& cmds, const glm::mat4& view, const glm::mat4& proj)
+	void Skybox::Draw(CommandBuffer& cmds, const glm::mat4& view, const glm::mat4& proj) const
 	{
 		cmds.BindGraphicsPipeline(*mEnvMapPipe);
 		cmds.BindGraphicsDescriptorSets(*mEnvMapPipeLayout, 0, { *mEnvMapSet });

@@ -11,7 +11,7 @@
 
 namespace im
 {
-	class Device;
+	class Renderer;
 	class CommandBuffer;
 
 	class Skybox
@@ -20,18 +20,18 @@ namespace im
 		static constexpr uint32_t Faces = 6;
 
 	public:
-		Skybox(Device& device, const std::array<std::filesystem::path, Faces>& skyboxPaths);
+		Skybox(Renderer& renderer, const std::array<std::filesystem::path, Faces>& skyboxPaths);
 		
 		TextureCube& Get() { return *mEnvMap; }
+		const TextureCube& Get() const { return *mEnvMap; }
 
-		void Draw(CommandBuffer& cmds, const glm::mat4& view, const glm::mat4& proj);
+		void Draw(CommandBuffer& cmds, const glm::mat4& view, const glm::mat4& proj) const;
 
 	private:
 		std::unique_ptr<TextureCube> mEnvMap;
 		std::unique_ptr<DescriptorSetLayout> mEnvMapSetLayout;
 		std::unique_ptr<PipelineLayout> mEnvMapPipeLayout;
 		std::unique_ptr<GraphicsPipeline> mEnvMapPipe;
-		std::unique_ptr<DescriptorPool> mEnvMapPool;
 		std::unique_ptr<DescriptorSet> mEnvMapSet;
 	};
 }

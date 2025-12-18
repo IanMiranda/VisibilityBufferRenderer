@@ -23,4 +23,16 @@ namespace im
 	{
 		return glfwWindowShouldClose(mWindow) == GLFW_TRUE;
 	}
+
+	void Window::WaitForNonMinimized()
+	{
+		int width = 0;
+		int height = 0;
+		glfwGetFramebufferSize(mWindow, &width, &height);
+		while (width == 0 || height == 0)
+		{
+			glfwGetFramebufferSize(mWindow, &width, &height);
+			glfwWaitEvents();
+		}
+	}
 }

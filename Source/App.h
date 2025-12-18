@@ -26,10 +26,13 @@
 #include "ShadowPass.h"
 #include "GBuffer.h"
 #include "Skybox.h"
+#include "Renderer.h"
 #include "Light.h"
 
 namespace im
 {
+	class Renderer;
+
 	class App
 	{
 	public:
@@ -51,21 +54,12 @@ namespace im
 	private:
 		void UpdateLightPositions();
 
-		void DrawScene(CommandBuffer& commandBuffer);
+		void DrawScene();
 		void DrawUI();
 
 	private:
 		void InitWindow();
-		void InitDepthBuffer();
-		void InitPipeline();
-		void InitCommandBuffers();
-		void InitSyncPrimitives();
-		void InitImGui();
 		void InitMeshes();
-		void InitUniformBuffers();
-		void InitDescriptors();
-
-		void RecreateSwapchain();
 
 		std::unique_ptr<Texture2D> CreateAndStageTexture(
 			const std::filesystem::path& path,
@@ -80,37 +74,12 @@ namespace im
 		);
 
 	private:
-		static constexpr int MaxFramesInFlight = 2;
-
 		Window mWindow;
-
-		Device mDevice;
-		BindlessSet mBindlessSet;
-		CommandPool mCommandPool;
-
-		std::unique_ptr<Texture2D> mDepthImage;
-
-		std::unique_ptr<DescriptorSetLayout> mMainLayout;
-		std::unique_ptr<PipelineLayout> mMainPipeLayout;
-		std::unique_ptr<GraphicsPipeline> mMainPipe;
-		
-		std::unique_ptr<DescriptorPool> mMainDescPool;
-		std::vector<std::unique_ptr<DescriptorSet>> mMainDescSets;
-
-		std::vector<std::unique_ptr<Buffer>> mMainPassBuffers;
-		std::vector<std::unique_ptr<Buffer>> mLightBuffers;
+		Renderer mRenderer;
 
 		Material mMaterial;
 
 		std::unique_ptr<Skybox> mSkybox;
-
-		std::vector<std::unique_ptr<CommandBuffer>> mCommandBuffers;
-		std::vector<std::unique_ptr<Semaphore>> mAcquireSemaphores;
-		std::vector<std::unique_ptr<Semaphore>> mRenderSemaphores;
-		std::vector<std::unique_ptr<Fence>> mRenderFences;
-		uint32_t mFrameIndex{ 0 };
-		uint32_t mSemaphoreIndex{ 0 };
-		bool mFramebufferResized{ false };
 
 		Camera mCamera;
 		std::vector<Mesh> mMeshes;

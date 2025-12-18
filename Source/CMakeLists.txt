@@ -34,6 +34,9 @@ target_sources(
 
             BindlessSet.h
             BindlessSet.cpp
+
+            DescriptorSetAllocator.h
+            DescriptorSetAllocator.cpp
 )
 
 add_subdirectory(API)

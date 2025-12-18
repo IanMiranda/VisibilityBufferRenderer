@@ -9,36 +9,30 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <stb_image.h>
-// #include <ktx.h>
 #include <imgui.h>
-#include <backends/imgui_impl_vulkan.h>
-#include <backends/imgui_impl_glfw.h>
 
 #include "Utils.h"
+#include "Renderer.h"
 
 namespace im
 {
-	static constexpr uint32_t gMaxTextures = 512;
 	static constexpr uint32_t gDefaultWindowWidth = 1280;
 	static constexpr uint32_t gDefaultWindowHeight = 720;
 
 	App::App()
 		: mWindow(gDefaultWindowWidth, gDefaultWindowHeight, "Vulkan App")
-		, mDevice(mWindow.Get())
-		, mBindlessSet(mDevice, gMaxTextures)
-		, mCommandPool(mDevice, mDevice.GetGraphicsIndex(), VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT)
+		, mRenderer(mWindow)
+		, mCamera(
+			75,
+			static_cast<float>(mRenderer.mDevice.GetSwapchain().GetExtent().width) / mRenderer.mDevice.GetSwapchain().GetExtent().height,
+			0.1f, 100.0f
+		)
 	{
 		InitWindow();
-
-		InitDepthBuffer();
-		InitImGui();
-		InitSyncPrimitives();
-		InitCommandBuffers();
-		InitPipeline();
 		InitMeshes();
-		InitUniformBuffers();
 
-		mSkybox = std::make_unique<Skybox>(mDevice,
+		mSkybox = std::make_unique<Skybox>(
+			mRenderer,
 			std::array<std::filesystem::path, Skybox::Faces>{
 				"./Assets/Textures/Stadium/px.png",
 				"./Assets/Textures/Stadium/nx.png",
@@ -49,23 +43,18 @@ namespace im
 			}
 		);
 		
-		InitDescriptors();
-
 		srand(time(nullptr));
 		mPointLights.resize(8);
 	}
 
 	App::~App()
 	{
-		mDevice.WaitIdle();
-
-		ImGui_ImplVulkan_Shutdown();
-		ImGui_ImplGlfw_Shutdown();
-		ImGui::DestroyContext();
 	}
 
 	void App::Run()
 	{
+		mRenderer.SetSkybox(*mSkybox);
+
 		float lastTime = glfwGetTime();
 		float fpsLast = glfwGetTime();
 		int frames = 0;
@@ -77,6 +66,7 @@ namespace im
 
 			Update(deltaTime);
 			Render();
+
 			++frames;
 			if (glfwGetTime() - fpsLast >= 1.0)
 			{
@@ -109,60 +99,19 @@ namespace im
 		else if (glfwGetKey(mWindow.Get(), GLFW_KEY_D) == GLFW_PRESS)
 			mCamera.position += right * deltaTime * moveFactor;
 
-		mCamera.Update();
+		mCamera.UpdateFrontVector();
 
 		UpdateLightPositions();
 	}
 
 	void App::Render()
 	{
-		Swapchain& swapchain = mDevice.GetSwapchain();
+		if (!mRenderer.BeginFrame()) return;
+		mRenderer.BeginScene(mCamera, mPointLights);
 
-		mRenderFences[mFrameIndex]->Wait();
+		DrawScene();
 
-		auto [res, imageIndex] = swapchain.AcquireNextImage(*mAcquireSemaphores[mSemaphoreIndex]);
-		if (res == VK_ERROR_OUT_OF_DATE_KHR)
-		{
-			RecreateSwapchain();
-			return;
-		}
-		else
-		{
-			VK_CHECK(res);
-		}
-
-		mRenderFences[mFrameIndex]->Reset();
-
-		ImGui_ImplVulkan_NewFrame();
-		ImGui_ImplGlfw_NewFrame();
-		ImGui::NewFrame();
-
-		mCommandBuffers[mFrameIndex]->Begin();
-
-		DrawScene(*mCommandBuffers[mFrameIndex]);
-		
-		mCommandBuffers[mFrameIndex]->End();
-
-		mDevice.Submit(*(mCommandBuffers[mFrameIndex]),
-			mAcquireSemaphores[mSemaphoreIndex].get(), VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-			mRenderSemaphores[imageIndex].get(), mRenderFences[mFrameIndex].get());
-
-		ImGui::UpdatePlatformWindows();
-		ImGui::RenderPlatformWindowsDefault();
-
-		res = swapchain.Present(*mRenderSemaphores[imageIndex]);
-		if (res == VK_ERROR_OUT_OF_DATE_KHR || res == VK_SUBOPTIMAL_KHR || mFramebufferResized)
-		{
-			mFramebufferResized = false;
-			RecreateSwapchain();
-		}
-		else
-		{
-			VK_CHECK(res);
-		}
-
-		mSemaphoreIndex = (mSemaphoreIndex + 1) % mAcquireSemaphores.size();
-		mFrameIndex = (mFrameIndex + 1) % MaxFramesInFlight;
+		mRenderer.EndFrame();
 	}
 
     void App::UpdateLightPositions()
@@ -176,81 +125,13 @@ namespace im
 		}
     }
 
-    void App::DrawScene(CommandBuffer& commandBuffer)
+    void App::DrawScene()
     {
-		const Swapchain& swapchain = mDevice.GetSwapchain();
-		const auto swapExtent = swapchain.GetExtent();
-
-		commandBuffer.BarrierSwapchainImage(
-			swapchain.GetImages()[swapchain.GetImageIndex()],
-			VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-			VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-			VK_ACCESS_2_NONE,
-			VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-			VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT);
-
-		commandBuffer.SetViewportAndScissor(swapExtent);
-
-		glm::mat4 view = mCamera.GetViewMatrix();
-		glm::mat4 proj = glm::perspective(glm::radians(75.0f), static_cast<float>(swapExtent.width) / swapExtent.height, 0.1f, 100.0f);
-
-		commandBuffer.BeginRendering(
-			{ utils::ColorAttachment(swapchain.GetViews()[swapchain.GetImageIndex()], VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE) },
-			utils::DepthAttachment(mDepthImage->GetView(), VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_DONT_CARE),
-			utils::Scissor(swapExtent)
-		);
-
-		mSkybox->Draw(commandBuffer, view, proj);
-
-		// Forward pass
-		MainPassData passData{};
-		passData.view = view;
-		passData.viewProj = proj * view;
-		passData.viewInverse = glm::inverse(view);
-		passData.lightCount = mPointLights.size();
-		mMainPassBuffers[mFrameIndex]->SetData(passData);
-
-		LightData lightData{};
-		for (int i = 0; i < mPointLights.size(); ++i)
-			lightData.lights[i] = { glm::vec3(view * glm::vec4(mPointLights[i].position, 1.0f)), 0, mPointLights[i].i };
-		mLightBuffers[mFrameIndex]->SetData(lightData);
-
-		commandBuffer.BindGraphicsPipeline(*mMainPipe);
-		commandBuffer.BindGraphicsDescriptorSets(*mMainPipeLayout, 0, { *(mMainDescSets[mFrameIndex]), mBindlessSet.Get() });
-
-		ObjectData pushConsts{};
+		mRenderer.DrawSkybox(*mSkybox);
 		for (const auto& mesh : mMeshes)
-		{
-			pushConsts.model = mesh.transform;
-			pushConsts.albedoMapIndex = mBindlessSet.GetOrCreateId(mesh.material.albedoMap);
-			pushConsts.metallicMapIndex = mBindlessSet.GetOrCreateId(mesh.material.metallicMap);
-			pushConsts.roughnessMapIndex = mBindlessSet.GetOrCreateId(mesh.material.roughnessMap);
-			pushConsts.normalMapIndex = mBindlessSet.GetOrCreateId(mesh.material.normalMap);
-			pushConsts.aoMapIndex = mBindlessSet.GetOrCreateId(mesh.material.aoMap);
-			pushConsts.emissiveMapIndex = mBindlessSet.GetOrCreateId(mesh.material.emissiveMap);
-
-			commandBuffer.PushConstants(*mMainPipeLayout,
-				VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-				pushConsts
-			);
-			commandBuffer.BindVertexBuffer(*mesh.vertexBuffer);
-			commandBuffer.BindIndexBuffer(*mesh.indexBuffer);
-			commandBuffer.DrawIndexed(mesh.indexCount);
-		}
+			mRenderer.DrawMesh(mesh);
 
 		DrawUI();
-		ImGui::Render();
-		ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer.Get());
-
-		commandBuffer.EndRendering();
-		
-		commandBuffer.BarrierSwapchainImage(
-			swapchain.GetImages()[swapchain.GetImageIndex()],
-			VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-			VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-			VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-			VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
-			VK_ACCESS_2_NONE);
 	}
 
     void App::DrawUI()
@@ -280,116 +161,6 @@ namespace im
 		glfwSetInputMode(mWindow.Get(), GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 	}
 
-	void App::InitDepthBuffer()
-	{
-		const auto swapExtent = mDevice.GetSwapchain().GetExtent();
-		mDepthImage = std::make_unique<Texture2D>(mDevice, mDevice.GetDepthFormat(),
-			VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, swapExtent.width, swapExtent.height, false);
-
-		mDevice.RunImmediateCommands([this](CommandBuffer& cmds)
-		{
-			cmds.Barrier(*mDepthImage,
-				VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-				VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE,
-				VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
-				VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT);
-		});
-	}
-
-	void App::InitPipeline()
-	{
-		mMainLayout = std::make_unique<DescriptorSetLayout>(
-			mDevice,
-			std::initializer_list{
-				DescriptorSetLayout::Binding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-					VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT),
-				DescriptorSetLayout::Binding(1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT),
-				DescriptorSetLayout::Binding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-			}
-		);
-
-		mMainPipeLayout = std::make_unique<PipelineLayout>(
-			mDevice,
-			std::initializer_list{
-				std::ref(*mMainLayout),
-				std::ref(mBindlessSet.GetSetLayout())
-			},
-			std::initializer_list{
-				utils::PushConstantRange(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(ObjectData))
-			}
-		);
-
-		Shader shader(mDevice, "./Assets/Shaders/Bin/PBR.spv");
-		shader.AddStage(VK_SHADER_STAGE_VERTEX_BIT, "VSMain")
-			.AddStage(VK_SHADER_STAGE_FRAGMENT_BIT, "FSMain");
-		mMainPipe = std::make_unique<GraphicsPipeline>(mDevice, *mMainPipeLayout, shader);
-		mMainPipe->
-			SetVertexInput({ Vertex::GetInputBinding(0) }, Vertex::GetInputAttributes())
-			.SetPrimitiveTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
-			.SetRasterizer(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE, VK_POLYGON_MODE_FILL)
-			.SetMsaaSamples(VK_SAMPLE_COUNT_1_BIT)
-			.AddColorAttachment(mDevice.GetSwapchain().GetFormat())
-			.SetDepthAttachment(mDepthImage->GetFormat(), true)
-			.Commit();
-	}
-
-	void App::InitCommandBuffers()
-	{
-		mCommandBuffers = mCommandPool.Allocate(MaxFramesInFlight);
-	}
-
-	void App::InitSyncPrimitives()
-	{
-		mAcquireSemaphores.resize(mDevice.GetSwapchain().GetViews().size());
-		mRenderSemaphores.resize(mDevice.GetSwapchain().GetViews().size());
-		mRenderFences.resize(MaxFramesInFlight);
-
-		for (size_t i = 0; i < mDevice.GetSwapchain().GetViews().size(); ++i)
-		{
-			mAcquireSemaphores[i] = std::make_unique<Semaphore>(mDevice);
-			mRenderSemaphores[i] = std::make_unique<Semaphore>(mDevice);
-		}
-
-		for (size_t i = 0; i < MaxFramesInFlight; ++i)
-			mRenderFences[i] = std::make_unique<Fence>(mDevice, true);
-	}
-
-	void App::InitImGui()
-	{
-		IMGUI_CHECKVERSION();
-		ImGui::CreateContext();
-
-		ImGuiIO& io = ImGui::GetIO();
-		io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-		io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-		io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
-
-		ImGui_ImplGlfw_InitForVulkan(mWindow.Get(), true);
-
-		const auto format = mDevice.GetSwapchain().GetFormat();
-		VkPipelineRenderingCreateInfo renderingInfo{ VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO };
-		renderingInfo.colorAttachmentCount = 1;
-		renderingInfo.pColorAttachmentFormats = &format;
-		renderingInfo.depthAttachmentFormat = mDevice.GetDepthFormat();
-
-		ImGui_ImplVulkan_InitInfo imguiVulkanInfo{};
-		imguiVulkanInfo.ApiVersion = VK_API_VERSION_1_4;
-		imguiVulkanInfo.CheckVkResultFn = [](VkResult err) { VK_CHECK(err); };
-		imguiVulkanInfo.DescriptorPoolSize = 128;
-		imguiVulkanInfo.Device = mDevice.Get();
-		imguiVulkanInfo.ImageCount = mDevice.GetSwapchain().GetViews().size();
-		imguiVulkanInfo.MinImageCount = MaxFramesInFlight;
-		imguiVulkanInfo.Instance = mDevice.GetInstance();
-		imguiVulkanInfo.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
-		imguiVulkanInfo.PhysicalDevice = mDevice.GetGpu();
-		imguiVulkanInfo.UseDynamicRendering = true;
-		imguiVulkanInfo.PipelineRenderingCreateInfo = renderingInfo;
-		imguiVulkanInfo.Queue = mDevice.GetGraphicsQueue();
-		imguiVulkanInfo.QueueFamily = mDevice.GetGraphicsIndex();
-
-		ImGui_ImplVulkan_Init(&imguiVulkanInfo);
-	}
-
 	void App::InitMeshes()
 	{
 		// Load texture image
@@ -403,7 +174,7 @@ namespace im
 		};
 
 		{
-			auto [duckVertices, duckIndices] = utils::LoadModel("./Assets/Models/Helmet/DamagedHelmet2.gltf");
+			const auto [duckVertices, duckIndices] = utils::LoadGltfModel("./Assets/Models/Helmet/DamagedHelmet2.gltf");
 			glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f));
 			model = glm::rotate(model, glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
 			model = glm::scale(model, glm::vec3(2.0f));
@@ -431,68 +202,6 @@ namespace im
 		}*/
 	}
 
-	void App::InitUniformBuffers()
-	{
-		mMainPassBuffers.reserve(MaxFramesInFlight);
-		mLightBuffers.reserve(MaxFramesInFlight);
-		for (int i = 0; i < MaxFramesInFlight; ++i)
-		{
-			mMainPassBuffers.emplace_back(
-				std::make_unique<Buffer>(mDevice, sizeof(MainPassData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-					VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT)
-			);
-			mLightBuffers.emplace_back(
-				std::make_unique<Buffer>(mDevice, sizeof(LightData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-					VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT)
-			);
-		}
-	}
-
-	void App::InitDescriptors()
-	{
-		mMainDescPool = std::make_unique<DescriptorPool>(
-			mDevice,
-			std::initializer_list<VkDescriptorPoolSize>
-			{
-				{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, MaxFramesInFlight },
-				{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, MaxFramesInFlight },
-				{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2 * MaxFramesInFlight },
-			},
-			MaxFramesInFlight
-		);
-
-		mMainDescSets = mMainDescPool->Allocate({ *mMainLayout, *mMainLayout });
-
-		for (int i = 0; i < MaxFramesInFlight; ++i)
-		{
-			mMainDescSets[i]->
-				PushWrite(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, *(mMainPassBuffers[i]))
-				.PushWrite(1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, *(mLightBuffers[i]))
-				.PushWrite(
-					2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-					mSkybox->Get(), mDevice.GetSamplers().TrilinearColor(),
-					VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-				.Update();
-		}
-	}
-
-	void App::RecreateSwapchain()
-	{
-		int width = 0;
-		int height = 0;
-		glfwGetFramebufferSize(mWindow.Get(), &width, &height);
-		while (width == 0 || height == 0)
-		{
-			glfwGetFramebufferSize(mWindow.Get(), &width, &height);
-			glfwWaitEvents();
-		}
-
-		mDevice.WaitIdle();
-
-		mDevice.GetSwapchain().Recreate();
-		InitDepthBuffer();
-	}
-
 	std::unique_ptr<Texture2D> App::CreateAndStageTexture(const std::filesystem::path& path, VkFormat format, bool generateMipmaps)
 	{
 		stbi_set_flip_vertically_on_load(true);
@@ -506,13 +215,13 @@ namespace im
 		}
 
 		VkDeviceSize size = width * height * 4;
-		Buffer stagingTex(mDevice, size, data);
+		Buffer stagingTex(mRenderer.GetDevice(), size, data);
 
-		auto resTex = std::make_unique<Texture2D>(mDevice,
+		auto resTex = std::make_unique<Texture2D>(mRenderer.GetDevice(),
 			format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
 			width, height, generateMipmaps);
 
-		mDevice.RunImmediateCommands([&resTex, &stagingTex, generateMipmaps](CommandBuffer& cmds)
+		mRenderer.GetDevice().RunImmediateCommands([&resTex, &stagingTex, generateMipmaps](CommandBuffer& cmds)
 		{
 			cmds.Barrier(*resTex,
 				VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
@@ -544,19 +253,18 @@ namespace im
 		const glm::mat4& transform)
 	{
 		Mesh res;
-		Buffer stagingVerts(mDevice, vertices.size() * sizeof(vertices[0]), vertices.data());
-		Buffer stagingIdxs(mDevice, indices.size() * sizeof(indices[0]), indices.data());
+		Buffer stagingVerts(mRenderer.GetDevice(), vertices.size() * sizeof(vertices[0]), vertices.data());
+		Buffer stagingIdxs(mRenderer.GetDevice(), indices.size() * sizeof(indices[0]), indices.data());
 		res.vertexBuffer = std::make_unique<Buffer>(
-			mDevice, stagingVerts.GetSize(),
+			mRenderer.GetDevice(), stagingVerts.GetSize(),
 			VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, 0);
 		res.indexBuffer = std::make_unique<Buffer>(
-			mDevice, stagingIdxs.GetSize(),
+			mRenderer.GetDevice(), stagingIdxs.GetSize(),
 			VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, 0);
 		res.indexCount = indices.size();
 		res.material = material;
-		res.material.normalMap = material.normalMap;
 		res.transform = transform;
-		mDevice.RunImmediateCommands([this, &stagingVerts, &stagingIdxs, &res](CommandBuffer& cmds)
+		mRenderer.GetDevice().RunImmediateCommands([this, &stagingVerts, &stagingIdxs, &res](CommandBuffer& cmds)
 		{
 			cmds.Copy(stagingVerts, *res.vertexBuffer);
 			cmds.Copy(stagingIdxs, *res.indexBuffer);
@@ -567,7 +275,7 @@ namespace im
 	void App::FramebufferSizeCallback(GLFWwindow* window, int width, int height)
 	{
 		App* app = reinterpret_cast<App*>(glfwGetWindowUserPointer(window));
-		app->mFramebufferResized = true;
+		app->mRenderer.mFramebufferResized = true;
 	}
 
 	static bool cursorEnabled = false;

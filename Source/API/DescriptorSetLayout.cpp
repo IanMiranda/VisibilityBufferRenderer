@@ -12,6 +12,11 @@ namespace im
 		setLayoutInfo.pBindings = bindings.begin();
 
 		VK_CHECK(vkCreateDescriptorSetLayout(mDevice.Get(), &setLayoutInfo, nullptr, &mLayout));
+
+		for (const auto& binding : bindings)
+		{
+			mBindingMap[binding.descriptorType] += binding.descriptorCount;
+		}
 	}
 
     DescriptorSetLayout::DescriptorSetLayout(
@@ -31,6 +36,11 @@ namespace im
 		setLayoutInfo.pBindings = bindings.begin();
 
 		VK_CHECK(vkCreateDescriptorSetLayout(mDevice.Get(), &setLayoutInfo, nullptr, &mLayout));
+
+		for (const auto& binding : bindings)
+		{
+			mBindingMap[binding.descriptorType] += binding.descriptorCount;
+		}
     }
 
     DescriptorSetLayout::~DescriptorSetLayout()

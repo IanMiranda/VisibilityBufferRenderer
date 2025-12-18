@@ -7,9 +7,9 @@ VulkanRenderer is a project for me to experiment with graphics programming.
 Simply call ```cmake -B Build .``` from the root directory. This will automatically fetch dependencies. Once CMake has finished the generation phase, run ```cmake --build Build``` to build the project files from the command line.
 
 ## Project background
-- C++17
+- C++23
 - Vulkan 1.4
-- Dependencies: GLFW3, GLM, VulkanMemoryAllocator, tinygltf, DearImGui, ktx
+- Dependencies: GLFW3, GLM, VulkanMemoryAllocator, tinygltf, DearImGui, stb_image
 
 ## Features
 - Blinn-Phong shading
