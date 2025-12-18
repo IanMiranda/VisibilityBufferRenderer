@@ -38,9 +38,6 @@ namespace im
 		void BeginScene(const Camera& camera, std::span<PointLight> pointLights);
 
 		void DrawMesh(const Mesh& mesh);
-		void DrawSkybox(const Skybox& skybox);
-
-		void SetSkybox(const Skybox& skybox);
 
 		Device& GetDevice() { return mDevice; }
 		DescriptorSetAllocator& GetDescriptorSetAllocator() { return mSetAllocator; }
@@ -77,6 +74,8 @@ namespace im
 
 		std::vector<std::unique_ptr<Buffer>> mMainPassBuffers;
 		std::vector<std::unique_ptr<Buffer>> mLightBuffers;
+
+		std::unique_ptr<Skybox> mSkybox;
 
 		std::vector<std::unique_ptr<CommandBuffer>> mCommandBuffers;
 		std::vector<std::unique_ptr<Semaphore>> mAcquireSemaphores;

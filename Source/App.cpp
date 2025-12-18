@@ -30,18 +30,6 @@ namespace im
 	{
 		InitWindow();
 		InitMeshes();
-
-		mSkybox = std::make_unique<Skybox>(
-			mRenderer,
-			std::array<std::filesystem::path, Skybox::Faces>{
-				"./Assets/Textures/Stadium/px.png",
-				"./Assets/Textures/Stadium/nx.png",
-				"./Assets/Textures/Stadium/py.png",
-				"./Assets/Textures/Stadium/ny.png",
-				"./Assets/Textures/Stadium/pz.png",
-				"./Assets/Textures/Stadium/nz.png",
-			}
-		);
 		
 		srand(time(nullptr));
 		mPointLights.resize(8);
@@ -53,8 +41,6 @@ namespace im
 
 	void App::Run()
 	{
-		mRenderer.SetSkybox(*mSkybox);
-
 		float lastTime = glfwGetTime();
 		float fpsLast = glfwGetTime();
 		int frames = 0;
@@ -127,7 +113,6 @@ namespace im
 
     void App::DrawScene()
     {
-		mRenderer.DrawSkybox(*mSkybox);
 		for (const auto& mesh : mMeshes)
 			mRenderer.DrawMesh(mesh);
 

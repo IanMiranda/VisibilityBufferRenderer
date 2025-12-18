@@ -26,6 +26,19 @@ namespace im
 		InitCommandBuffers();
 		InitPipeline();
 		InitUniformBuffers();
+
+		mSkybox = std::make_unique<Skybox>(
+			*this,
+			std::array<std::filesystem::path, Skybox::Faces>{
+				"./Assets/Textures/Stadium/px.png",
+				"./Assets/Textures/Stadium/nx.png",
+				"./Assets/Textures/Stadium/py.png",
+				"./Assets/Textures/Stadium/ny.png",
+				"./Assets/Textures/Stadium/pz.png",
+				"./Assets/Textures/Stadium/nz.png",
+			}
+		);
+
 		InitDescriptors();
 	}
 
@@ -139,6 +152,8 @@ namespace im
 		for (int i = 0; i < pointLights.size(); ++i)
 			lightData.lights[i] = { glm::vec3(view * glm::vec4(pointLights[i].position, 1.0f)), 0, pointLights[i].i };
 		mLightBuffers[mFrameIndex]->SetData(lightData);
+
+		mSkybox->Draw(*mCommandBuffers[mFrameIndex], mCamera.GetViewMatrix(), mCamera.GetProjectionMatrix());
 	}
 
 	void Renderer::DrawMesh(const Mesh& mesh)
@@ -162,26 +177,6 @@ namespace im
 		commandBuffer.BindVertexBuffer(*mesh.vertexBuffer);
 		commandBuffer.BindIndexBuffer(*mesh.indexBuffer);
 		commandBuffer.DrawIndexed(mesh.indexCount);
-	}
-
-	void Renderer::DrawSkybox(const Skybox& skybox)
-	{
-		skybox.Draw(*mCommandBuffers[mFrameIndex], mCamera.GetViewMatrix(), mCamera.GetProjectionMatrix());
-	}
-
-	void Renderer::SetSkybox(const Skybox& skybox)
-	{
-		// TODO: Think of better solution, perhaps add skybox as a material parameter?
-		for (const auto& set : mMainDescSets)
-		{
-			set->
-				PushWrite(
-					2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-					skybox.Get(), mDevice.GetSamplers().TrilinearColor(),
-					VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-				)
-				.Update();
-		}
 	}
 
 	void Renderer::RecreateSwapchain()
@@ -329,6 +324,11 @@ namespace im
 			mMainDescSets[i]->
 				PushWrite(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, *(mMainPassBuffers[i]))
 				.PushWrite(1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, *(mLightBuffers[i]))
+				.PushWrite(
+					2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+					mSkybox->Get(), mDevice.GetSamplers().TrilinearColor(),
+					VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+				)
 				.Update();
 		}
 	}

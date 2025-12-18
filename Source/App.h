@@ -78,9 +78,7 @@ namespace im
 		Renderer mRenderer;
 
 		Material mMaterial;
-
-		std::unique_ptr<Skybox> mSkybox;
-
+		
 		Camera mCamera;
 		std::vector<Mesh> mMeshes;
 
