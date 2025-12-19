@@ -16,11 +16,8 @@
 
 namespace im
 {
-	static constexpr uint32_t gDefaultWindowWidth = 1280;
-	static constexpr uint32_t gDefaultWindowHeight = 720;
-
 	App::App()
-		: mWindow(gDefaultWindowWidth, gDefaultWindowHeight, "Vulkan App")
+		: mWindow("Vulkan App")
 		, mRenderer(mWindow)
 		, mCamera(
 			75,
@@ -29,6 +26,8 @@ namespace im
 		)
 	{
 		InitWindow();
+		mRenderer.InitImGui();
+
 		InitMeshes();
 		
 		srand(time(nullptr));
@@ -92,12 +91,12 @@ namespace im
 
 	void App::Render()
 	{
-		if (!mRenderer.BeginFrame()) return;
+		if (!mRenderer.Begin()) return;
 		mRenderer.BeginScene(mCamera, mPointLights);
 
 		DrawScene();
 
-		mRenderer.EndFrame();
+		mRenderer.End();
 	}
 
     void App::UpdateLightPositions()
@@ -143,7 +142,7 @@ namespace im
 		glfwSetFramebufferSizeCallback(mWindow.Get(), FramebufferSizeCallback);
 		glfwSetCursorPosCallback(mWindow.Get(), MousePositionCallback);
 		glfwSetKeyCallback(mWindow.Get(), KeyCallback);
-		glfwSetInputMode(mWindow.Get(), GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+		mWindow.SetCursorLocked(true);
 	}
 
 	void App::InitMeshes()
@@ -263,15 +262,13 @@ namespace im
 		app->mRenderer.mFramebufferResized = true;
 	}
 
-	static bool cursorEnabled = false;
-
 	void App::MousePositionCallback(GLFWwindow* window, double xpos, double ypos)
 	{
 		static bool firstTouch = true;
 		static double lastX;
 		static double lastY;
 		App* app = reinterpret_cast<App*>(glfwGetWindowUserPointer(window));
-		if (cursorEnabled) return;
+		if (!app->mWindow.IsCursorLocked()) return;
 
 		if (firstTouch)
 		{
@@ -293,16 +290,8 @@ namespace im
     {
 		if (key == GLFW_KEY_K && action == GLFW_PRESS)
 		{
-			if (cursorEnabled)
-			{
-				cursorEnabled = false;
-				glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-			}
-			else
-			{
-				cursorEnabled = true;
-				glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-			}
+			auto* app = reinterpret_cast<App*>(glfwGetWindowUserPointer(window));
+			app->mWindow.SetCursorLocked(!app->mWindow.IsCursorLocked());
 		}
     }
 }

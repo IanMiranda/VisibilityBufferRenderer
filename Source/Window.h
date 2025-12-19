@@ -7,7 +7,11 @@ namespace im
 	class Window
 	{
 	public:
-		Window(uint32_t width, uint32_t height, const char* title);
+		static constexpr uint32_t DefaultWidth{ 1280 };
+		static constexpr uint32_t DefaultHeight{ 720 };
+
+	public:
+		Window(const char* title, uint32_t width = DefaultWidth, uint32_t height = DefaultHeight);
 		~Window();
 
 		Window(Window&& other) noexcept = delete;
@@ -19,10 +23,15 @@ namespace im
 		GLFWwindow* Get() { return mWindow; }
 
 		bool ShouldClose() const;
+		bool IsCursorLocked() const { return mCursorLocked; }
 
 		void WaitForNonMinimized();
 
+		void SetCursorLocked(bool locked);
+
 	private:
 		GLFWwindow* mWindow;
+
+		bool mCursorLocked{ false };
 	};
 }

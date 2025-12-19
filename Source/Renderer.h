@@ -32,8 +32,8 @@ namespace im
 		Renderer(Window& window);
 		~Renderer();
 
-		bool BeginFrame();
-		void EndFrame();
+		bool Begin();
+		void End();
 
 		void BeginScene(const Camera& camera, std::span<PointLight> pointLights);
 
@@ -50,9 +50,9 @@ namespace im
 		void InitPipeline();
 		void InitCommandBuffers();
 		void InitSyncPrimitives();
-		void InitImGui();
 		void InitUniformBuffers();
 		void InitDescriptors();
+		void InitImGui();
 
 	private:
 		static constexpr int MaxFramesInFlight = 2;

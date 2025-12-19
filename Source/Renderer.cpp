@@ -10,18 +10,15 @@
 
 namespace im
 {
-	static constexpr uint32_t gMaxTextures = 512;
-
 	Renderer::Renderer(Window& window)
 		: mWindow(window)
 		, mDevice(mWindow.Get())
-		, mBindlessSet(mDevice, gMaxTextures)
+		, mBindlessSet(mDevice)
 		, mSetAllocator(mDevice)
 		, mCommandPool(mDevice, mDevice.GetGraphicsIndex(), VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT)
 		, mCamera(0.0f, 0.0f, 0.0f, 0.0f)
 	{
 		InitDepthBuffer();
-		InitImGui();
 		InitSyncPrimitives();
 		InitCommandBuffers();
 		InitPipeline();
@@ -51,7 +48,7 @@ namespace im
 		ImGui::DestroyContext();
 	}
 
-	bool Renderer::BeginFrame()
+	bool Renderer::Begin()
 	{
 		Swapchain& swapchain = mDevice.GetSwapchain();
 
@@ -94,7 +91,7 @@ namespace im
 		return true;
 	}
 
-	void Renderer::EndFrame()
+	void Renderer::End()
 	{
 		auto& commandBuffer = *mCommandBuffers[mFrameIndex];
 
@@ -317,7 +314,7 @@ namespace im
 
 	void Renderer::InitDescriptors()
 	{
-		mMainDescSets = mSetAllocator.Allocate({ *mMainLayout, *mMainLayout });
+		mMainDescSets = mSetAllocator.Allocate({ *mMainLayout, *mMainLayout }); // TODO: Convert to vector?
 
 		for (int i = 0; i < MaxFramesInFlight; ++i)
 		{

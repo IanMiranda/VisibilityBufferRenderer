@@ -16,7 +16,10 @@ namespace im
 	class BindlessSet
 	{
 	public:
-		BindlessSet(Device& device, uint32_t maxTextures);
+		static constexpr uint32_t MaxTextures{ 512 };
+
+	public:
+		BindlessSet(Device& device, uint32_t maxTextures = MaxTextures);
 		~BindlessSet();
 
 		DescriptorSetLayout& GetSetLayout() { return mBindlessSetLayout; }
