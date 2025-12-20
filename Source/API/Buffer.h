@@ -10,7 +10,7 @@ namespace im
 	{
 	public:
 		Buffer(Device& device, VkDeviceSize size, VkBufferUsageFlags usage, VmaAllocationCreateFlags allocationFlags);
-		Buffer(Device& device, VkDeviceSize size, const void* data);
+		Buffer(Device& device, VkDeviceSize size, const void* data, VkBufferUsageFlags usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
 		~Buffer();
 
 		Buffer(const Buffer& other) = delete;

@@ -3,6 +3,7 @@
 #include <imgui.h>
 #include <backends/imgui_impl_vulkan.h>
 #include <backends/imgui_impl_glfw.h>
+#include <stb_image.h>
 
 #include "API/Shader.h"
 #include "Utils.h"
@@ -37,6 +38,119 @@ namespace im
 		);
 
 		InitDescriptors();
+
+		stbi_set_flip_vertically_on_load(true);
+		int width, height, channels;
+		float* data = stbi_loadf("./Assets/Textures/stadium_exterior_4k.hdr", &width, &height, &channels, STBI_rgb_alpha);
+		if (!data)
+		{
+			fmt::println(stderr, "Failed to load HDR environment map!");
+			return;
+		}
+
+		mEquirectangularMap = std::make_unique<Texture2D>(mDevice, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, width, height, false);
+		Buffer staging(mDevice, width * height * 4 * sizeof(float), data);
+		mDevice.RunImmediateCommands([&staging, this](CommandBuffer& cmds)
+			{
+				cmds.Barrier(
+					*mEquirectangularMap,
+					VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+					VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, VK_ACCESS_2_NONE,
+					VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT);
+				cmds.Copy(staging, *mEquirectangularMap);
+				cmds.Barrier(
+					*mEquirectangularMap,
+					VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+					VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+					VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_READ_BIT);
+			}
+		);
+
+		stbi_image_free(data);
+
+		std::vector<float> cubeVertices
+		{
+			// back face
+			-1.0f, -1.0f, -1.0f,
+			 1.0f,  1.0f, -1.0f,
+			 1.0f, -1.0f, -1.0f,       
+			 1.0f,  1.0f, -1.0f,
+			-1.0f, -1.0f, -1.0f,
+			-1.0f,  1.0f, -1.0f,
+			// front face
+			-1.0f, -1.0f,  1.0f,
+			 1.0f, -1.0f,  1.0f,
+			 1.0f,  1.0f,  1.0f,
+			 1.0f,  1.0f,  1.0f,
+			-1.0f,  1.0f,  1.0f,
+			-1.0f, -1.0f,  1.0f,
+			// left face
+			-1.0f,  1.0f,  1.0f,
+			-1.0f,  1.0f, -1.0f,
+			-1.0f, -1.0f, -1.0f,
+			-1.0f, -1.0f, -1.0f,
+			-1.0f, -1.0f,  1.0f,
+			-1.0f,  1.0f,  1.0f,
+			// right face
+			 1.0f,  1.0f,  1.0f,
+			 1.0f, -1.0f, -1.0f,
+			 1.0f,  1.0f, -1.0f,    
+			 1.0f, -1.0f, -1.0f,
+			 1.0f,  1.0f,  1.0f,
+			 1.0f, -1.0f,  1.0f,  
+			 // bottom face
+			 -1.0f, -1.0f, -1.0f,
+			  1.0f, -1.0f, -1.0f,
+			  1.0f, -1.0f,  1.0f,
+			  1.0f, -1.0f,  1.0f,
+			 -1.0f, -1.0f,  1.0f,
+			 -1.0f, -1.0f, -1.0f,
+			 // top face
+			 -1.0f,  1.0f, -1.0f,
+			  1.0f,  1.0f , 1.0f,
+			  1.0f,  1.0f, -1.0f,
+			  1.0f,  1.0f,  1.0f,
+			 -1.0f,  1.0f, -1.0f,
+			 -1.0f,  1.0f,  1.0f,
+		};
+
+		mCubeVertexBuffer = std::make_unique<Buffer>(
+			mDevice,
+			cubeVertices.size() * sizeof(cubeVertices[0]),
+			cubeVertices.data(),
+			VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
+		);
+
+		mCubeDescSetLayout = std::make_unique<DescriptorSetLayout>(
+			mDevice,
+			std::initializer_list{
+				DescriptorSetLayout::Binding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1)
+			}
+		);
+		mCubePipeLayout = std::make_unique<PipelineLayout>(
+			mDevice,
+			std::initializer_list{ std::ref(*mCubeDescSetLayout) },
+			std::initializer_list{ utils::PushConstantRange(VK_SHADER_STAGE_VERTEX_BIT, sizeof(EqMapData)) }
+		);
+		Shader shader(mDevice, "./Assets/Shaders/Bin/EquirectangularToCubemap.spv");
+		shader.AddStage(VK_SHADER_STAGE_VERTEX_BIT, "VSMain")
+			.AddStage(VK_SHADER_STAGE_FRAGMENT_BIT, "FSMain");
+		mCubePipe = std::make_unique<GraphicsPipeline>(mDevice, *mCubePipeLayout, shader);
+		mCubePipe->
+			SetVertexInput(
+				{ utils::InputBinding(0, VK_VERTEX_INPUT_RATE_VERTEX, sizeof(float) * 3)},
+				{ utils::InputAttribute(0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0) })
+			.SetPrimitiveTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
+			.SetRasterizer(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE, VK_POLYGON_MODE_FILL)
+			.SetMsaaSamples(VK_SAMPLE_COUNT_1_BIT)
+			.AddColorAttachment(mDevice.GetSwapchain().GetFormat())
+			.SetDepthAttachment(mDepthImage->GetFormat(), true)
+			.Commit();
+
+		mCubeDescSet = mSetAllocator.Allocate(*mCubeDescSetLayout);
+		mCubeDescSet->
+			PushWrite(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, *mEquirectangularMap, mDevice.GetSamplers().TrilinearColor())
+			.Update();
 	}
 
 	Renderer::~Renderer()
@@ -150,7 +264,14 @@ namespace im
 			lightData.lights[i] = { glm::vec3(view * glm::vec4(pointLights[i].position, 1.0f)), 0, pointLights[i].i };
 		mLightBuffers[mFrameIndex]->SetData(lightData);
 
-		mSkybox->Draw(*mCommandBuffers[mFrameIndex], mCamera.GetViewMatrix(), mCamera.GetProjectionMatrix());
+		auto& commandBuffer = *mCommandBuffers[mFrameIndex];
+		mSkybox->Draw(commandBuffer, mCamera.GetViewMatrix(), mCamera.GetProjectionMatrix());
+
+		commandBuffer.BindGraphicsPipeline(*mCubePipe);
+		commandBuffer.BindGraphicsDescriptorSets(*mCubePipeLayout, 0, { std::ref(*mCubeDescSet) });
+		commandBuffer.PushConstants(*mCubePipeLayout, VK_SHADER_STAGE_VERTEX_BIT, EqMapData(proj * view));
+		commandBuffer.BindVertexBuffer(*mCubeVertexBuffer);
+		commandBuffer.Draw(36);
 	}
 
 	void Renderer::DrawMesh(const Mesh& mesh)

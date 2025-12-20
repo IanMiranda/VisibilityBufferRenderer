@@ -100,6 +100,13 @@ namespace im
 		}
 	};
 
+	struct EqMapData
+	{
+		glm::mat4 viewProj;
+
+		EqMapData(const glm::mat4& viewProj) : viewProj(viewProj) {}
+	};
+
 	class Buffer;
 	class Texture2D;
 

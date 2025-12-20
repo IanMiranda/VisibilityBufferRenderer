@@ -19,8 +19,8 @@ namespace im
 		VK_CHECK(vmaCreateBuffer(mDevice.GetAllocator(), &bufferInfo, &allocInfo, &mBuffer, &mAllocation, nullptr));
 	}
 
-	Buffer::Buffer(Device& device, VkDeviceSize size, const void* data)
-		: Buffer(device, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT)
+	Buffer::Buffer(Device& device, VkDeviceSize size, const void* data, VkBufferUsageFlags usage)
+		: Buffer(device, size, usage, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT)
 	{
 		SetData(data, size);
 	}

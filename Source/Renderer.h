@@ -77,6 +77,13 @@ namespace im
 
 		std::unique_ptr<Skybox> mSkybox;
 
+		std::unique_ptr<Texture2D> mEquirectangularMap;
+		std::unique_ptr<Buffer> mCubeVertexBuffer;
+		std::unique_ptr<DescriptorSetLayout> mCubeDescSetLayout;
+		std::unique_ptr<PipelineLayout> mCubePipeLayout;
+		std::unique_ptr<GraphicsPipeline> mCubePipe;
+		std::unique_ptr<DescriptorSet> mCubeDescSet;
+
 		std::vector<std::unique_ptr<CommandBuffer>> mCommandBuffers;
 		std::vector<std::unique_ptr<Semaphore>> mAcquireSemaphores;
 		std::vector<std::unique_ptr<Semaphore>> mRenderSemaphores;
