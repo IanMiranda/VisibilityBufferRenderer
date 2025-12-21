@@ -4,7 +4,7 @@
 
 namespace im
 {
-	TextureCube::TextureCube(Device& device, VkFormat format, VkImageUsageFlags usage, uint32_t width, uint32_t height)
+	TextureCube::TextureCube(Device& device, VkFormat format, VkImageUsageFlags usage, uint32_t width, uint32_t height, bool createFaceViews)
 		: mDevice(device)
 		, mFormat(format)
 		, mUsage(usage)
@@ -44,11 +44,27 @@ namespace im
 		viewInfo.subresourceRange.levelCount = 1;
 
 		VK_CHECK(vkCreateImageView(mDevice.Get(), &viewInfo, nullptr, &mView));
+
+		if (createFaceViews)
+		{
+			mFaceViews.resize(6);
+			for (uint32_t i = 0; i < 6; ++i)
+			{
+				viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+				viewInfo.subresourceRange.baseArrayLayer = i;
+				viewInfo.subresourceRange.layerCount = 1;
+				VK_CHECK(vkCreateImageView(mDevice.Get(), &viewInfo, nullptr, &mFaceViews[i]));
+			}
+		}
 	}
 
 	TextureCube::~TextureCube()
 	{
 		mDevice.WaitIdle();
+
+		for (auto view : mFaceViews)
+			vkDestroyImageView(mDevice.Get(), view, nullptr);
+		mFaceViews.clear();
 
 		vkDestroyImageView(mDevice.Get(), mView, nullptr);
 		vmaDestroyImage(mDevice.GetAllocator(), mImage, mAllocation);

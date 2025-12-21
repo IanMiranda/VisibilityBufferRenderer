@@ -10,7 +10,7 @@ namespace im
 	class TextureCube : public Texture
 	{
 	public:
-		TextureCube(Device& device, VkFormat format, VkImageUsageFlags usage, uint32_t width, uint32_t height);
+		TextureCube(Device& device, VkFormat format, VkImageUsageFlags usage, uint32_t width, uint32_t height, bool createFaceViews = false);
 		~TextureCube();
 
 		TextureCube(const TextureCube& other) = delete;
@@ -18,6 +18,7 @@ namespace im
 
 		VkImage Get() const { return mImage; }
 		VkImageView GetView() const override { return mView; }
+		VkImageView GetFaceView(uint32_t i) const { return mFaceViews[i]; }
 		VkFormat GetFormat() const { return mFormat; }
 		uint32_t GetWidth() const { return mWidth; }
 		uint32_t GetHeight() const { return mHeight; }
@@ -33,5 +34,6 @@ namespace im
 		VkImage mImage;
 		VmaAllocation mAllocation;
 		VkImageView mView;
+		std::vector<VkImageView> mFaceViews;
 	};
 }
