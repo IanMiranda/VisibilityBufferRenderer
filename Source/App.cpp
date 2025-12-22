@@ -147,7 +147,6 @@ namespace im
 
 	void App::InitMeshes()
 	{
-		// Load texture image
 		mMaterial = Material{
 			CreateAndStageTexture("./Assets/Models/Helmet/Default_albedo.jpg", VK_FORMAT_R8G8B8A8_SRGB, false),
 			CreateAndStageTexture("./Assets/Models/Helmet/Default_metalRoughness.jpg", VK_FORMAT_R8G8B8A8_UNORM, false),
@@ -164,26 +163,6 @@ namespace im
 			model = glm::scale(model, glm::vec3(2.0f));
 			mMeshes.emplace_back(UploadMesh(duckVertices, duckIndices, mMaterial, model));
 		}
-
-		/*{
-			const std::vector<Vertex> planeVertices
-			{
-				{ { -0.5f, 0.0f, 0.5f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 0.0f, 1.0f }, { 0.0f, 1.0f, 0.0f }, { 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 1.0f } },
-				{ { 0.5f, 0.0f, 0.5f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 1.0f, 1.0f }, { 0.0f, 1.0f, 0.0f }, { 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 1.0f } },
-				{ { 0.5f, 0.0f, -0.5f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 1.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, { 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 1.0f } },
-				{ { -0.5f, 0.0f, -0.5f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, { 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 1.0f } },
-			};
-
-			const std::vector<uint32_t> planeIndices
-			{
-				0, 1, 2,
-				2, 3, 0
-			};
-
-			glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -1.0f, 0.0f));
-			model = glm::scale(model, glm::vec3(42.0f));
-			mMeshes.emplace_back(UploadMesh(planeVertices, planeIndices, mMaterial, model));
-		}*/
 	}
 
 	std::unique_ptr<Texture2D> App::CreateAndStageTexture(const std::filesystem::path& path, VkFormat format, bool generateMipmaps)

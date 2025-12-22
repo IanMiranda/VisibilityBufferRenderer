@@ -360,13 +360,7 @@ namespace im
 		mLightBuffers[mFrameIndex]->SetData(lightData);
 
 		auto& commandBuffer = *mCommandBuffers[mFrameIndex];
-		/*mSkybox->Draw(commandBuffer, mCamera.GetViewMatrix(), mCamera.GetProjectionMatrix());
-
-		commandBuffer.BindGraphicsPipeline(*mCubePipe);
-		commandBuffer.BindGraphicsDescriptorSets(*mCubePipeLayout, 0, { std::ref(*mCubeDescSet) });
-		commandBuffer.PushConstants(*mCubePipeLayout, VK_SHADER_STAGE_VERTEX_BIT, EqMapData(proj * view));
-		commandBuffer.BindVertexBuffer(*mCubeVertexBuffer);
-		commandBuffer.Draw(36);*/
+		/*mSkybox->Draw(commandBuffer, mCamera.GetViewMatrix(), mCamera.GetProjectionMatrix());*/
 
 		commandBuffer.BindGraphicsPipeline(*mEnvMapPipe);
 		commandBuffer.BindGraphicsDescriptorSets(*mEnvMapPipeLayout, 0, { *mEnvMapSet });
