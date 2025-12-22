@@ -132,27 +132,35 @@ namespace im
 			std::initializer_list{ std::ref(*mCubeDescSetLayout) },
 			std::initializer_list{ utils::PushConstantRange(VK_SHADER_STAGE_VERTEX_BIT, sizeof(EqMapData)) }
 		);
-		Shader shader(mDevice, "./Assets/Shaders/Bin/EquirectangularToCubemap.spv");
-		shader.AddStage(VK_SHADER_STAGE_VERTEX_BIT, "VSMain")
-			.AddStage(VK_SHADER_STAGE_FRAGMENT_BIT, "FSMain");
-		mCubePipe = std::make_unique<GraphicsPipeline>(mDevice, *mCubePipeLayout, shader);
-		mCubePipe->
-			SetVertexInput(
-				{ utils::InputBinding(0, VK_VERTEX_INPUT_RATE_VERTEX, sizeof(float) * 3)},
-				{ utils::InputAttribute(0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0) })
-			.SetPrimitiveTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
-			.SetRasterizer(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE, VK_POLYGON_MODE_FILL)
-			.SetMsaaSamples(VK_SAMPLE_COUNT_1_BIT)
-			.AddColorAttachment(VK_FORMAT_R32G32B32A32_SFLOAT)
-			.SetDepthAttachment(mDepthImage->GetFormat(), true)
-			.Commit();
+
+		mCubePipe = std::make_unique<GraphicsPipeline>(
+			mDevice,
+			GraphicsPipelineDesc(
+				*mCubePipeLayout,
+				Shader(mDevice, "./Assets/Shaders/Bin/EquirectangularToCubemap.spv")
+					.AddStage(VK_SHADER_STAGE_VERTEX_BIT, "VSMain")
+					.AddStage(VK_SHADER_STAGE_FRAGMENT_BIT, "FSMain"),
+				{
+					InputBinding(
+						{ InputAttribute(0, VK_FORMAT_R32G32B32_SFLOAT, 0) },
+						VK_VERTEX_INPUT_RATE_VERTEX,
+						sizeof(float) * 3
+					)
+				},
+				InputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST),
+				Rasterizer(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE, VK_POLYGON_MODE_FILL),
+				Multisample(VK_SAMPLE_COUNT_1_BIT),
+				{ ColorAttachment(VK_FORMAT_R32G32B32A32_SFLOAT) },
+				{ DepthStencil(mDepthImage->GetFormat()) }
+			)
+		);
 
 		mCubeDescSet = mSetAllocator.Allocate(*mCubeDescSetLayout);
 		mCubeDescSet->
 			PushWrite(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, *mEquirectangularMap, mDevice.GetSamplers().TrilinearColor())
 			.Update();
 
-		mEnvMap = std::make_unique<TextureCube>(mDevice, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 512, 512, true);
+		mEnvMap = std::make_unique<TextureCube>(mDevice, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 1024, 1024, true);
 		std::array views
 		{
    			glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 1.0f,  0.0f,  0.0f), glm::vec3(0.0f, 1.0f,  0.0f)),
@@ -214,18 +222,21 @@ namespace im
 			std::initializer_list{ utils::PushConstantRange(VK_SHADER_STAGE_VERTEX_BIT, sizeof(CubemapData)) }
 		);
 
-		Shader shaderEnv(mDevice, "./Assets/Shaders/Bin/Cubemap.spv");
-		shaderEnv.AddStage(VK_SHADER_STAGE_VERTEX_BIT, "VSMain")
-			.AddStage(VK_SHADER_STAGE_FRAGMENT_BIT, "FSMain");
-		mEnvMapPipe = std::make_unique<GraphicsPipeline>(mDevice, *mEnvMapPipeLayout, shaderEnv);
-		mEnvMapPipe->
-			SetVertexInput({}, {})
-			.SetPrimitiveTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
-			.SetRasterizer(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE, VK_POLYGON_MODE_FILL)
-			.SetMsaaSamples(VK_SAMPLE_COUNT_1_BIT)
-			.AddColorAttachment(mDevice.GetSwapchain().GetFormat())
-			.SetDepthAttachment(mDevice.GetDepthFormat(), false)
-			.Commit();
+		mEnvMapPipe = std::make_unique<GraphicsPipeline>(
+			mDevice,
+			GraphicsPipelineDesc(
+				*mEnvMapPipeLayout,
+				Shader(mDevice, "./Assets/Shaders/Bin/Cubemap.spv")
+					.AddStage(VK_SHADER_STAGE_VERTEX_BIT, "VSMain")
+					.AddStage(VK_SHADER_STAGE_FRAGMENT_BIT, "FSMain"),
+				{},
+				InputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST),
+				Rasterizer(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE, VK_POLYGON_MODE_FILL),
+				Multisample(VK_SAMPLE_COUNT_1_BIT),
+				{ ColorAttachment(mDevice.GetSwapchain().GetFormat()) },
+				{ DepthStencil(mDevice.GetDepthFormat(), false) }
+			)
+		);
 
 		mEnvMapSet = mSetAllocator.Allocate(*mEnvMapSetLayout);
 
@@ -434,18 +445,21 @@ namespace im
 			}
 		);
 
-		Shader shader(mDevice, "./Assets/Shaders/Bin/PBR.spv");
-		shader.AddStage(VK_SHADER_STAGE_VERTEX_BIT, "VSMain")
-			.AddStage(VK_SHADER_STAGE_FRAGMENT_BIT, "FSMain");
-		mMainPipe = std::make_unique<GraphicsPipeline>(mDevice, *mMainPipeLayout, shader);
-		mMainPipe->
-			SetVertexInput({ Vertex::GetInputBinding(0) }, Vertex::GetInputAttributes())
-			.SetPrimitiveTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
-			.SetRasterizer(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE, VK_POLYGON_MODE_FILL)
-			.SetMsaaSamples(VK_SAMPLE_COUNT_1_BIT)
-			.AddColorAttachment(mDevice.GetSwapchain().GetFormat())
-			.SetDepthAttachment(mDepthImage->GetFormat(), true)
-			.Commit();
+		mMainPipe = std::make_unique<GraphicsPipeline>(
+			mDevice,
+			GraphicsPipelineDesc(
+				*mMainPipeLayout,
+				Shader(mDevice, "./Assets/Shaders/Bin/PBR.spv")
+					.AddStage(VK_SHADER_STAGE_VERTEX_BIT, "VSMain")
+					.AddStage(VK_SHADER_STAGE_FRAGMENT_BIT, "FSMain"),
+				Vertex::GetInputBindings(),
+				InputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST),
+				Rasterizer(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE, VK_POLYGON_MODE_FILL),
+				Multisample(VK_SAMPLE_COUNT_1_BIT),
+				{ ColorAttachment(mDevice.GetSwapchain().GetFormat()) },
+				{ DepthStencil(mDepthImage->GetFormat()) }
+			)
+		);
 	}
 
 	void Renderer::InitCommandBuffers()

@@ -12,7 +12,7 @@ namespace im
 	ShadowPass::ShadowPass(Device& device, VkDeviceSize pushConstantSize, VkExtent2D dims)
 		: mDevice(device), mPushConstSize(pushConstantSize)
 	{
-		mShadowMap = std::make_unique<Texture2D>(
+		/*mShadowMap = std::make_unique<Texture2D>(
 			mDevice, mDevice.GetDepthFormat(),
 			VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
 			dims.width, dims.height, false
@@ -41,7 +41,7 @@ namespace im
 			.SetRasterizer(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE, VK_POLYGON_MODE_FILL)
 			.SetMsaaSamples(VK_SAMPLE_COUNT_1_BIT)
 			.SetDepthAttachment(mShadowMap->GetFormat(), true)
-			.Commit();
+			.Commit();*/
 	}
 
 	void ShadowPass::Begin(CommandBuffer& cmds)

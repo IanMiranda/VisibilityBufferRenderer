@@ -26,6 +26,8 @@
 
 namespace im
 {
+	struct InputBinding;
+	
 	struct Vertex
 	{
 		glm::vec3 position;
@@ -37,8 +39,7 @@ namespace im
 
 		bool operator<=>(const Vertex& other) const = default;
 
-		static VkVertexInputBindingDescription GetInputBinding(uint32_t binding);
-		static std::vector<VkVertexInputAttributeDescription> GetInputAttributes();
+		static std::vector<InputBinding> GetInputBindings();
 	};
 
 	struct ShadowPassData

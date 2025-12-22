@@ -26,7 +26,7 @@ VSOutput VSMain(float3 pos : POSITION)
 static const float2 inverseAtan = float2(0.1591, 0.3183);
 float2 SampleSphericalMap(float3 dir)
 {
-    float2 uv = float2(atan2(dir.z, dir.x), asin(dir.y));
+    float2 uv = float2(atan2(dir.x, dir.z), asin(dir.y));
     uv *= inverseAtan;
     uv += 0.5;
     return uv;
