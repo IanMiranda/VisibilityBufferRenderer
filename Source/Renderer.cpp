@@ -68,145 +68,7 @@ namespace im
 
 		stbi_image_free(data);
 
-		std::vector<float> cubeVertices
-		{
-			// back face
-			-1.0f, -1.0f, -1.0f,
-			 1.0f,  1.0f, -1.0f,
-			 1.0f, -1.0f, -1.0f,       
-			 1.0f,  1.0f, -1.0f,
-			-1.0f, -1.0f, -1.0f,
-			-1.0f,  1.0f, -1.0f,
-			// front face
-			-1.0f, -1.0f,  1.0f,
-			 1.0f, -1.0f,  1.0f,
-			 1.0f,  1.0f,  1.0f,
-			 1.0f,  1.0f,  1.0f,
-			-1.0f,  1.0f,  1.0f,
-			-1.0f, -1.0f,  1.0f,
-			// left face
-			-1.0f,  1.0f,  1.0f,
-			-1.0f,  1.0f, -1.0f,
-			-1.0f, -1.0f, -1.0f,
-			-1.0f, -1.0f, -1.0f,
-			-1.0f, -1.0f,  1.0f,
-			-1.0f,  1.0f,  1.0f,
-			// right face
-			 1.0f,  1.0f,  1.0f,
-			 1.0f, -1.0f, -1.0f,
-			 1.0f,  1.0f, -1.0f,    
-			 1.0f, -1.0f, -1.0f,
-			 1.0f,  1.0f,  1.0f,
-			 1.0f, -1.0f,  1.0f,  
-			 // bottom face
-			 -1.0f, -1.0f, -1.0f,
-			  1.0f, -1.0f, -1.0f,
-			  1.0f, -1.0f,  1.0f,
-			  1.0f, -1.0f,  1.0f,
-			 -1.0f, -1.0f,  1.0f,
-			 -1.0f, -1.0f, -1.0f,
-			 // top face
-			 -1.0f,  1.0f, -1.0f,
-			  1.0f,  1.0f , 1.0f,
-			  1.0f,  1.0f, -1.0f,
-			  1.0f,  1.0f,  1.0f,
-			 -1.0f,  1.0f, -1.0f,
-			 -1.0f,  1.0f,  1.0f,
-		};
-
-		mCubeVertexBuffer = std::make_unique<Buffer>(
-			mDevice,
-			cubeVertices.size() * sizeof(cubeVertices[0]),
-			cubeVertices.data(),
-			VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
-		);
-
-		mCubeDescSetLayout = std::make_unique<DescriptorSetLayout>(
-			mDevice,
-			std::initializer_list{
-				DescriptorSetLayout::Binding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1)
-			}
-		);
-		mCubePipeLayout = std::make_unique<PipelineLayout>(
-			mDevice,
-			std::initializer_list{ std::ref(*mCubeDescSetLayout) },
-			std::initializer_list{ utils::PushConstantRange(VK_SHADER_STAGE_VERTEX_BIT, sizeof(EqMapData)) }
-		);
-
-		mCubePipe = std::make_unique<GraphicsPipeline>(
-			mDevice,
-			GraphicsPipelineDesc(
-				*mCubePipeLayout,
-				Shader(mDevice, "./Assets/Shaders/Bin/EquirectangularToCubemap.spv")
-					.AddStage(VK_SHADER_STAGE_VERTEX_BIT, "VSMain")
-					.AddStage(VK_SHADER_STAGE_FRAGMENT_BIT, "FSMain"),
-				{
-					InputBinding(
-						{ InputAttribute(0, VK_FORMAT_R32G32B32_SFLOAT, 0) },
-						VK_VERTEX_INPUT_RATE_VERTEX,
-						sizeof(float) * 3
-					)
-				},
-				InputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST),
-				Rasterizer(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE, VK_POLYGON_MODE_FILL),
-				Multisample(VK_SAMPLE_COUNT_1_BIT),
-				{ ColorAttachment(VK_FORMAT_R32G32B32A32_SFLOAT) },
-				{ DepthStencil(mDepthImage->GetFormat()) }
-			)
-		);
-
-		mCubeDescSet = mSetAllocator.Allocate(*mCubeDescSetLayout);
-		mCubeDescSet->
-			PushWrite(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, *mEquirectangularMap, mDevice.GetSamplers().TrilinearColor())
-			.Update();
-
-		mEnvMap = std::make_unique<TextureCube>(mDevice, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 1024, 1024, true);
-		std::array views
-		{
-   			glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 1.0f,  0.0f,  0.0f), glm::vec3(0.0f, 1.0f,  0.0f)),
-   			glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(-1.0f,  0.0f,  0.0f), glm::vec3(0.0f, 1.0f,  0.0f)),
-   			glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 0.0f,  1.0f,  0.0f), glm::vec3(0.0f,  0.0f,  1.0f)),
-   			glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 0.0f, -1.0f,  0.0f), glm::vec3(0.0f,  0.0f, -1.0f)),
-   			glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 0.0f,  0.0f, -1.0f), glm::vec3(0.0f, 1.0f,  0.0f)),
-   			glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 0.0f,  0.0f,  1.0f), glm::vec3(0.0f, 1.0f,  0.0f)),
-		};
-		
-		mDevice.RunImmediateCommands([&](CommandBuffer& cmds)
-		{
-			glm::mat4 proj = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 100.0f);
-			cmds.Barrier(
-				*mEnvMap,
-				VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-				VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, VK_ACCESS_2_NONE,
-				VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT
-			);
-			cmds.SetViewportAndScissor({ mEnvMap->GetWidth(), mEnvMap->GetHeight() });
-			for (uint32_t i = 0; i < 6; ++i)
-			{
-				cmds.BeginRendering(
-					{
-						utils::ColorAttachment(mEnvMap->GetFaceView(i), VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE)
-					},
-					utils::Scissor({ mEnvMap->GetWidth(), mEnvMap->GetHeight() })
-				);
-				cmds.BindGraphicsPipeline(*mCubePipe);
-				cmds.BindGraphicsDescriptorSets(*mCubePipeLayout, 0, { std::ref(*mCubeDescSet) });
-				cmds.PushConstants(
-					*mCubePipeLayout,
-					VK_SHADER_STAGE_VERTEX_BIT,
-					EqMapData(proj * glm::mat4(glm::mat3(views[i])))
-				);
-				cmds.BindVertexBuffer(*mCubeVertexBuffer);
-				cmds.Draw(36);
-				cmds.EndRendering();
-			}
-			cmds.Barrier(
-				*mEnvMap,
-				VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-				VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-				VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_READ_BIT
-			);
-		});
+		mEnvMap = EquirectangularToCubemap(*mEquirectangularMap);
 
 		// Create environment pipeline
 		mEnvMapSetLayout = std::make_unique<DescriptorSetLayout>(
@@ -513,7 +375,156 @@ namespace im
 		ImGui_ImplVulkan_Init(&imguiVulkanInfo);
 	}
 
-	void Renderer::InitUniformBuffers()
+    std::unique_ptr<TextureCube> Renderer::EquirectangularToCubemap(Texture2D &eqMap)
+    {
+		auto cubeVertexBuffer = CreateCubeVertexBuffer();
+
+		DescriptorSetLayout cubeSetLayout(
+			mDevice,
+			{
+				DescriptorSetLayout::Binding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1)
+			}
+		);
+		PipelineLayout cubePipeLayout(
+			mDevice,
+			{ std::ref(cubeSetLayout) },
+			{ utils::PushConstantRange(VK_SHADER_STAGE_VERTEX_BIT, sizeof(EqMapData)) }
+		);
+
+		GraphicsPipeline cubePipe(
+			mDevice,
+			GraphicsPipelineDesc(
+				cubePipeLayout,
+				Shader(mDevice, "./Assets/Shaders/Bin/EquirectangularToCubemap.spv")
+					.AddStage(VK_SHADER_STAGE_VERTEX_BIT, "VSMain")
+					.AddStage(VK_SHADER_STAGE_FRAGMENT_BIT, "FSMain"),
+				{
+					InputBinding(
+						{ InputAttribute(0, VK_FORMAT_R32G32B32_SFLOAT, 0) },
+						VK_VERTEX_INPUT_RATE_VERTEX,
+						sizeof(float) * 3
+					)
+				},
+				InputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST),
+				Rasterizer(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE, VK_POLYGON_MODE_FILL),
+				Multisample(VK_SAMPLE_COUNT_1_BIT),
+				{ ColorAttachment(VK_FORMAT_R32G32B32A32_SFLOAT) },
+				{ DepthStencil(mDepthImage->GetFormat()) }
+			)
+		);
+
+		auto cubeDescSet = mSetAllocator.Allocate(cubeSetLayout);
+		cubeDescSet->
+			PushWrite(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, *mEquirectangularMap, mDevice.GetSamplers().TrilinearColor())
+			.Update();
+
+		auto cubeMap = std::make_unique<TextureCube>(mDevice, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 1024, 1024, true);
+		std::array views
+		{
+   			glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 1.0f,  0.0f,  0.0f), glm::vec3(0.0f, 1.0f,  0.0f)),
+   			glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(-1.0f,  0.0f,  0.0f), glm::vec3(0.0f, 1.0f,  0.0f)),
+   			glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 0.0f,  1.0f,  0.0f), glm::vec3(0.0f,  0.0f,  1.0f)),
+   			glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 0.0f, -1.0f,  0.0f), glm::vec3(0.0f,  0.0f, -1.0f)),
+   			glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 0.0f,  0.0f, -1.0f), glm::vec3(0.0f, 1.0f,  0.0f)),
+   			glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 0.0f,  0.0f,  1.0f), glm::vec3(0.0f, 1.0f,  0.0f)),
+		};
+		
+		mDevice.RunImmediateCommands([&](CommandBuffer& cmds)
+		{
+			glm::mat4 proj = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 100.0f);
+			cmds.Barrier(
+				*cubeMap,
+				VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+				VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, VK_ACCESS_2_NONE,
+				VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT
+			);
+			cmds.SetViewportAndScissor({ cubeMap->GetWidth(), cubeMap->GetHeight() });
+			for (uint32_t i = 0; i < 6; ++i)
+			{
+				cmds.BeginRendering(
+					{
+						utils::ColorAttachment(cubeMap->GetFaceView(i), VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE)
+					},
+					utils::Scissor({ cubeMap->GetWidth(), cubeMap->GetHeight() })
+				);
+				cmds.BindGraphicsPipeline(cubePipe);
+				cmds.BindGraphicsDescriptorSets(cubePipeLayout, 0, { std::ref(*cubeDescSet) });
+				cmds.PushConstants(
+					cubePipeLayout,
+					VK_SHADER_STAGE_VERTEX_BIT,
+					EqMapData(proj * glm::mat4(glm::mat3(views[i])))
+				);
+				cmds.BindVertexBuffer(cubeVertexBuffer);
+				cmds.Draw(36);
+				cmds.EndRendering();
+			}
+			cmds.Barrier(
+				*cubeMap,
+				VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+				VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+				VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_READ_BIT
+			);
+		});
+		return cubeMap;
+    }
+
+    Buffer Renderer::CreateCubeVertexBuffer()
+    {
+		constexpr std::array cubeVertices
+		{
+			// back face
+			-1.0f, -1.0f, -1.0f,
+			 1.0f,  1.0f, -1.0f,
+			 1.0f, -1.0f, -1.0f,       
+			 1.0f,  1.0f, -1.0f,
+			-1.0f, -1.0f, -1.0f,
+			-1.0f,  1.0f, -1.0f,
+			// front face
+			-1.0f, -1.0f,  1.0f,
+			 1.0f, -1.0f,  1.0f,
+			 1.0f,  1.0f,  1.0f,
+			 1.0f,  1.0f,  1.0f,
+			-1.0f,  1.0f,  1.0f,
+			-1.0f, -1.0f,  1.0f,
+			// left face
+			-1.0f,  1.0f,  1.0f,
+			-1.0f,  1.0f, -1.0f,
+			-1.0f, -1.0f, -1.0f,
+			-1.0f, -1.0f, -1.0f,
+			-1.0f, -1.0f,  1.0f,
+			-1.0f,  1.0f,  1.0f,
+			// right face
+			 1.0f,  1.0f,  1.0f,
+			 1.0f, -1.0f, -1.0f,
+			 1.0f,  1.0f, -1.0f,    
+			 1.0f, -1.0f, -1.0f,
+			 1.0f,  1.0f,  1.0f,
+			 1.0f, -1.0f,  1.0f,  
+			 // bottom face
+			 -1.0f, -1.0f, -1.0f,
+			  1.0f, -1.0f, -1.0f,
+			  1.0f, -1.0f,  1.0f,
+			  1.0f, -1.0f,  1.0f,
+			 -1.0f, -1.0f,  1.0f,
+			 -1.0f, -1.0f, -1.0f,
+			 // top face
+			 -1.0f,  1.0f, -1.0f,
+			  1.0f,  1.0f , 1.0f,
+			  1.0f,  1.0f, -1.0f,
+			  1.0f,  1.0f,  1.0f,
+			 -1.0f,  1.0f, -1.0f,
+			 -1.0f,  1.0f,  1.0f,
+		};
+
+		return Buffer(
+			mDevice,
+			cubeVertices.size() * sizeof(cubeVertices[0]),
+			cubeVertices.data(),
+			VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
+		);
+    }
+
+    void Renderer::InitUniformBuffers()
 	{
 		mMainPassBuffers.reserve(MaxFramesInFlight);
 		mLightBuffers.reserve(MaxFramesInFlight);

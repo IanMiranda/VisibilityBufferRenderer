@@ -54,6 +54,9 @@ namespace im
 		void InitDescriptors();
 		void InitImGui();
 
+		std::unique_ptr<TextureCube> EquirectangularToCubemap(Texture2D& eqMap);
+		Buffer CreateCubeVertexBuffer();
+
 	private:
 		static constexpr int MaxFramesInFlight = 2;
 
@@ -79,10 +82,6 @@ namespace im
 
 		std::unique_ptr<Texture2D> mEquirectangularMap;
 		std::unique_ptr<Buffer> mCubeVertexBuffer;
-		std::unique_ptr<DescriptorSetLayout> mCubeDescSetLayout;
-		std::unique_ptr<PipelineLayout> mCubePipeLayout;
-		std::unique_ptr<GraphicsPipeline> mCubePipe;
-		std::unique_ptr<DescriptorSet> mCubeDescSet;
 
 		std::unique_ptr<TextureCube> mEnvMap;
 		std::unique_ptr<DescriptorSetLayout> mEnvMapSetLayout;

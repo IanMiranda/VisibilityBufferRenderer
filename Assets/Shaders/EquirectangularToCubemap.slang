@@ -37,7 +37,5 @@ float4 FSMain(VSOutput input) : SV_Target0
 {
     float2 uv = SampleSphericalMap(normalize(input.localPos));
     float3 color = gEqMap.Sample(uv).rgb;
-    color = color / (color + float3(1.0));
-    color = pow(color, float3(1.0 / 2.2));
     return float4(color, 1.0);
 }
