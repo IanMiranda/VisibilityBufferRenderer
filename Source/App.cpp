@@ -182,7 +182,7 @@ namespace im
 
 		auto resTex = std::make_unique<Texture2D>(mRenderer.GetDevice(),
 			format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-			width, height, generateMipmaps);
+			width, height, generateMipmaps ? Texture::GetMaxMipLevels(width, height) : 1);
 
 		mRenderer.GetDevice().RunImmediateCommands([&resTex, &stagingTex, generateMipmaps](CommandBuffer& cmds)
 		{

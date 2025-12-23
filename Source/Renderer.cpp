@@ -46,7 +46,7 @@ namespace im
 			return;
 		}
 
-		mEquirectangularMap = std::make_unique<Texture2D>(mDevice, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, width, height, false);
+		mEquirectangularMap = std::make_unique<Texture2D>(mDevice, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, width, height, 1);
 		Buffer staging(mDevice, width * height * 4 * sizeof(float), data);
 		mDevice.RunImmediateCommands([&staging, this](CommandBuffer& cmds)
 			{
@@ -266,7 +266,7 @@ namespace im
 	{
 		const auto swapExtent = mDevice.GetSwapchain().GetExtent();
 		mDepthImage = std::make_unique<Texture2D>(mDevice, mDevice.GetDepthFormat(),
-			VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, swapExtent.width, swapExtent.height, false);
+			VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, swapExtent.width, swapExtent.height, 1);
 
 		mDevice.RunImmediateCommands([this](CommandBuffer& cmds)
 			{

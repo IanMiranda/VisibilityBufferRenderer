@@ -10,7 +10,7 @@ namespace im
 	class Texture2D : public Texture
 	{
 	public:
-		Texture2D(Device& device, VkFormat format, VkImageUsageFlags usage, uint32_t width, uint32_t height, bool supportMipmaps);
+		Texture2D(Device& device, VkFormat format, VkImageUsageFlags usage, uint32_t width, uint32_t height, uint32_t mipLevels);
 		~Texture2D();
 
 		Texture2D(const Texture2D& other) = delete;

@@ -15,7 +15,7 @@ namespace im
 		/*mShadowMap = std::make_unique<Texture2D>(
 			mDevice, mDevice.GetDepthFormat(),
 			VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-			dims.width, dims.height, false
+			dims.width, dims.height, 1
 		);
 
 		Shader shader(mDevice, "Assets/Shaders/ShadowDepthPass.spv");

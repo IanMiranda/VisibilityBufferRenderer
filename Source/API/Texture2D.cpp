@@ -8,13 +8,13 @@
 
 namespace im
 {
-	Texture2D::Texture2D(Device& device, VkFormat format, VkImageUsageFlags usage, uint32_t width, uint32_t height, bool supportMipmaps)
+	Texture2D::Texture2D(Device& device, VkFormat format, VkImageUsageFlags usage, uint32_t width, uint32_t height, uint32_t mipLevels)
 		: mDevice(device)
 		, mFormat(format)
 		, mUsage(usage)
 		, mWidth(width)
 		, mHeight(height)
-		, mMipLevelCount(supportMipmaps ? static_cast<uint32_t>(std::floor(std::log2(std::max(width, height)))) + 1 : 1)
+		, mMipLevelCount(mipLevels)
 	{
 		VkImageCreateInfo imageInfo{ VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
 		imageInfo.arrayLayers = 1;

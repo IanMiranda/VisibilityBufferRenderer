@@ -144,7 +144,7 @@ namespace im
             mDevice, format, usage,
             mDevice.GetSwapchain().GetExtent().width,
             mDevice.GetSwapchain().GetExtent().height,
-            false
+            1
         );
     }
 }
