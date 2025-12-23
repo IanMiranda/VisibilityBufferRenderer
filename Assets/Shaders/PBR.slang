@@ -76,6 +76,8 @@ VSOutput VSMain(VSInput input)
 
 [vk_binding(1, 0)] ConstantBuffer<LightData> gLightData;
 [vk_binding(2, 0)] SamplerCube gIrradianceMap;
+[vk_binding(3, 0)] SamplerCube gPrefilterMap;
+[vk_binding(4, 0)] Sampler2D gBrdfLut;
 
 float3 CalculateRadiance(float distance, PointLight light)
 {
@@ -142,7 +144,15 @@ float4 FSMain(VSOutput input) : SV_Target0
     float3 Kd = float3(1.0) - Ks;
     float3 diffuseIrradiance = gIrradianceMap.Sample(N).rgb;
     float3 diffuseAmbient = diffuseIrradiance * albedo;
-    float3 ambient = diffuseAmbient * Kd * ao;
+
+    static const float maxReflectionLevel = 4.0;
+    const float3 R = reflect(-V, N);
+    const float3 prefilterColor = gPrefilterMap.SampleLevel(R, roughness * maxReflectionLevel).rgb;
+    const float3 F = FresnelSchlickRoughness(F0, V, N, roughness);
+    float2 brdfValue = gBrdfLut.Sample(float2(saturate(dot(N, V)), roughness)).rg;
+    float3 specular = prefilterColor * (F * brdfValue.x + brdfValue.y);
+
+    float3 ambient = (diffuseAmbient * Kd + specular) * ao;
     float3 emissive = gTextures[NonUniformResourceIndex(gObjectData.emissiveMapIndex)].Sample(gTrilinearColor, input.uv).rgb;
 
     float3 color = ambient + finalColor + emissive;

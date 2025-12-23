@@ -289,6 +289,8 @@ namespace im
 					VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT),
 				DescriptorSetLayout::Binding(1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT),
 				DescriptorSetLayout::Binding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+				DescriptorSetLayout::Binding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+				DescriptorSetLayout::Binding(4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
 			}
 		);
 
@@ -805,6 +807,16 @@ namespace im
 				.PushWrite(
 					2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 					*mIrradianceMap, mDevice.GetSamplers().TrilinearColor(),
+					VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+				)
+				.PushWrite(
+					3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+					*mPrefilteredEnvMap, mDevice.GetSamplers().TrilinearColorClamp(),
+					VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+				)
+				.PushWrite(
+					4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+					*mBrdfLut, mDevice.GetSamplers().TrilinearColorClamp(),
 					VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
 				)
 				.Update();
