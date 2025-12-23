@@ -16,6 +16,7 @@ namespace im
 		Samplers& operator=(const Samplers& other) = delete;
 
 		VkSampler& TrilinearColor() { return mTrilinearColor; }
+		VkSampler& TrilinearColorClamp() { return mTrilinearColor; }
 		VkSampler& NearestColor() { return mNearestColor; }
 		VkSampler& Shadow() { return mShadow; }
 
@@ -26,6 +27,7 @@ namespace im
 		Device& mDevice;
 
 		VkSampler mTrilinearColor;
+		VkSampler mTrilinearColorClamp;
 		VkSampler mNearestColor;
 		VkSampler mShadow;
 	};

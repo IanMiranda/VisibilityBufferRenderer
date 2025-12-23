@@ -69,6 +69,7 @@ namespace im
 		mEnvMap = EquirectangularToCubemap(*mEquirectangularMap);
 		mIrradianceMap = CalculateDiffuseIrradiance(*mEnvMap);
 		mPrefilteredEnvMap = PrefilterEnvMap(*mEnvMap);
+		mBrdfLut = GenerateBrdfLut();
 
 		// Create environment pipeline
 		mEnvMapSetLayout = std::make_unique<DescriptorSetLayout>(
@@ -656,6 +657,59 @@ namespace im
 						cmds.EndRendering();
 					}
 				}
+				cmds.Barrier(
+					*res,
+					VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+					VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+					VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_READ_BIT
+				);
+			});
+		return res;
+	}
+
+	std::unique_ptr<Texture2D> Renderer::GenerateBrdfLut()
+	{
+		PipelineLayout cubePipeLayout(mDevice, {}, {});
+
+		GraphicsPipeline cubePipe(
+			mDevice,
+			GraphicsPipelineDesc(
+				cubePipeLayout,
+				Shader(mDevice, "./Assets/Shaders/Bin/IntegrateBRDF.spv")
+				.AddStage(VK_SHADER_STAGE_VERTEX_BIT, "VSMain")
+				.AddStage(VK_SHADER_STAGE_FRAGMENT_BIT, "FSMain"),
+				{},
+				InputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST),
+				Rasterizer(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE, VK_POLYGON_MODE_FILL),
+				Multisample(VK_SAMPLE_COUNT_1_BIT),
+				{ ColorAttachment(VK_FORMAT_R32G32B32A32_SFLOAT) },
+				{ DepthStencil(mDepthImage->GetFormat()) }
+			)
+		);
+
+		auto res = std::make_unique<Texture2D>(
+			mDevice, VK_FORMAT_R32G32B32A32_SFLOAT,
+			VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+			512, 512, 1);
+
+		mDevice.RunImmediateCommands([&](CommandBuffer& cmds)
+			{
+				cmds.Barrier(
+					*res,
+					VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+					VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, VK_ACCESS_2_NONE,
+					VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT
+				);
+				cmds.SetViewportAndScissor({ res->GetWidth(), res->GetHeight() });
+				cmds.BeginRendering(
+					{
+						utils::ColorAttachment(res->GetView(), VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE)
+					},
+					utils::Scissor({ res->GetWidth(), res->GetHeight() })
+				);
+				cmds.BindGraphicsPipeline(cubePipe);
+				cmds.Draw(6);
+				cmds.EndRendering();
 				cmds.Barrier(
 					*res,
 					VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,

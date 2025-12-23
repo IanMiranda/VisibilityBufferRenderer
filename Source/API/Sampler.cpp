@@ -12,7 +12,15 @@ namespace im
 			trilinearColorInfo.compareOp = VK_COMPARE_OP_ALWAYS;
 			VK_CHECK(vkCreateSampler(mDevice.Get(), &trilinearColorInfo, nullptr, &mTrilinearColor));
 		}
-
+		{
+			auto trilinearColorInfo = GetDefaultSamplerInfo();
+			trilinearColorInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+			trilinearColorInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+			trilinearColorInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+			trilinearColorInfo.compareEnable = VK_FALSE;
+			trilinearColorInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+			VK_CHECK(vkCreateSampler(mDevice.Get(), &trilinearColorInfo, nullptr, &mTrilinearColorClamp));
+		}
 		{
 			{
 			auto nearestColor = GetDefaultSamplerInfo();
@@ -36,6 +44,7 @@ namespace im
 	{
 		mDevice.WaitIdle();
 		vkDestroySampler(mDevice.Get(), mTrilinearColor, nullptr);
+		vkDestroySampler(mDevice.Get(), mTrilinearColorClamp, nullptr);
 		vkDestroySampler(mDevice.Get(), mNearestColor, nullptr);
 		vkDestroySampler(mDevice.Get(), mShadow, nullptr);
 	}

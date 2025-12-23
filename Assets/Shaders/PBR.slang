@@ -93,31 +93,6 @@ float3 FresnelSchlickRoughness(float3 F0, float3 W, float3 H, float roughness)
     return F0 + (max(float3(1 - roughness), F0) - F0) * pow(1 - saturate(dot(W, H)), 5.0);
 }
 
-float TrowbridgeReitzGGX(float a, float3 N, float3 H)
-{
-    float NoH = saturate(dot(N, H));
-    float NoH2 = NoH * NoH;
-
-    float num = a * a;
-    float denom = NoH2 * (num - 1.0) + 1.0;
-    denom *= denom * PI;
-    return num / denom;
-}
-
-float SchlickGGX(float NoV, float roughness)
-{
-    float r = roughness + 1.0;
-    float k = (r * r) / 8.0;
-
-    return NoV / (NoV * (1.0 - k) + k);
-}
-
-float SmithGGX(float roughness, float3 W, float3 V, float3 N)
-{
-    return SchlickGGX(saturate(dot(N, W)), roughness) *
-        SchlickGGX(saturate(dot(N, V)), roughness);
-}
-
 [shader("fragment")]
 float4 FSMain(VSOutput input) : SV_Target0
 {
