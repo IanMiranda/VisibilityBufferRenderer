@@ -2,8 +2,7 @@
 
 import Common;
 import Lighting;
-
-static const float PI = 3.1415926538;
+import Math;
 
 struct VSInput
 {
@@ -76,6 +75,7 @@ VSOutput VSMain(VSInput input)
 }
 
 [vk_binding(1, 0)] ConstantBuffer<LightData> gLightData;
+[vk_binding(2, 0)] SamplerCube gIrradianceMap;
 
 float3 CalculateRadiance(float distance, PointLight light)
 {
@@ -86,6 +86,11 @@ float3 CalculateRadiance(float distance, PointLight light)
 float3 FresnelSchlick(float3 F0, float3 W, float3 H)
 {
     return F0 + (1 - F0) * pow(1 - saturate(dot(W, H)), 5.0);
+}
+
+float3 FresnelSchlickRoughness(float3 F0, float3 W, float3 H, float roughness)
+{
+    return F0 + (max(float3(1 - roughness), F0) - F0) * pow(1 - saturate(dot(W, H)), 5.0);
 }
 
 float TrowbridgeReitzGGX(float a, float3 N, float3 H)
@@ -127,6 +132,9 @@ float4 FSMain(VSOutput input) : SV_Target0
 
     float3 V = -normalize(input.posView);
 
+    float3 F0 = float3(0.04);
+    F0 = lerp(F0, albedo, metallic);
+
     float3 finalColor = 0;
     for (int i = 0; i < gPassData.lightCount; ++i)
     {
@@ -139,8 +147,6 @@ float4 FSMain(VSOutput input) : SV_Target0
 
         var radiance = CalculateRadiance(lightDistance, gLightData.lights[i]);
 
-        float3 F0 = float3(0.04);
-        F0 = lerp(F0, albedo, metallic);
         float3 F = FresnelSchlick(F0, W, H);
 
         float D = TrowbridgeReitzGGX(roughness * roughness, N, H);
@@ -157,7 +163,11 @@ float4 FSMain(VSOutput input) : SV_Target0
         finalColor += (Kd * albedo / PI + specularTerm) * radiance * NoW;
     }
 
-    float3 ambient = float3(0.03) * albedo * ao;
+    float3 Ks = FresnelSchlickRoughness(F0, N, V, roughness);
+    float3 Kd = float3(1.0) - Ks;
+    float3 diffuseIrradiance = gIrradianceMap.Sample(N).rgb;
+    float3 diffuseAmbient = diffuseIrradiance * albedo;
+    float3 ambient = diffuseAmbient * Kd * ao;
     float3 emissive = gTextures[NonUniformResourceIndex(gObjectData.emissiveMapIndex)].Sample(gTrilinearColor, input.uv).rgb;
 
     float3 color = ambient + finalColor + emissive;

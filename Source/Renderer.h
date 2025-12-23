@@ -55,6 +55,8 @@ namespace im
 		void InitImGui();
 
 		std::unique_ptr<TextureCube> EquirectangularToCubemap(Texture2D& eqMap);
+		std::unique_ptr<TextureCube> CalculateDiffuseIrradiance(TextureCube& cubeMap);
+
 		Buffer CreateCubeVertexBuffer();
 
 	private:
@@ -81,13 +83,14 @@ namespace im
 		std::unique_ptr<Skybox> mSkybox;
 
 		std::unique_ptr<Texture2D> mEquirectangularMap;
-		std::unique_ptr<Buffer> mCubeVertexBuffer;
 
 		std::unique_ptr<TextureCube> mEnvMap;
 		std::unique_ptr<DescriptorSetLayout> mEnvMapSetLayout;
 		std::unique_ptr<PipelineLayout> mEnvMapPipeLayout;
 		std::unique_ptr<GraphicsPipeline> mEnvMapPipe;
 		std::unique_ptr<DescriptorSet> mEnvMapSet;
+
+		std::unique_ptr<TextureCube> mIrradianceMap;
 
 		std::vector<std::unique_ptr<CommandBuffer>> mCommandBuffers;
 		std::vector<std::unique_ptr<Semaphore>> mAcquireSemaphores;

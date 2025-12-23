@@ -22,7 +22,7 @@ namespace im
 
 	void Camera::UpdateFrontVector()
 	{
-		pitch = std::clamp(pitch, -89.9f, 89.9f);
+		pitch = std::clamp(pitch, -89.99f, 89.99f);
 		yaw = std::fmodf(yaw, 360.0f);
 
 		// Recalculate front vector

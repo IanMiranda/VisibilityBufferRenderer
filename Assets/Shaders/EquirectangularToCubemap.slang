@@ -14,7 +14,6 @@ struct EqMapData
 [shader("vertex")]
 VSOutput VSMain(float3 pos : POSITION)
 {
-    pos.y *= -1.0f;
 	VSOutput res = (VSOutput)0;
     res.pos = mul(gEqMapData.viewProj, float4(pos, 1.0)).xyww;
     res.localPos = pos;
