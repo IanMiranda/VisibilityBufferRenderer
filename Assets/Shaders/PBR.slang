@@ -107,7 +107,7 @@ float4 FSMain(VSOutput input) : SV_Target0
     N = N * 2.0 - 1.0;
     N = normalize(mul(input.tbn, N));
 
-    float3 V = -normalize(input.posView);
+    float3 V = normalize(-input.posView);
 
     float3 F0 = float3(0.04);
     F0 = lerp(F0, albedo, metallic);
@@ -146,7 +146,8 @@ float4 FSMain(VSOutput input) : SV_Target0
     float3 diffuseAmbient = diffuseIrradiance * albedo;
 
     static const float maxReflectionLevel = 4.0;
-    const float3 R = reflect(-V, N);
+    float3 R = normalize(reflect(-V, N));
+    R = mul(gPassData.viewInverse, float4(R, 0.0)).xyz;
     const float3 prefilterColor = gPrefilterMap.SampleLevel(R, roughness * maxReflectionLevel).rgb;
     const float3 F = FresnelSchlickRoughness(F0, V, N, roughness);
     float2 brdfValue = gBrdfLut.Sample(float2(saturate(dot(N, V)), roughness)).rg;

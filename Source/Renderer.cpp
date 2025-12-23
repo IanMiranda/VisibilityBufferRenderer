@@ -39,7 +39,7 @@ namespace im
 
 		stbi_set_flip_vertically_on_load(true);
 		int width, height, channels;
-		float* data = stbi_loadf("./Assets/Textures/stadium_exterior_4k.hdr", &width, &height, &channels, STBI_rgb_alpha);
+		float* data = stbi_loadf("./Assets/Textures/empty_play_room_4k.hdr", &width, &height, &channels, STBI_rgb_alpha);
 		if (!data)
 		{
 			fmt::println(stderr, "Failed to load HDR environment map!");
@@ -105,7 +105,7 @@ namespace im
 		mEnvMapSet->
 			PushWrite(
 				0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-				*mPrefilteredEnvMap, mDevice.GetSamplers().TrilinearColor(),
+				*mEnvMap, mDevice.GetSamplers().TrilinearColor(),
 				VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
 			.Update();
 
