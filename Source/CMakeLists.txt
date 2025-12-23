@@ -21,16 +21,8 @@ target_sources(
             Utils.h
             Utils.cpp
 
-            ShadowPass.h
-            ShadowPass.cpp
-
-            GBuffer.h
-            GBuffer.cpp
-
             Common.h
             Common.cpp
-
-            Geometry.h
 
             BindlessSet.h
             BindlessSet.cpp

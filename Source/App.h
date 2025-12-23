@@ -23,8 +23,6 @@
 #include "API/DescriptorPool.h"
 #include "API/DescriptorSet.h"
 #include "BindlessSet.h"
-#include "ShadowPass.h"
-#include "GBuffer.h"
 #include "Skybox.h"
 #include "Renderer.h"
 #include "Light.h"
