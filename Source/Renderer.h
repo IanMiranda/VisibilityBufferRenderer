@@ -56,6 +56,7 @@ namespace im
 
 		std::unique_ptr<TextureCube> EquirectangularToCubemap(Texture2D& eqMap);
 		std::unique_ptr<TextureCube> CalculateDiffuseIrradiance(TextureCube& cubeMap);
+		std::unique_ptr<TextureCube> PrefilterEnvMap(TextureCube& cubeMap);
 
 		Buffer CreateCubeVertexBuffer();
 
@@ -91,6 +92,7 @@ namespace im
 		std::unique_ptr<DescriptorSet> mEnvMapSet;
 
 		std::unique_ptr<TextureCube> mIrradianceMap;
+		std::unique_ptr<TextureCube> mPrefilteredEnvMap;
 
 		std::vector<std::unique_ptr<CommandBuffer>> mCommandBuffers;
 		std::vector<std::unique_ptr<Semaphore>> mAcquireSemaphores;

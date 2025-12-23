@@ -26,7 +26,7 @@ VSOutput VSMain(uint vertexIndex : SV_VertexID)
 [shader("fragment")]
 float4 FSMain(VSOutput input) : SV_Target0
 {
-    float3 color = gCubemap.Sample(input.viewDir).rgb;
+    float3 color = gCubemap.SampleLevel(input.viewDir, 1.2).rgb;
     color = color / (color + float3(1.0));
     color = pow(color, float3(1.0 / 2.2));
     return float4(color, 1.0);

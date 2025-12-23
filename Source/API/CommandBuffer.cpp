@@ -139,7 +139,7 @@ namespace im
 		imageBarrier.subresourceRange.baseArrayLayer = 0;
 		imageBarrier.subresourceRange.layerCount = 6;
 		imageBarrier.subresourceRange.baseMipLevel = 0;
-		imageBarrier.subresourceRange.levelCount = 1;
+		imageBarrier.subresourceRange.levelCount = texture.GetMipLevels();
 
 		VkDependencyInfo depInfo{ VK_STRUCTURE_TYPE_DEPENDENCY_INFO };
 		depInfo.imageMemoryBarrierCount = 1;

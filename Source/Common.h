@@ -108,6 +108,16 @@ namespace im
 		EqMapData(const glm::mat4& viewProj) : viewProj(viewProj) {}
 	};
 
+	struct PrefilterData
+	{
+		glm::mat4 viewProj;
+		float roughness;
+
+		PrefilterData(const glm::mat4& viewProj, float roughness)
+			: viewProj(viewProj), roughness(roughness)
+		{}
+	};
+
 	class Buffer;
 	class Texture2D;
 

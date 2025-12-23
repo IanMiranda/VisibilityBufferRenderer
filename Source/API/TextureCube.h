@@ -22,6 +22,7 @@ namespace im
 		VkFormat GetFormat() const { return mFormat; }
 		uint32_t GetWidth() const { return mWidth; }
 		uint32_t GetHeight() const { return mHeight; }
+		uint32_t GetMipLevels() const { return mMipLevels; }
 
 	private:
 		Device& mDevice;

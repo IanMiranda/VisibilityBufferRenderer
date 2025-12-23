@@ -26,7 +26,7 @@ namespace im
 		cubemapInfo.format = mFormat;
 		cubemapInfo.imageType = VK_IMAGE_TYPE_2D;
 		cubemapInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-		cubemapInfo.mipLevels = 1;
+		cubemapInfo.mipLevels = mipLevels;
 		cubemapInfo.samples = VK_SAMPLE_COUNT_1_BIT;
 		cubemapInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 		cubemapInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
@@ -65,7 +65,7 @@ namespace im
 					viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
 					viewInfo.subresourceRange.baseArrayLayer = i;
 					viewInfo.subresourceRange.layerCount = 1;
-					VK_CHECK(vkCreateImageView(mDevice.Get(), &viewInfo, nullptr, &mFaceViews[i]));
+					VK_CHECK(vkCreateImageView(mDevice.Get(), &viewInfo, nullptr, &mFaceViews[i + level * 6]));
 				}
 			}
 		}
