@@ -4,12 +4,20 @@
 
 namespace im
 {
-	TextureCube::TextureCube(Device& device, VkFormat format, VkImageUsageFlags usage, uint32_t width, uint32_t height, bool createFaceViews)
+	TextureCube::TextureCube(
+		Device& device,
+		VkFormat format,
+		VkImageUsageFlags usage,
+		uint32_t width,
+		uint32_t height,
+		bool createFaceViews,
+		uint32_t mipLevels)
 		: mDevice(device)
 		, mFormat(format)
 		, mUsage(usage)
 		, mWidth(width)
 		, mHeight(height)
+		, mMipLevels(mipLevels)
 	{
 		VkImageCreateInfo cubemapInfo{ VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
 		cubemapInfo.arrayLayers = 6;
@@ -47,13 +55,18 @@ namespace im
 
 		if (createFaceViews)
 		{
-			mFaceViews.resize(6);
-			for (uint32_t i = 0; i < 6; ++i)
+			mFaceViews.resize(6 * mMipLevels);
+			for (uint32_t level = 0; level < mMipLevels; ++level)
 			{
-				viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-				viewInfo.subresourceRange.baseArrayLayer = i;
-				viewInfo.subresourceRange.layerCount = 1;
-				VK_CHECK(vkCreateImageView(mDevice.Get(), &viewInfo, nullptr, &mFaceViews[i]));
+				viewInfo.subresourceRange.baseMipLevel = level;
+				viewInfo.subresourceRange.levelCount = 1;
+				for (uint32_t i = 0; i < 6; ++i)
+				{
+					viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+					viewInfo.subresourceRange.baseArrayLayer = i;
+					viewInfo.subresourceRange.layerCount = 1;
+					VK_CHECK(vkCreateImageView(mDevice.Get(), &viewInfo, nullptr, &mFaceViews[i]));
+				}
 			}
 		}
 	}
