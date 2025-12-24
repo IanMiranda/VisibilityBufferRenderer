@@ -24,92 +24,7 @@ namespace im
 		InitCommandBuffers();
 		InitPipeline();
 		InitUniformBuffers();
-
-		mSkybox = std::make_unique<Skybox>(
-			*this,
-			std::array<std::filesystem::path, Skybox::Faces>{
-				"./Assets/Textures/Stadium/px.png",
-				"./Assets/Textures/Stadium/nx.png",
-				"./Assets/Textures/Stadium/py.png",
-				"./Assets/Textures/Stadium/ny.png",
-				"./Assets/Textures/Stadium/pz.png",
-				"./Assets/Textures/Stadium/nz.png",
-			}
-		);
-
-		stbi_set_flip_vertically_on_load(true);
-		int width, height, channels;
-		float* data = stbi_loadf("./Assets/Textures/stadium_exterior_4k.hdr", &width, &height, &channels, STBI_rgb_alpha);
-		if (!data)
-		{
-			fmt::println(stderr, "Failed to load HDR environment map!");
-			return;
-		}
-
-		mEquirectangularMap = std::make_unique<Texture2D>(mDevice, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, width, height, 1);
-		Buffer staging(mDevice, width * height * 4 * sizeof(float), data);
-		mDevice.RunImmediateCommands([&staging, this](CommandBuffer& cmds)
-			{
-				cmds.Barrier(
-					*mEquirectangularMap,
-					VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-					VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, VK_ACCESS_2_NONE,
-					VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT);
-				cmds.Copy(staging, *mEquirectangularMap);
-				cmds.Barrier(
-					*mEquirectangularMap,
-					VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-					VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
-					VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_READ_BIT);
-			}
-		);
-
-		stbi_image_free(data);
-
-		// TODO: Update view matrices for environment maps, technically incorrect now
-		mEnvMap = EquirectangularToCubemap(*mEquirectangularMap);
-		mIrradianceMap = CalculateDiffuseIrradiance(*mEnvMap);
-		mPrefilteredEnvMap = PrefilterEnvMap(*mEnvMap);
-		mBrdfLut = GenerateBrdfLut();
-
-		// Create environment pipeline
-		mEnvMapSetLayout = std::make_unique<DescriptorSetLayout>(
-			mDevice,
-			std::initializer_list{
-				DescriptorSetLayout::Binding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
-			}
-		);
-
-		mEnvMapPipeLayout = std::make_unique<PipelineLayout>(
-			mDevice,
-			std::initializer_list{ std::ref(*mEnvMapSetLayout) },
-			std::initializer_list{ utils::PushConstantRange(VK_SHADER_STAGE_VERTEX_BIT, sizeof(CubemapData)) }
-		);
-
-		mEnvMapPipe = std::make_unique<GraphicsPipeline>(
-			mDevice,
-			GraphicsPipelineDesc(
-				*mEnvMapPipeLayout,
-				Shader(mDevice, "./Assets/Shaders/Bin/Cubemap.spv")
-					.AddStage(VK_SHADER_STAGE_VERTEX_BIT, "VSMain")
-					.AddStage(VK_SHADER_STAGE_FRAGMENT_BIT, "FSMain"),
-				{},
-				InputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST),
-				Rasterizer(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE, VK_POLYGON_MODE_FILL),
-				Multisample(VK_SAMPLE_COUNT_1_BIT),
-				{ ColorAttachment(mDevice.GetSwapchain().GetFormat()) },
-				{ DepthStencil(mDevice.GetDepthFormat(), false) }
-			)
-		);
-
-		mEnvMapSet = mSetAllocator.Allocate(*mEnvMapSetLayout);
-		mEnvMapSet->
-			PushWrite(
-				0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-				*mEnvMap, mDevice.GetSamplers().TrilinearColor(),
-				VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-			.Update();
-
+		InitPbr();
 		InitDescriptors();
 	}
 
@@ -794,6 +709,82 @@ namespace im
 					VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT)
 			);
 		}
+	}
+
+	void Renderer::InitPbr()
+	{
+		stbi_set_flip_vertically_on_load(true);
+		int width, height, channels;
+		float* data = stbi_loadf("./Assets/Textures/stadium_exterior_4k.hdr", &width, &height, &channels, STBI_rgb_alpha);
+		if (!data)
+		{
+			fmt::println(stderr, "Failed to load HDR environment map!");
+			return;
+		}
+
+		mEquirectangularMap = std::make_unique<Texture2D>(mDevice, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, width, height, 1);
+		Buffer staging(mDevice, width * height * 4 * sizeof(float), data);
+		mDevice.RunImmediateCommands([&staging, this](CommandBuffer& cmds)
+			{
+				cmds.Barrier(
+					*mEquirectangularMap,
+					VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+					VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, VK_ACCESS_2_NONE,
+					VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT);
+				cmds.Copy(staging, *mEquirectangularMap);
+				cmds.Barrier(
+					*mEquirectangularMap,
+					VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+					VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+					VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_READ_BIT);
+			}
+		);
+
+		stbi_image_free(data);
+
+		// TODO: Update view matrices for environment maps, technically incorrect now
+		mEnvMap = EquirectangularToCubemap(*mEquirectangularMap);
+		mIrradianceMap = CalculateDiffuseIrradiance(*mEnvMap);
+		mPrefilteredEnvMap = PrefilterEnvMap(*mEnvMap);
+		mBrdfLut = GenerateBrdfLut();
+
+		// Create environment pipeline
+		mEnvMapSetLayout = std::make_unique<DescriptorSetLayout>(
+			mDevice,
+			std::initializer_list{
+				DescriptorSetLayout::Binding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
+			}
+		);
+
+		mEnvMapPipeLayout = std::make_unique<PipelineLayout>(
+			mDevice,
+			std::initializer_list{ std::ref(*mEnvMapSetLayout) },
+			std::initializer_list{ utils::PushConstantRange(VK_SHADER_STAGE_VERTEX_BIT, sizeof(CubemapData)) }
+		);
+
+		mEnvMapPipe = std::make_unique<GraphicsPipeline>(
+			mDevice,
+			GraphicsPipelineDesc(
+				*mEnvMapPipeLayout,
+				Shader(mDevice, "./Assets/Shaders/Bin/Cubemap.spv")
+				.AddStage(VK_SHADER_STAGE_VERTEX_BIT, "VSMain")
+				.AddStage(VK_SHADER_STAGE_FRAGMENT_BIT, "FSMain"),
+				{},
+				InputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST),
+				Rasterizer(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE, VK_POLYGON_MODE_FILL),
+				Multisample(VK_SAMPLE_COUNT_1_BIT),
+				{ ColorAttachment(mDevice.GetSwapchain().GetFormat()) },
+				{ DepthStencil(mDevice.GetDepthFormat(), false) }
+			)
+		);
+
+		mEnvMapSet = mSetAllocator.Allocate(*mEnvMapSetLayout);
+		mEnvMapSet->
+			PushWrite(
+				0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+				*mEnvMap, mDevice.GetSamplers().TrilinearColor(),
+				VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+			.Update();
 	}
 
 	void Renderer::InitDescriptors()

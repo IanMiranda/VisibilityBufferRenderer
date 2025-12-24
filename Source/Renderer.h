@@ -51,6 +51,7 @@ namespace im
 		void InitCommandBuffers();
 		void InitSyncPrimitives();
 		void InitUniformBuffers();
+		void InitPbr();
 		void InitDescriptors();
 		void InitImGui();
 
@@ -81,8 +82,6 @@ namespace im
 
 		std::vector<std::unique_ptr<Buffer>> mMainPassBuffers;
 		std::vector<std::unique_ptr<Buffer>> mLightBuffers;
-
-		std::unique_ptr<Skybox> mSkybox;
 
 		std::unique_ptr<Texture2D> mEquirectangularMap;
 
