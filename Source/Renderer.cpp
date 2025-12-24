@@ -7,7 +7,6 @@
 
 #include "API/Shader.h"
 #include "Utils.h"
-#include "Skybox.h"
 
 namespace im
 {

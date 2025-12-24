@@ -23,7 +23,6 @@
 #include "API/DescriptorPool.h"
 #include "API/DescriptorSet.h"
 #include "BindlessSet.h"
-#include "Skybox.h"
 #include "Renderer.h"
 #include "Light.h"
 

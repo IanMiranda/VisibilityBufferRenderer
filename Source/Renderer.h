@@ -13,6 +13,7 @@
 #include "API/DescriptorPool.h"
 #include "API/Buffer.h"
 #include "API/Texture2D.h"
+#include "API/TextureCube.h"
 #include "BindlessSet.h"
 #include "DescriptorSetAllocator.h"
 #include "Light.h"
@@ -21,7 +22,6 @@
 namespace im
 {
 	class Mesh;
-	class Skybox;
 
 	class Renderer
 	{
