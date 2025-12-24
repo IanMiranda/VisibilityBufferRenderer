@@ -157,11 +157,18 @@ namespace im
 		};
 
 		{
-			const auto [duckVertices, duckIndices] = utils::LoadGltfModel("./Assets/Models/Helmet/DamagedHelmet2.gltf");
-			glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f));
-			model = glm::rotate(model, glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
-			model = glm::scale(model, glm::vec3(2.0f));
-			mMeshes.emplace_back(UploadMesh(duckVertices, duckIndices, mMaterial, model));
+			const auto [helmetVertices, helmetIndices] = utils::LoadGltfModel("./Assets/Models/Helmet/DamagedHelmet2.gltf");
+
+			for (float z = -5.0f; z <= 5.0f; z += 1.0f)
+			{
+				for (float x = -5.0f; x <= 5.0f; x += 1.0f)
+				{
+					glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(x * 5.0f, 0.0f, z * 5.0f));
+					model = glm::rotate(model, glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+					model = glm::scale(model, glm::vec3(2.0f));
+					mMeshes.emplace_back(UploadMesh(helmetVertices, helmetIndices, mMaterial, model));
+				}
+			}
 		}
 	}
 
