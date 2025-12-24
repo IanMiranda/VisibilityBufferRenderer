@@ -39,7 +39,7 @@ namespace im
 
 		stbi_set_flip_vertically_on_load(true);
 		int width, height, channels;
-		float* data = stbi_loadf("./Assets/Textures/empty_play_room_4k.hdr", &width, &height, &channels, STBI_rgb_alpha);
+		float* data = stbi_loadf("./Assets/Textures/stadium_exterior_4k.hdr", &width, &height, &channels, STBI_rgb_alpha);
 		if (!data)
 		{
 			fmt::println(stderr, "Failed to load HDR environment map!");
@@ -66,6 +66,7 @@ namespace im
 
 		stbi_image_free(data);
 
+		// TODO: Update view matrices for environment maps, technically incorrect now
 		mEnvMap = EquirectangularToCubemap(*mEquirectangularMap);
 		mIrradianceMap = CalculateDiffuseIrradiance(*mEnvMap);
 		mPrefilteredEnvMap = PrefilterEnvMap(*mEnvMap);
