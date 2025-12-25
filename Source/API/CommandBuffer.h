@@ -100,6 +100,8 @@ namespace im
 			uint32_t vertexOffet = 0,
 			uint32_t firstInstance = 0);
 
+		void DrawIndexedIndirect(Buffer& buffer, uint32_t offset, uint32_t drawCount, uint32_t stride);
+
 		VkCommandBuffer Get() { return mCmdBuf; }
 
 	private:

@@ -17,6 +17,16 @@ namespace im
 		, mBindlessSet(mDevice)
 		, mSetAllocator(mDevice)
 		, mCommandPool(mDevice, mDevice.GetGraphicsIndex(), VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT)
+		, mIndirectDrawBuffer(
+			mDevice,
+			MaxDrawCalls * sizeof(DrawCall),
+			VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
+			VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT)
+		, mObjectDataBuffer(
+			mDevice,
+			MaxDrawCalls * sizeof(ObjectData),
+			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+			VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT)
 		, mCamera(0.0f, 0.0f, 0.0f, 0.0f)
 	{
 		InitDepthBuffer();
@@ -94,6 +104,9 @@ namespace im
 	{
 		auto& commandBuffer = *mCommandBuffers[mFrameIndex];
 
+		mIndirectDrawBuffer.Unmap();
+		mObjectDataBuffer.Unmap();
+
 		ImGui::Render();
 		ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer.Get());
 
@@ -129,6 +142,10 @@ namespace im
 
 		mSemaphoreIndex = (mSemaphoreIndex + 1) % mAcquireSemaphores.size();
 		mFrameIndex = (mFrameIndex + 1) % MaxFramesInFlight;
+
+		mDrawCallCount = 0;
+		mDrawCallPtr = nullptr;
+		mObjectDataPtr = nullptr;
 	}
 
 	void Renderer::BeginScene(const Camera& camera, std::span<PointLight> pointLights)
@@ -156,10 +173,18 @@ namespace im
 		commandBuffer.BindGraphicsDescriptorSets(*mEnvMapPipeLayout, 0, { *mEnvMapSet });
 		commandBuffer.PushConstants(*mEnvMapPipeLayout, VK_SHADER_STAGE_VERTEX_BIT, CubemapData(view, proj));
 		commandBuffer.Draw(3);
+
+		mDrawCallPtr = reinterpret_cast<DrawCall*>(mIndirectDrawBuffer.Map());
+		mObjectDataPtr = reinterpret_cast<ObjectData*>(mObjectDataBuffer.Map());
 	}
 
 	void Renderer::DrawMesh(const Mesh& mesh)
 	{
+		if (mDrawCallCount > MaxDrawCalls)
+		{
+			fmt::println(stderr, "Exceeded maximum draw call count ({})", MaxDrawCalls);
+		}
+
 		ObjectData pushConsts;
 		pushConsts.model = mesh.transform;
 		pushConsts.albedoMapIndex = mBindlessSet.GetOrCreateId(mesh.material.albedoMap);
@@ -178,7 +203,16 @@ namespace im
 		);
 		commandBuffer.BindVertexBuffer(*mesh.vertexBuffer);
 		commandBuffer.BindIndexBuffer(*mesh.indexBuffer);
-		commandBuffer.DrawIndexed(mesh.indexCount);
+
+		mDrawCallPtr->indexCount = mesh.indexCount;
+		mDrawCallPtr->instanceCount = 1;
+		mDrawCallPtr->vertexOffset = 0;
+		mDrawCallPtr->firstVertex = 0;
+		mDrawCallPtr->firstInstance = 0;
+		++mDrawCallPtr;
+		commandBuffer.DrawIndexedIndirect(mIndirectDrawBuffer, mDrawCallCount * sizeof(DrawCall), 1, sizeof(DrawCall));
+
+		mDrawCallCount += 1;
 	}
 
 	void Renderer::RecreateSwapchain()

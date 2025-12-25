@@ -328,4 +328,9 @@ namespace im
 	{
 		vkCmdDrawIndexed(mCmdBuf, indexCount, instanceCount, firstIndex, vertexOffet, firstInstance);
 	}
+
+	void CommandBuffer::DrawIndexedIndirect(Buffer& buffer, uint32_t offset, uint32_t drawCount, uint32_t stride)
+	{
+		vkCmdDrawIndexedIndirect(mCmdBuf, buffer.Get(), offset, drawCount, stride);
+	}
 }

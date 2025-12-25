@@ -68,6 +68,16 @@ namespace im
 
 	private:
 		static constexpr int MaxFramesInFlight = 2;
+		static constexpr uint32_t MaxDrawCalls = 100'000;
+
+		struct DrawCall
+		{
+			uint32_t indexCount;
+			uint32_t instanceCount;
+			uint32_t firstVertex;
+			uint32_t vertexOffset;
+			uint32_t firstInstance;
+		};
 
 		Window& mWindow;
 
@@ -75,6 +85,8 @@ namespace im
 		BindlessSet mBindlessSet;
 		DescriptorSetAllocator mSetAllocator;
 		CommandPool mCommandPool;
+		Buffer mIndirectDrawBuffer;
+		Buffer mObjectDataBuffer;
 
 		std::unique_ptr<Texture2D> mDepthImage;
 
@@ -108,5 +120,8 @@ namespace im
 		bool mFramebufferResized{ false };
 
 		Camera mCamera;
+		DrawCall* mDrawCallPtr{ nullptr };
+		ObjectData* mObjectDataPtr{ nullptr };
+		uint32_t mDrawCallCount{ 0 };
 	};
 }
