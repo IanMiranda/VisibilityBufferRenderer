@@ -7,6 +7,7 @@
 
 #include "API/Shader.h"
 #include "Utils.h"
+#include "Scene.h"
 
 namespace im
 {
@@ -36,7 +37,17 @@ namespace im
 		ImGui::DestroyContext();
 	}
 
-	bool Renderer::Begin()
+    void Renderer::Render(Scene& scene)
+    {
+		if (!Begin()) return;
+		
+		BeginScene(scene.GetCamera(), scene.GetPointLights());
+		scene.Render();
+
+		End();
+    }
+
+    bool Renderer::Begin()
 	{
 		Swapchain& swapchain = mDevice.GetSwapchain();
 

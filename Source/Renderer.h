@@ -22,6 +22,7 @@
 namespace im
 {
 	class Mesh;
+	class Scene;
 
 	class Renderer
 	{
@@ -32,15 +33,18 @@ namespace im
 		Renderer(Window& window);
 		~Renderer();
 
-		bool Begin();
-		void End();
-
-		void BeginScene(const Camera& camera, std::span<PointLight> pointLights);
+		void Render(Scene& scene);
 
 		void DrawMesh(const Mesh& mesh);
 
 		Device& GetDevice() { return mDevice; }
 		DescriptorSetAllocator& GetDescriptorSetAllocator() { return mSetAllocator; }
+
+	private:
+		bool Begin();
+		void End();
+
+		void BeginScene(const Camera& camera, std::span<PointLight> pointLights);
 
 	private:
 		void RecreateSwapchain();
