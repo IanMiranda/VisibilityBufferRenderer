@@ -2,6 +2,7 @@
 
 #include <imgui.h>
 #include <stb_image.h>
+#include <numeric>
 
 #include "App.h"
 #include "Utils.h"
@@ -35,12 +36,13 @@ namespace im
 					glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(x * 5.0f, 0.0f, z * 5.0f));
 					model = glm::rotate(model, glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
 					model = glm::scale(model, glm::vec3(2.0f));
-					mMeshes.emplace_back(UploadMesh(helmetVertices, helmetIndices, mMaterial, model));
+					mMeshes.emplace_back(helmetVertices, helmetIndices, 0, mMaterial, model);
 				}
 			}
 		}
 
         mPointLights.resize(8);
+		CombineMeshBuffers();
     }
     
     void Scene::Update(float deltaTime)
@@ -152,29 +154,51 @@ namespace im
 		return resTex;
 	}
 
-	Mesh Scene::UploadMesh(
-		const std::vector<Vertex>& vertices,
-		const std::vector<uint32_t>& indices,
-		const Material& material,
-		const glm::mat4& transform)
+	void Scene::CombineMeshBuffers()
 	{
-		Mesh res;
-		Buffer stagingVerts(mApp.GetRenderer().GetDevice(), vertices.size() * sizeof(vertices[0]), vertices.data());
-		Buffer stagingIdxs(mApp.GetRenderer().GetDevice(), indices.size() * sizeof(indices[0]), indices.data());
-		res.vertexBuffer = std::make_unique<Buffer>(
-			mApp.GetRenderer().GetDevice(), stagingVerts.GetSize(),
-			VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, 0);
-		res.indexBuffer = std::make_unique<Buffer>(
-			mApp.GetRenderer().GetDevice(), stagingIdxs.GetSize(),
-			VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, 0);
-		res.indexCount = indices.size();
-		res.material = material;
-		res.transform = transform;
-		mApp.GetRenderer().GetDevice().RunImmediateCommands([this, &stagingVerts, &stagingIdxs, &res](CommandBuffer& cmds)
+		auto totalVertices = std::accumulate(mMeshes.begin(), mMeshes.end(), 0z, [](size_t res, const Mesh& mesh) { return res + mesh.vertices.size(); });
+		auto totalIndices = std::accumulate(mMeshes.begin(), mMeshes.end(), 0z, [](size_t res, const Mesh& mesh) { return res + mesh.indices.size(); });
+
+		Buffer stagingVtx(
+			mApp.GetRenderer().GetDevice(),
+			totalVertices * sizeof(Vertex),
+			VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+			VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
+		Buffer stagingIdx(
+			mApp.GetRenderer().GetDevice(),
+			totalIndices * sizeof(uint32_t),
+			VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+			VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
+
+		auto vertexData = reinterpret_cast<Vertex*>(stagingVtx.Map());
+		auto indexData = reinterpret_cast<uint32_t*>(stagingIdx.Map());
+		uint32_t sceneBufferIndex = 0;
+		for (auto& mesh : mMeshes)
 		{
-			cmds.Copy(stagingVerts, *res.vertexBuffer);
-			cmds.Copy(stagingIdxs, *res.indexBuffer);
-		});
-		return res;
+			std::memcpy(vertexData, mesh.vertices.data(), mesh.vertices.size() * sizeof(Vertex));
+			std::memcpy(indexData, mesh.indices.data(), mesh.indices.size() * sizeof(uint32_t));
+			vertexData += mesh.vertices.size();
+			indexData += mesh.indices.size();
+			mesh.sceneBufferIndex = sceneBufferIndex;
+			sceneBufferIndex += mesh.vertices.size();
+		}
+		stagingVtx.Unmap();
+		stagingIdx.Unmap();
+
+		mApp.GetRenderer().GetDevice().RunImmediateCommands([this, &stagingVtx, &stagingIdx](CommandBuffer& commandBuffer)
+			{
+				mVertexBuffer = std::make_unique<Buffer>(
+					mApp.GetRenderer().GetDevice(),
+					stagingVtx.GetSize(),
+					VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+					0);
+				mIndexBuffer = std::make_unique<Buffer>(
+					mApp.GetRenderer().GetDevice(),
+					stagingIdx.GetSize(),
+					VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+					0);
+				commandBuffer.Copy(stagingVtx, *mVertexBuffer);
+				commandBuffer.Copy(stagingIdx, *mIndexBuffer);
+			});
 	}
 }

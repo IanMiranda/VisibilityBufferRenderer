@@ -44,7 +44,7 @@ namespace im
 		bool Begin();
 		void End();
 
-		void BeginScene(const Camera& camera, std::span<PointLight> pointLights);
+		void BeginScene(Scene& scene);
 
 	private:
 		void RecreateSwapchain();

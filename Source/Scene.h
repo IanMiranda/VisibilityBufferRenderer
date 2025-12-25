@@ -20,27 +20,27 @@ namespace im
 
         Camera& GetCamera() { return mCamera; }
         std::vector<PointLight>& GetPointLights() { return mPointLights; }
+        Buffer& GetVertexBuffer() { return *mVertexBuffer; }
+        Buffer& GetIndexBuffer() { return *mIndexBuffer; }
 
     private:
     	void UpdateLightPositions();
     	void DrawUI();
+
+        void CombineMeshBuffers();
 
         std::unique_ptr<Texture2D> CreateAndStageTexture(
 			const std::filesystem::path& path,
 			VkFormat format,
 			bool generateMipmaps);
 
-		Mesh UploadMesh(
-			const std::vector<Vertex>& vertices,
-			const std::vector<uint32_t>& indices,
-			const Material& material,
-			const glm::mat4& transform
-		);
-
     private:
         App& mApp;
 
     	Material mMaterial;
+
+        std::unique_ptr<Buffer> mVertexBuffer;
+        std::unique_ptr<Buffer> mIndexBuffer;
 		
 		Camera mCamera;
 		std::vector<Mesh> mMeshes;

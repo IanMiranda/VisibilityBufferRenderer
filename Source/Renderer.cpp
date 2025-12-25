@@ -61,7 +61,7 @@ namespace im
     {
 		if (!Begin()) return;
 		
-		BeginScene(scene.GetCamera(), scene.GetPointLights());
+		BeginScene(scene);
 		scene.Render();
 
 		End();
@@ -117,6 +117,8 @@ namespace im
 		mIndirectDrawBuffers[mFrameIndex].Unmap();
 		mObjectDataBuffers[mFrameIndex].Unmap();
 
+		commandBuffer.DrawIndexedIndirect(mIndirectDrawBuffers[mFrameIndex], 0, mDrawCallCount, sizeof(DrawCall));
+
 		ImGui::Render();
 		ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer.Get());
 
@@ -158,9 +160,9 @@ namespace im
 		mObjectDataPtr = nullptr;
 	}
 
-	void Renderer::BeginScene(const Camera& camera, std::span<PointLight> pointLights)
+	void Renderer::BeginScene(Scene& scene)
 	{
-		mCamera = camera;
+		mCamera = scene.GetCamera();
 		const auto view = mCamera.GetViewMatrix();
 		const auto proj = mCamera.GetProjectionMatrix();
 
@@ -169,17 +171,15 @@ namespace im
 		passData.viewProj = proj * view;
 		passData.viewInverse = glm::inverse(view);
 		passData.objectData = mObjectDataBuffers[mFrameIndex].GetAddress();
-		passData.lightCount = pointLights.size();
+		passData.lightCount = scene.GetPointLights().size();
 		mMainPassBuffers[mFrameIndex]->SetData(passData);
 
 		LightData lightData{};
-		for (int i = 0; i < pointLights.size(); ++i)
-			lightData.lights[i] = { glm::vec3(view * glm::vec4(pointLights[i].position, 1.0f)), 0, pointLights[i].i };
+		for (int i = 0; i < scene.GetPointLights().size(); ++i)
+			lightData.lights[i] = { glm::vec3(view * glm::vec4(scene.GetPointLights()[i].position, 1.0f)), 0, scene.GetPointLights()[i].i };
 		mLightBuffers[mFrameIndex]->SetData(lightData);
 
 		auto& commandBuffer = *mCommandBuffers[mFrameIndex];
-		/*mSkybox->Draw(commandBuffer, mCamera.GetViewMatrix(), mCamera.GetProjectionMatrix());*/
-
 		commandBuffer.BindGraphicsPipeline(*mEnvMapPipe);
 		commandBuffer.BindGraphicsDescriptorSets(*mEnvMapPipeLayout, 0, { *mEnvMapSet });
 		commandBuffer.PushConstants(*mEnvMapPipeLayout, VK_SHADER_STAGE_VERTEX_BIT, CubemapData(view, proj));
@@ -190,6 +190,8 @@ namespace im
 
 		commandBuffer.BindGraphicsPipeline(*mMainPipe);
 		commandBuffer.BindGraphicsDescriptorSets(*mMainPipeLayout, 0, { *(mMainDescSets[mFrameIndex]), mBindlessSet.Get() });
+		commandBuffer.BindVertexBuffer(scene.GetVertexBuffer());
+		commandBuffer.BindIndexBuffer(scene.GetIndexBuffer());
 	}
 
 	void Renderer::DrawMesh(const Mesh& mesh)
@@ -200,12 +202,9 @@ namespace im
 		}
 
 		auto& commandBuffer = *mCommandBuffers[mFrameIndex];
-		commandBuffer.BindVertexBuffer(*mesh.vertexBuffer);
-		commandBuffer.BindIndexBuffer(*mesh.indexBuffer);
-
-		mDrawCallPtr->indexCount = mesh.indexCount;
+		mDrawCallPtr->indexCount = mesh.indices.size();
 		mDrawCallPtr->instanceCount = 1;
-		mDrawCallPtr->vertexOffset = 0;
+		mDrawCallPtr->vertexOffset = mesh.sceneBufferIndex;
 		mDrawCallPtr->firstVertex = 0;
 		mDrawCallPtr->firstInstance = mDrawCallCount;
 		++mDrawCallPtr;
@@ -218,10 +217,8 @@ namespace im
 		mObjectDataPtr->aoMapIndex = mBindlessSet.GetOrCreateId(mesh.material.aoMap);
 		mObjectDataPtr->emissiveMapIndex = mBindlessSet.GetOrCreateId(mesh.material.emissiveMap);
 		++mObjectDataPtr;
-		
-		commandBuffer.DrawIndexedIndirect(mIndirectDrawBuffers[mFrameIndex], mDrawCallCount * sizeof(DrawCall), 1, sizeof(DrawCall));
 
-		mDrawCallCount += 1;
+		++mDrawCallCount;
 	}
 
 	void Renderer::RecreateSwapchain()

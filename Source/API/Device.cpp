@@ -291,6 +291,7 @@ namespace im
 
 			VkPhysicalDeviceFeatures2 features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2 };
 			features.pNext = &dynamicRenderFeatures;
+			features.features.multiDrawIndirect = VK_TRUE;
 
 			if (InstanceExtensionSupported("VK_KHR_portability_subset"))
 			{

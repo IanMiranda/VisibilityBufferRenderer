@@ -132,11 +132,24 @@ namespace im
 
 	struct Mesh
 	{
-		std::unique_ptr<Buffer> vertexBuffer;
-		std::unique_ptr<Buffer> indexBuffer;
-		uint32_t indexCount;
+		std::vector<Vertex> vertices;
+		std::vector<uint32_t> indices;
+		uint32_t sceneBufferIndex;
 		Material material;
 		glm::mat4 transform;
+
+		Mesh(
+			const std::vector<Vertex>& vertices,
+			const std::vector<uint32_t>& indices,
+			uint32_t sceneBufferIndex,
+			const Material& material,
+			const glm::mat4& transform)
+			: vertices(vertices)
+			, indices(indices)
+			, sceneBufferIndex(sceneBufferIndex)
+			, material(material)
+			, transform(transform)
+		{}
 	};
 }
 
