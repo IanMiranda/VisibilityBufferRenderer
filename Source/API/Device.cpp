@@ -279,6 +279,7 @@ namespace im
 			vulkan12Features.descriptorBindingVariableDescriptorCount		= VK_TRUE;
 			vulkan12Features.shaderSampledImageArrayNonUniformIndexing		= VK_TRUE;
 			vulkan12Features.runtimeDescriptorArray							= VK_TRUE;
+			vulkan12Features.bufferDeviceAddress							= VK_TRUE;
 
 			VkPhysicalDeviceSynchronization2Features syncFeatures{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES };
 			syncFeatures.pNext = &vulkan12Features;
@@ -315,6 +316,7 @@ namespace im
 			allocatorInfo.instance = mInstance;
 			allocatorInfo.physicalDevice = mGpu;
 			allocatorInfo.device = mDevice;
+			allocatorInfo.flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
 			VK_CHECK(vmaCreateAllocator(&allocatorInfo, &mAllocator));
 
 			return;

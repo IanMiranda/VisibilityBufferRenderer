@@ -12,6 +12,7 @@ struct VSInput
     float3 normal : NORMAL;
     float3 tangent : TANGENT;
     float3 bitangent : BITANGENT;
+    uint instance : SV_VulkanInstanceID;
 };
 
 struct VSOutput
@@ -23,18 +24,7 @@ struct VSOutput
     float3 normal : NORMAL0;
     float4 posLight : POSITION1;
     float3x3 tbn : TBN;
-};
-
-public struct GlobalPassData
-{
-    public float4x4 view;
-    public float4x4 viewProj;
-    public float4x4 viewProjLight;
-    public float4x4 viewInverse;
-    public uint lightCount;
-    uint _pad0;
-    uint _pad1;
-    uint _pad2;
+    uint instance : INSTANCE;
 };
 
 struct PbrObjectData
@@ -48,17 +38,29 @@ struct PbrObjectData
     uint emissiveMapIndex;
 };
 
-[push_constant] ConstantBuffer<PbrObjectData> gObjectData;
+public struct GlobalPassData
+{
+    public float4x4 view;
+    public float4x4 viewProj;
+    public float4x4 viewProjLight;
+    public float4x4 viewInverse;
+    PbrObjectData *objectData;
+    public uint lightCount;
+    uint _pad0;
+};
+
 [vk_binding(0, 0)] ConstantBuffer<GlobalPassData> gPassData;
+//[vk_binding(1, 0)] ConstantBuffer<PbrObjectData> gObjectData;
 
 [shader("vertex")]
 VSOutput VSMain(VSInput input)
 {
     VSOutput output = (VSOutput)0;
 
-    float4x4 mv = mul(gPassData.view, gObjectData.model);
-    float4x4 mvp = mul(gPassData.viewProj, gObjectData.model);
-    float4x4 mvpLight = mul(gPassData.viewProjLight, gObjectData.model);
+    float4x4 model = gPassData.objectData[input.instance].model;
+    float4x4 mv = mul(gPassData.view, model);
+    float4x4 mvp = mul(gPassData.viewProj, model);
+    float4x4 mvpLight = mul(gPassData.viewProjLight, model);
 
     float3 T = normalize(mul(mv, float4(input.tangent, 0.0))).xyz;
     float3 B = normalize(mul(mv, float4(input.bitangent, 0.0))).xyz;
@@ -71,6 +73,7 @@ VSOutput VSMain(VSInput input)
     output.posLight.y *= -1.0f;
     output.color = input.color;
     output.uv = input.uv;
+    output.instance = input.instance;
     return output;
 }
 
@@ -98,12 +101,12 @@ float3 FresnelSchlickRoughness(float3 F0, float3 W, float3 H, float roughness)
 [shader("fragment")]
 float4 FSMain(VSOutput input) : SV_Target0
 {
-    float3 albedo = gTextures[NonUniformResourceIndex(gObjectData.albedoMapIndex)].Sample(gTrilinearColor, input.uv).rgb;
-    float metallic = gTextures[NonUniformResourceIndex(gObjectData.metallicMapIndex)].Sample(gTrilinearColor, input.uv).r;
-    float roughness = gTextures[NonUniformResourceIndex(gObjectData.roughnessMapIndex)].Sample(gTrilinearColor, input.uv).g;
-    float ao = gTextures[NonUniformResourceIndex(gObjectData.aoMapIndex)].Sample(gTrilinearColor, input.uv).r;
+    float3 albedo = gTextures[gPassData.objectData[input.instance].albedoMapIndex].Sample(gTrilinearColor, input.uv).rgb;
+    float metallic = gTextures[gPassData.objectData[input.instance].metallicMapIndex] .Sample(gTrilinearColor, input.uv).r;
+    float roughness = gTextures[gPassData.objectData[input.instance].roughnessMapIndex] .Sample(gTrilinearColor, input.uv).g;
+    float ao = gTextures[gPassData.objectData[input.instance].aoMapIndex].Sample(gTrilinearColor, input.uv).r;
 
-    float3 N = gTextures[NonUniformResourceIndex(gObjectData.normalMapIndex)].Sample(gTrilinearColor, input.uv).rgb;
+    float3 N = gTextures[NonUniformResourceIndex(gPassData.objectData[input.instance].normalMapIndex)].Sample(gTrilinearColor, input.uv).rgb;
     N = N * 2.0 - 1.0;
     N = normalize(mul(input.tbn, N));
 
@@ -154,7 +157,7 @@ float4 FSMain(VSOutput input) : SV_Target0
     float3 specular = prefilterColor * (F * brdfValue.x + brdfValue.y);
 
     float3 ambient = (diffuseAmbient * Kd + specular) * ao;
-    float3 emissive = gTextures[NonUniformResourceIndex(gObjectData.emissiveMapIndex)].Sample(gTrilinearColor, input.uv).rgb;
+    float3 emissive = gTextures[gPassData.objectData[input.instance].emissiveMapIndex].Sample(gTrilinearColor, input.uv).rgb;
 
     float3 color = ambient + finalColor + emissive;
     color = color / (color + float3(1.0));

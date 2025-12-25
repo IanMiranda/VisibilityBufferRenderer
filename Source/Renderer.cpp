@@ -17,16 +17,26 @@ namespace im
 		, mBindlessSet(mDevice)
 		, mSetAllocator(mDevice)
 		, mCommandPool(mDevice, mDevice.GetGraphicsIndex(), VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT)
-		, mIndirectDrawBuffer(
-			mDevice,
-			MaxDrawCalls * sizeof(DrawCall),
-			VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
-			VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT)
-		, mObjectDataBuffer(
-			mDevice,
-			MaxDrawCalls * sizeof(ObjectData),
-			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-			VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT)
+		, mIndirectDrawBuffers{
+			Buffer(mDevice,
+				MaxDrawCalls * sizeof(DrawCall),
+				VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
+				VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT),
+			Buffer(mDevice,
+				MaxDrawCalls * sizeof(DrawCall),
+				VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
+				VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT)
+		}
+		, mObjectDataBuffers{
+			Buffer(mDevice,
+				MaxDrawCalls * sizeof(ObjectData),
+				VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+				VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT),
+			Buffer(mDevice,
+				MaxDrawCalls * sizeof(ObjectData),
+				VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+				VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT)
+		}
 		, mCamera(0.0f, 0.0f, 0.0f, 0.0f)
 	{
 		InitDepthBuffer();
@@ -104,8 +114,8 @@ namespace im
 	{
 		auto& commandBuffer = *mCommandBuffers[mFrameIndex];
 
-		mIndirectDrawBuffer.Unmap();
-		mObjectDataBuffer.Unmap();
+		mIndirectDrawBuffers[mFrameIndex].Unmap();
+		mObjectDataBuffers[mFrameIndex].Unmap();
 
 		ImGui::Render();
 		ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer.Get());
@@ -158,6 +168,7 @@ namespace im
 		passData.view = view;
 		passData.viewProj = proj * view;
 		passData.viewInverse = glm::inverse(view);
+		passData.objectData = mObjectDataBuffers[mFrameIndex].GetAddress();
 		passData.lightCount = pointLights.size();
 		mMainPassBuffers[mFrameIndex]->SetData(passData);
 
@@ -174,8 +185,11 @@ namespace im
 		commandBuffer.PushConstants(*mEnvMapPipeLayout, VK_SHADER_STAGE_VERTEX_BIT, CubemapData(view, proj));
 		commandBuffer.Draw(3);
 
-		mDrawCallPtr = reinterpret_cast<DrawCall*>(mIndirectDrawBuffer.Map());
-		mObjectDataPtr = reinterpret_cast<ObjectData*>(mObjectDataBuffer.Map());
+		mDrawCallPtr = reinterpret_cast<DrawCall*>(mIndirectDrawBuffers[mFrameIndex].Map());
+		mObjectDataPtr = reinterpret_cast<ObjectData*>(mObjectDataBuffers[mFrameIndex].Map());
+
+		commandBuffer.BindGraphicsPipeline(*mMainPipe);
+		commandBuffer.BindGraphicsDescriptorSets(*mMainPipeLayout, 0, { *(mMainDescSets[mFrameIndex]), mBindlessSet.Get() });
 	}
 
 	void Renderer::DrawMesh(const Mesh& mesh)
@@ -185,22 +199,7 @@ namespace im
 			fmt::println(stderr, "Exceeded maximum draw call count ({})", MaxDrawCalls);
 		}
 
-		ObjectData pushConsts;
-		pushConsts.model = mesh.transform;
-		pushConsts.albedoMapIndex = mBindlessSet.GetOrCreateId(mesh.material.albedoMap);
-		pushConsts.metallicMapIndex = mBindlessSet.GetOrCreateId(mesh.material.metallicMap);
-		pushConsts.roughnessMapIndex = mBindlessSet.GetOrCreateId(mesh.material.roughnessMap);
-		pushConsts.normalMapIndex = mBindlessSet.GetOrCreateId(mesh.material.normalMap);
-		pushConsts.aoMapIndex = mBindlessSet.GetOrCreateId(mesh.material.aoMap);
-		pushConsts.emissiveMapIndex = mBindlessSet.GetOrCreateId(mesh.material.emissiveMap);
-
 		auto& commandBuffer = *mCommandBuffers[mFrameIndex];
-		commandBuffer.BindGraphicsPipeline(*mMainPipe);
-		commandBuffer.BindGraphicsDescriptorSets(*mMainPipeLayout, 0, { *(mMainDescSets[mFrameIndex]), mBindlessSet.Get() });
-		commandBuffer.PushConstants(*mMainPipeLayout,
-			VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-			pushConsts
-		);
 		commandBuffer.BindVertexBuffer(*mesh.vertexBuffer);
 		commandBuffer.BindIndexBuffer(*mesh.indexBuffer);
 
@@ -208,9 +207,19 @@ namespace im
 		mDrawCallPtr->instanceCount = 1;
 		mDrawCallPtr->vertexOffset = 0;
 		mDrawCallPtr->firstVertex = 0;
-		mDrawCallPtr->firstInstance = 0;
+		mDrawCallPtr->firstInstance = mDrawCallCount;
 		++mDrawCallPtr;
-		commandBuffer.DrawIndexedIndirect(mIndirectDrawBuffer, mDrawCallCount * sizeof(DrawCall), 1, sizeof(DrawCall));
+
+		mObjectDataPtr->model = mesh.transform;
+		mObjectDataPtr->albedoMapIndex = mBindlessSet.GetOrCreateId(mesh.material.albedoMap);
+		mObjectDataPtr->metallicMapIndex = mBindlessSet.GetOrCreateId(mesh.material.metallicMap);
+		mObjectDataPtr->roughnessMapIndex = mBindlessSet.GetOrCreateId(mesh.material.roughnessMap);
+		mObjectDataPtr->normalMapIndex = mBindlessSet.GetOrCreateId(mesh.material.normalMap);
+		mObjectDataPtr->aoMapIndex = mBindlessSet.GetOrCreateId(mesh.material.aoMap);
+		mObjectDataPtr->emissiveMapIndex = mBindlessSet.GetOrCreateId(mesh.material.emissiveMap);
+		++mObjectDataPtr;
+		
+		commandBuffer.DrawIndexedIndirect(mIndirectDrawBuffers[mFrameIndex], mDrawCallCount * sizeof(DrawCall), 1, sizeof(DrawCall));
 
 		mDrawCallCount += 1;
 	}
@@ -260,8 +269,8 @@ namespace im
 				std::ref(*mMainLayout),
 				std::ref(mBindlessSet.GetSetLayout())
 			},
-			std::initializer_list{
-				utils::PushConstantRange(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(ObjectData))
+			std::initializer_list<VkPushConstantRange>{
+				// utils::PushConstantRange(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(ObjectData))
 			}
 		);
 

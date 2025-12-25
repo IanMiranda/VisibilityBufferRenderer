@@ -31,6 +31,13 @@ namespace im
 		vmaDestroyBuffer(mDevice.GetAllocator(), mBuffer, mAllocation);
 	}
 
+	VkDeviceAddress Buffer::GetAddress()
+	{
+		VkBufferDeviceAddressInfo addressInfo{ VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO };
+		addressInfo.buffer = mBuffer;
+		return vkGetBufferDeviceAddress(mDevice.Get(), &addressInfo);
+	}
+
 	void* Buffer::Map()
 	{
 		void* mappedData;

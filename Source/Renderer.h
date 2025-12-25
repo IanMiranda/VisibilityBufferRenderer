@@ -85,8 +85,8 @@ namespace im
 		BindlessSet mBindlessSet;
 		DescriptorSetAllocator mSetAllocator;
 		CommandPool mCommandPool;
-		Buffer mIndirectDrawBuffer;
-		Buffer mObjectDataBuffer;
+		std::array<Buffer, 2> mIndirectDrawBuffers;
+		std::array<Buffer, 2> mObjectDataBuffers;
 
 		std::unique_ptr<Texture2D> mDepthImage;
 

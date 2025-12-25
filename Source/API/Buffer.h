@@ -18,6 +18,7 @@ namespace im
 
 		VkBuffer Get() const { return mBuffer; }
 		VkDeviceSize GetSize() const { return mSize; }
+		VkDeviceAddress GetAddress();
 
 		void* Map();
 		void Unmap();
