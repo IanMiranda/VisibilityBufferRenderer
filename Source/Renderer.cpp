@@ -156,6 +156,7 @@ namespace im
 		mFrameIndex = (mFrameIndex + 1) % MaxFramesInFlight;
 
 		mDrawCallCount = 0;
+		mInstanceIndex = 0;
 		mDrawCallPtr = nullptr;
 		mObjectDataPtr = nullptr;
 	}
@@ -194,7 +195,7 @@ namespace im
 		commandBuffer.BindIndexBuffer(scene.GetIndexBuffer());
 	}
 
-	void Renderer::DrawMesh(const Mesh& mesh)
+	void Renderer::DrawBatch(const std::vector<Object>& batch)
 	{
 		if (mDrawCallCount > MaxDrawCalls)
 		{
@@ -202,23 +203,27 @@ namespace im
 		}
 
 		auto& commandBuffer = *mCommandBuffers[mFrameIndex];
-		mDrawCallPtr->indexCount = mesh.indices.size();
-		mDrawCallPtr->instanceCount = 1;
-		mDrawCallPtr->vertexOffset = mesh.sceneBufferIndex;
+		mDrawCallPtr->indexCount = batch[0].mesh->indices.size();
+		mDrawCallPtr->instanceCount = batch.size();
+		mDrawCallPtr->vertexOffset = batch[0].mesh->sceneBufferIndex;
 		mDrawCallPtr->firstVertex = 0;
-		mDrawCallPtr->firstInstance = mDrawCallCount;
+		mDrawCallPtr->firstInstance = mInstanceIndex;
 		++mDrawCallPtr;
 
-		mObjectDataPtr->model = mesh.transform;
-		mObjectDataPtr->albedoMapIndex = mBindlessSet.GetOrCreateId(mesh.material.albedoMap);
-		mObjectDataPtr->metallicMapIndex = mBindlessSet.GetOrCreateId(mesh.material.metallicMap);
-		mObjectDataPtr->roughnessMapIndex = mBindlessSet.GetOrCreateId(mesh.material.roughnessMap);
-		mObjectDataPtr->normalMapIndex = mBindlessSet.GetOrCreateId(mesh.material.normalMap);
-		mObjectDataPtr->aoMapIndex = mBindlessSet.GetOrCreateId(mesh.material.aoMap);
-		mObjectDataPtr->emissiveMapIndex = mBindlessSet.GetOrCreateId(mesh.material.emissiveMap);
-		++mObjectDataPtr;
+		for (const auto& object : batch)
+		{
+			mObjectDataPtr->model = object.transform;
+			mObjectDataPtr->albedoMapIndex = mBindlessSet.GetOrCreateId(object.material.albedoMap);
+			mObjectDataPtr->metallicMapIndex = mBindlessSet.GetOrCreateId(object.material.metallicMap);
+			mObjectDataPtr->roughnessMapIndex = mBindlessSet.GetOrCreateId(object.material.roughnessMap);
+			mObjectDataPtr->normalMapIndex = mBindlessSet.GetOrCreateId(object.material.normalMap);
+			mObjectDataPtr->aoMapIndex = mBindlessSet.GetOrCreateId(object.material.aoMap);
+			mObjectDataPtr->emissiveMapIndex = mBindlessSet.GetOrCreateId(object.material.emissiveMap);
+			++mObjectDataPtr;
+		}
 
 		++mDrawCallCount;
+		mInstanceIndex += batch.size();
 	}
 
 	void Renderer::RecreateSwapchain()
@@ -266,9 +271,7 @@ namespace im
 				std::ref(*mMainLayout),
 				std::ref(mBindlessSet.GetSetLayout())
 			},
-			std::initializer_list<VkPushConstantRange>{
-				// utils::PushConstantRange(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(ObjectData))
-			}
+			std::initializer_list<VkPushConstantRange>{}
 		);
 
 		mMainPipe = std::make_unique<GraphicsPipeline>(

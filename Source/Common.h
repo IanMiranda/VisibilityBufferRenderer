@@ -69,27 +69,6 @@ namespace im
 		uint32_t pad0;
 	};
 
-	struct GeomPassData
-	{
-		glm::mat4 view;
-		glm::mat4 viewProj;
-
-		GeomPassData(const glm::mat4& view, const glm::mat4 proj)
-			: view(view), viewProj(proj* view)
-		{
-		}
-	};
-
-	struct LightingPassData
-	{
-		glm::mat4 viewInverse;
-		glm::mat4 viewProjInverse;
-		uint32_t lightCount;
-		uint32_t pad0;
-		uint32_t pad1;
-		uint32_t pad2;
-	};
-
 	struct CubemapData
 	{
 		glm::mat4 viewProjInverse;
@@ -135,21 +114,27 @@ namespace im
 		std::vector<Vertex> vertices;
 		std::vector<uint32_t> indices;
 		uint32_t sceneBufferIndex;
-		Material material;
-		glm::mat4 transform;
 
 		Mesh(
 			const std::vector<Vertex>& vertices,
 			const std::vector<uint32_t>& indices,
-			uint32_t sceneBufferIndex,
-			const Material& material,
-			const glm::mat4& transform)
+			uint32_t sceneBufferIndex)
 			: vertices(vertices)
 			, indices(indices)
 			, sceneBufferIndex(sceneBufferIndex)
-			, material(material)
-			, transform(transform)
 		{}
+	};
+
+	struct Object
+	{
+		Mesh* mesh;
+		Material material;
+		glm::mat4 transform;
+
+		Object(Mesh* mesh, Material material, const glm::mat4& transform)
+			: mesh(mesh), material(material), transform(transform)
+		{
+		}
 	};
 }
 

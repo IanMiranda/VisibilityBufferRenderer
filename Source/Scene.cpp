@@ -25,18 +25,22 @@ namespace im
 			CreateAndStageTexture("./Assets/Models/Helmet/Default_AO.jpg", VK_FORMAT_R8G8B8A8_UNORM, false),
 			CreateAndStageTexture("./Assets/Models/Helmet/Default_emissive.jpg", VK_FORMAT_R8G8B8A8_SRGB, false),
 		};
+		
+		const auto [helmetVertices, helmetIndices] = utils::LoadGltfModel("./Assets/Models/Helmet/DamagedHelmet2.gltf");
+		mMeshes.emplace_back(helmetVertices, helmetIndices, 0);
 
 		{
-			const auto [helmetVertices, helmetIndices] = utils::LoadGltfModel("./Assets/Models/Helmet/DamagedHelmet2.gltf");
-
-			for (float z = -5.0f; z <= 5.0f; z += 1.0f)
+			for (float z = -10.0f; z <= 10.0f; z += 1.0f)
 			{
-				for (float x = -5.0f; x <= 5.0f; x += 1.0f)
+				for (float x = -10.0f; x <= 10.0f; x += 1.0f)
 				{
-					glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(x * 5.0f, 0.0f, z * 5.0f));
-					model = glm::rotate(model, glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
-					model = glm::scale(model, glm::vec3(2.0f));
-					mMeshes.emplace_back(helmetVertices, helmetIndices, 0, mMaterial, model);
+					for (float y = -10.0f; y <= 10.0f; y += 1.0f)
+					{
+						glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(x * 5.0f, y * 5.0f, z * 5.0f));
+						model = glm::rotate(model, glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+						model = glm::scale(model, glm::vec3(2.0f));
+						mObjects.emplace_back(&mMeshes.back(), mMaterial, model);
+					}
 				}
 			}
 		}
@@ -50,7 +54,9 @@ namespace im
         if (glfwGetKey(mApp.GetWindow().Get(), GLFW_KEY_ESCAPE) == GLFW_PRESS)
 			glfwSetWindowShouldClose(mApp.GetWindow().Get(), GLFW_TRUE);
 
-		constexpr float moveFactor = 2.5f;
+		const bool fast = glfwGetKey(mApp.GetWindow().Get(), GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS;
+
+		const float moveFactor = fast ? 7.5f : 2.5f;
 		const auto front = mCamera.front;
 		constexpr glm::vec3 up(0.0f, 1.0f, 0.0f);
 		const glm::vec3 right = glm::normalize(glm::cross(front, up));
@@ -72,8 +78,7 @@ namespace im
 
     void Scene::Render()
     {
-        for (const auto& mesh : mMeshes)
-			mApp.GetRenderer().DrawMesh(mesh);
+		mApp.GetRenderer().DrawBatch(mObjects);
 
 		DrawUI();
     }

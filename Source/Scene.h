@@ -44,6 +44,7 @@ namespace im
 		
 		Camera mCamera;
 		std::vector<Mesh> mMeshes;
+        std::vector<Object> mObjects;
 
 		std::vector<PointLight> mPointLights;
     };
