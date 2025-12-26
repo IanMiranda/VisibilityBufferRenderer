@@ -195,7 +195,7 @@ namespace im
 				mVertexBuffer = std::make_unique<Buffer>(
 					mApp.GetRenderer().GetDevice(),
 					stagingVtx.GetSize(),
-					VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+					VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
 					0);
 				mIndexBuffer = std::make_unique<Buffer>(
 					mApp.GetRenderer().GetDevice(),

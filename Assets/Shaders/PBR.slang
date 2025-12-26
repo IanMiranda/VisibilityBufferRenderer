@@ -4,7 +4,7 @@ import Common;
 import Lighting;
 import Math;
 
-struct VSInput
+struct Vertex
 {
     float3 position : POSITION;
     float4 color : COLOR;
@@ -12,7 +12,6 @@ struct VSInput
     float3 normal : NORMAL;
     float3 tangent : TANGENT;
     float3 bitangent : BITANGENT;
-    uint instance : SV_VulkanInstanceID;
 };
 
 struct VSOutput
@@ -45,6 +44,7 @@ public struct GlobalPassData
     public float4x4 viewProjLight;
     public float4x4 viewInverse;
     PbrObjectData *objectData;
+    Vertex *vertexData;
     public uint lightCount;
     uint _pad0;
 };
@@ -53,11 +53,12 @@ public struct GlobalPassData
 //[vk_binding(1, 0)] ConstantBuffer<PbrObjectData> gObjectData;
 
 [shader("vertex")]
-VSOutput VSMain(VSInput input)
+VSOutput VSMain(uint vertex : SV_VulkanVertexID, uint instance : SV_VulkanInstanceID)
 {
     VSOutput output = (VSOutput)0;
+    Vertex input = gPassData.vertexData[vertex];
 
-    float4x4 model = gPassData.objectData[input.instance].model;
+    float4x4 model = gPassData.objectData[instance].model;
     float4x4 mv = mul(gPassData.view, model);
     float4x4 mvp = mul(gPassData.viewProj, model);
     float4x4 mvpLight = mul(gPassData.viewProjLight, model);
@@ -73,7 +74,7 @@ VSOutput VSMain(VSInput input)
     output.posLight.y *= -1.0f;
     output.color = input.color;
     output.uv = input.uv;
-    output.instance = input.instance;
+    output.instance = instance;
     return output;
 }
 

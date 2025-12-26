@@ -280,6 +280,7 @@ namespace im
 			vulkan12Features.shaderSampledImageArrayNonUniformIndexing		= VK_TRUE;
 			vulkan12Features.runtimeDescriptorArray							= VK_TRUE;
 			vulkan12Features.bufferDeviceAddress							= VK_TRUE;
+			vulkan12Features.scalarBlockLayout								= VK_TRUE;
 
 			VkPhysicalDeviceSynchronization2Features syncFeatures{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES };
 			syncFeatures.pNext = &vulkan12Features;

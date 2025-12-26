@@ -65,6 +65,7 @@ namespace im
 		glm::mat4 viewProjLight;
 		glm::mat4 viewInverse;
 		VkDeviceAddress objectData;
+		VkDeviceAddress vertexData;
 		uint32_t lightCount;
 		uint32_t pad0;
 	};

@@ -172,6 +172,7 @@ namespace im
 		passData.viewProj = proj * view;
 		passData.viewInverse = glm::inverse(view);
 		passData.objectData = mObjectDataBuffers[mFrameIndex].GetAddress();
+		passData.vertexData = scene.GetVertexBuffer().GetAddress();
 		passData.lightCount = scene.GetPointLights().size();
 		mMainPassBuffers[mFrameIndex]->SetData(passData);
 
@@ -191,7 +192,6 @@ namespace im
 
 		commandBuffer.BindGraphicsPipeline(*mMainPipe);
 		commandBuffer.BindGraphicsDescriptorSets(*mMainPipeLayout, 0, { *(mMainDescSets[mFrameIndex]), mBindlessSet.Get() });
-		commandBuffer.BindVertexBuffer(scene.GetVertexBuffer());
 		commandBuffer.BindIndexBuffer(scene.GetIndexBuffer());
 	}
 
@@ -281,7 +281,7 @@ namespace im
 				Shader(mDevice, "./Assets/Shaders/Bin/PBR.spv")
 					.AddStage(VK_SHADER_STAGE_VERTEX_BIT, "VSMain")
 					.AddStage(VK_SHADER_STAGE_FRAGMENT_BIT, "FSMain"),
-				Vertex::GetInputBindings(),
+				{},
 				InputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST),
 				Rasterizer(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE, VK_POLYGON_MODE_FILL),
 				Multisample(VK_SAMPLE_COUNT_1_BIT),
