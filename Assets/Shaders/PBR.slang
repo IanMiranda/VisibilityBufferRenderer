@@ -50,7 +50,6 @@ public struct GlobalPassData
 };
 
 [vk_binding(0, 0)] ConstantBuffer<GlobalPassData> gPassData;
-//[vk_binding(1, 0)] ConstantBuffer<PbrObjectData> gObjectData;
 
 [shader("vertex")]
 VSOutput VSMain(uint vertex : SV_VulkanVertexID, uint instance : SV_VulkanInstanceID)

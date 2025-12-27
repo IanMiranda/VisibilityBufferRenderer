@@ -28,6 +28,7 @@ namespace im
 		void WaitForNonMinimized();
 
 		void SetCursorLocked(bool locked);
+		void SetTitle(std::string_view title);
 
 	private:
 		GLFWwindow* mWindow;

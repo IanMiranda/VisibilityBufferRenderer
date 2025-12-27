@@ -41,4 +41,9 @@ namespace im
 		mCursorLocked = locked;
 		glfwSetInputMode(mWindow, GLFW_CURSOR, locked ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
 	}
+
+	void Window::SetTitle(std::string_view title)
+	{
+		glfwSetWindowTitle(mWindow, title.data());
+	}
 }

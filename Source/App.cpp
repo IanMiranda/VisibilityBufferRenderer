@@ -6,6 +6,7 @@
 #include <fstream>
 #include <unordered_map>
 #include <string_view>
+#include <numeric>
 
 #include <stb_image.h>
 #include <imgui.h>
@@ -30,26 +31,23 @@ namespace im
 
 	void App::Run()
 	{
-		float lastTime = glfwGetTime();
-		float fpsLast = glfwGetTime();
-		int frames = 0;
+		double lastTime = glfwGetTime();
+		std::array<double, 100> totalMspf;
+		totalMspf.fill(0.0);
 		while (!mWindow.ShouldClose())
 		{
 			glfwPollEvents();
-			const float currentTime = glfwGetTime();
-			const float deltaTime = currentTime - lastTime;
-
+			const double currentTime = glfwGetTime();
+			const double deltaTime = currentTime - lastTime;
+			const double deltaTimeMs = deltaTime * 1000.0;
+			
 			Update(deltaTime);
 			Render();
 
-			++frames;
-			if (glfwGetTime() - fpsLast >= 1.0)
-			{
-				fmt::println("FPS: {}", frames);
-				fpsLast = glfwGetTime();
-				frames = 0;
-			}
-
+			std::shift_left(totalMspf.begin(), totalMspf.end(), 1);
+			totalMspf.back() = deltaTimeMs;
+			mWindow.SetTitle(std::format("Vulkan App - {:.1f} ms", std::accumulate(totalMspf.begin(), totalMspf.end(), 0.0) / (double)totalMspf.size()));
+			
 			lastTime = currentTime;
 		}
 	}
