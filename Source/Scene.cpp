@@ -26,8 +26,7 @@ namespace im
 			CreateAndStageTexture("./Assets/Models/Helmet/Default_emissive.jpg", VK_FORMAT_R8G8B8A8_SRGB, false),
 		};
 		
-		const auto [helmetVertices, helmetIndices] = utils::LoadGltfModel("./Assets/Models/Helmet/DamagedHelmet2.gltf");
-		mMeshes.emplace_back(helmetVertices, helmetIndices, 0);
+		CreateMesh("./Assets/Models/Helmet/DamagedHelmet2.gltf");
 
 		{
 			for (float z = -10.0f; z <= 10.0f; z += 1.0f)
@@ -46,7 +45,6 @@ namespace im
 		}
 
         mPointLights.resize(8);
-		CombineMeshBuffers();
     }
     
     void Scene::Update(float deltaTime)
@@ -78,7 +76,8 @@ namespace im
 
     void Scene::Render()
     {
-		mApp.GetRenderer().DrawBatch(mObjects);
+		for (const auto& object : mObjects)
+			mApp.GetRenderer().DrawObject(object);
 
 		DrawUI();
     }
@@ -100,6 +99,39 @@ namespace im
 			ImGui::End();
 		}
     }
+
+	void Scene::CreateMesh(const std::filesystem::path& path)
+	{
+		const auto [vertices, indices] = utils::LoadGltfModel(path.string().c_str());
+
+		Buffer stagingVtx(
+			mApp.GetRenderer().GetDevice(),
+			vertices.size() * sizeof(Vertex),
+			vertices.data(),
+			VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+		Buffer stagingIdx(
+			mApp.GetRenderer().GetDevice(),
+			indices.size() * sizeof(uint32_t),
+			indices.data(),
+			VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+
+		mApp.GetRenderer().GetDevice().RunImmediateCommands([this, &stagingVtx, &stagingIdx, &indices](CommandBuffer& commandBuffer)
+			{
+				auto vbo = std::make_unique<Buffer>(
+					mApp.GetRenderer().GetDevice(),
+					stagingVtx.GetSize(),
+					VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+					0);
+				auto ibo = std::make_unique<Buffer>(
+					mApp.GetRenderer().GetDevice(),
+					stagingIdx.GetSize(),
+					VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+					0);
+				commandBuffer.Copy(stagingVtx, *vbo);
+				commandBuffer.Copy(stagingIdx, *ibo);
+				mMeshes.push_back(Mesh(std::move(vbo), std::move(ibo), indices.size()));
+			});
+	}
 
     void Scene::UpdateLightPositions()
     {
@@ -157,53 +189,5 @@ namespace im
 		});
 
 		return resTex;
-	}
-
-	void Scene::CombineMeshBuffers()
-	{
-		auto totalVertices = std::accumulate(mMeshes.begin(), mMeshes.end(), 0z, [](size_t res, const Mesh& mesh) { return res + mesh.vertices.size(); });
-		auto totalIndices = std::accumulate(mMeshes.begin(), mMeshes.end(), 0z, [](size_t res, const Mesh& mesh) { return res + mesh.indices.size(); });
-
-		Buffer stagingVtx(
-			mApp.GetRenderer().GetDevice(),
-			totalVertices * sizeof(Vertex),
-			VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-			VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
-		Buffer stagingIdx(
-			mApp.GetRenderer().GetDevice(),
-			totalIndices * sizeof(uint32_t),
-			VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-			VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
-
-		auto vertexData = reinterpret_cast<Vertex*>(stagingVtx.Map());
-		auto indexData = reinterpret_cast<uint32_t*>(stagingIdx.Map());
-		uint32_t sceneBufferIndex = 0;
-		for (auto& mesh : mMeshes)
-		{
-			std::memcpy(vertexData, mesh.vertices.data(), mesh.vertices.size() * sizeof(Vertex));
-			std::memcpy(indexData, mesh.indices.data(), mesh.indices.size() * sizeof(uint32_t));
-			vertexData += mesh.vertices.size();
-			indexData += mesh.indices.size();
-			mesh.sceneBufferIndex = sceneBufferIndex;
-			sceneBufferIndex += mesh.vertices.size();
-		}
-		stagingVtx.Unmap();
-		stagingIdx.Unmap();
-
-		mApp.GetRenderer().GetDevice().RunImmediateCommands([this, &stagingVtx, &stagingIdx](CommandBuffer& commandBuffer)
-			{
-				mVertexBuffer = std::make_unique<Buffer>(
-					mApp.GetRenderer().GetDevice(),
-					stagingVtx.GetSize(),
-					VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-					0);
-				mIndexBuffer = std::make_unique<Buffer>(
-					mApp.GetRenderer().GetDevice(),
-					stagingIdx.GetSize(),
-					VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-					0);
-				commandBuffer.Copy(stagingVtx, *mVertexBuffer);
-				commandBuffer.Copy(stagingIdx, *mIndexBuffer);
-			});
 	}
 }

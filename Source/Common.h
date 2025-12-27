@@ -50,6 +50,7 @@ namespace im
 	struct ObjectData
 	{
 		glm::mat4 model;
+		VkDeviceAddress vertexData;
 		uint32_t albedoMapIndex;
 		uint32_t metallicMapIndex;
 		uint32_t roughnessMapIndex;
@@ -65,7 +66,6 @@ namespace im
 		glm::mat4 viewProjLight;
 		glm::mat4 viewInverse;
 		VkDeviceAddress objectData;
-		VkDeviceAddress vertexData;
 		uint32_t lightCount;
 		uint32_t pad0;
 	};
@@ -112,18 +112,11 @@ namespace im
 
 	struct Mesh
 	{
-		std::vector<Vertex> vertices;
-		std::vector<uint32_t> indices;
-		uint32_t sceneBufferIndex;
-
-		Mesh(
-			const std::vector<Vertex>& vertices,
-			const std::vector<uint32_t>& indices,
-			uint32_t sceneBufferIndex)
-			: vertices(vertices)
-			, indices(indices)
-			, sceneBufferIndex(sceneBufferIndex)
-		{}
+		std::unique_ptr<Buffer> vertexBuffer;
+		std::unique_ptr<Buffer> indexBuffer;
+		uint32_t indexCount;
+		
+		Mesh(std::unique_ptr<Buffer> vertexBuffer, std::unique_ptr<Buffer> indexBuffer, uint32_t indexCount);
 	};
 
 	struct Object

@@ -35,7 +35,7 @@ namespace im
 
 		void Render(Scene& scene);
 
-		void DrawBatch(const std::vector<Object>& batch);
+		void DrawObject(const Object& object);
 
 		Device& GetDevice() { return mDevice; }
 		DescriptorSetAllocator& GetDescriptorSetAllocator() { return mSetAllocator; }
@@ -123,6 +123,5 @@ namespace im
 		DrawCall* mDrawCallPtr{ nullptr };
 		ObjectData* mObjectDataPtr{ nullptr };
 		uint32_t mDrawCallCount{ 0 };
-		uint32_t mInstanceIndex{ 0 };
 	};
 }

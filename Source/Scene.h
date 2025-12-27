@@ -20,14 +20,12 @@ namespace im
 
         Camera& GetCamera() { return mCamera; }
         std::vector<PointLight>& GetPointLights() { return mPointLights; }
-        Buffer& GetVertexBuffer() { return *mVertexBuffer; }
-        Buffer& GetIndexBuffer() { return *mIndexBuffer; }
 
     private:
     	void UpdateLightPositions();
     	void DrawUI();
 
-        void CombineMeshBuffers();
+        void CreateMesh(const std::filesystem::path& path);
 
         std::unique_ptr<Texture2D> CreateAndStageTexture(
 			const std::filesystem::path& path,
@@ -38,9 +36,6 @@ namespace im
         App& mApp;
 
     	Material mMaterial;
-
-        std::unique_ptr<Buffer> mVertexBuffer;
-        std::unique_ptr<Buffer> mIndexBuffer;
 		
 		Camera mCamera;
 		std::vector<Mesh> mMeshes;

@@ -117,8 +117,6 @@ namespace im
 		mIndirectDrawBuffers[mFrameIndex].Unmap();
 		mObjectDataBuffers[mFrameIndex].Unmap();
 
-		commandBuffer.DrawIndexedIndirect(mIndirectDrawBuffers[mFrameIndex], 0, mDrawCallCount, sizeof(DrawCall));
-
 		ImGui::Render();
 		ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer.Get());
 
@@ -156,7 +154,6 @@ namespace im
 		mFrameIndex = (mFrameIndex + 1) % MaxFramesInFlight;
 
 		mDrawCallCount = 0;
-		mInstanceIndex = 0;
 		mDrawCallPtr = nullptr;
 		mObjectDataPtr = nullptr;
 	}
@@ -172,7 +169,6 @@ namespace im
 		passData.viewProj = proj * view;
 		passData.viewInverse = glm::inverse(view);
 		passData.objectData = mObjectDataBuffers[mFrameIndex].GetAddress();
-		passData.vertexData = scene.GetVertexBuffer().GetAddress();
 		passData.lightCount = scene.GetPointLights().size();
 		mMainPassBuffers[mFrameIndex]->SetData(passData);
 
@@ -192,10 +188,9 @@ namespace im
 
 		commandBuffer.BindGraphicsPipeline(*mMainPipe);
 		commandBuffer.BindGraphicsDescriptorSets(*mMainPipeLayout, 0, { *(mMainDescSets[mFrameIndex]), mBindlessSet.Get() });
-		commandBuffer.BindIndexBuffer(scene.GetIndexBuffer());
 	}
 
-	void Renderer::DrawBatch(const std::vector<Object>& batch)
+	void Renderer::DrawObject(const Object& object)
 	{
 		if (mDrawCallCount > MaxDrawCalls)
 		{
@@ -203,27 +198,27 @@ namespace im
 		}
 
 		auto& commandBuffer = *mCommandBuffers[mFrameIndex];
-		mDrawCallPtr->indexCount = batch[0].mesh->indices.size();
-		mDrawCallPtr->instanceCount = batch.size();
-		mDrawCallPtr->vertexOffset = batch[0].mesh->sceneBufferIndex;
+		mDrawCallPtr->indexCount = object.mesh->indexCount;
+		mDrawCallPtr->instanceCount = 1;
+		mDrawCallPtr->vertexOffset = 0;
 		mDrawCallPtr->firstVertex = 0;
-		mDrawCallPtr->firstInstance = mInstanceIndex;
+		mDrawCallPtr->firstInstance = mDrawCallCount;
 		++mDrawCallPtr;
 
-		for (const auto& object : batch)
-		{
-			mObjectDataPtr->model = object.transform;
-			mObjectDataPtr->albedoMapIndex = mBindlessSet.GetOrCreateId(object.material.albedoMap);
-			mObjectDataPtr->metallicMapIndex = mBindlessSet.GetOrCreateId(object.material.metallicMap);
-			mObjectDataPtr->roughnessMapIndex = mBindlessSet.GetOrCreateId(object.material.roughnessMap);
-			mObjectDataPtr->normalMapIndex = mBindlessSet.GetOrCreateId(object.material.normalMap);
-			mObjectDataPtr->aoMapIndex = mBindlessSet.GetOrCreateId(object.material.aoMap);
-			mObjectDataPtr->emissiveMapIndex = mBindlessSet.GetOrCreateId(object.material.emissiveMap);
-			++mObjectDataPtr;
-		}
+		mObjectDataPtr->model = object.transform;
+		mObjectDataPtr->vertexData = object.mesh->vertexBuffer->GetAddress();
+		mObjectDataPtr->albedoMapIndex = mBindlessSet.GetOrCreateId(object.material.albedoMap);
+		mObjectDataPtr->metallicMapIndex = mBindlessSet.GetOrCreateId(object.material.metallicMap);
+		mObjectDataPtr->roughnessMapIndex = mBindlessSet.GetOrCreateId(object.material.roughnessMap);
+		mObjectDataPtr->normalMapIndex = mBindlessSet.GetOrCreateId(object.material.normalMap);
+		mObjectDataPtr->aoMapIndex = mBindlessSet.GetOrCreateId(object.material.aoMap);
+		mObjectDataPtr->emissiveMapIndex = mBindlessSet.GetOrCreateId(object.material.emissiveMap);
+		++mObjectDataPtr;
+
+		commandBuffer.BindIndexBuffer(*object.mesh->indexBuffer);
+		commandBuffer.DrawIndexedIndirect(mIndirectDrawBuffers[mFrameIndex], sizeof(DrawCall) * mDrawCallCount, 1, sizeof(DrawCall));
 
 		++mDrawCallCount;
-		mInstanceIndex += batch.size();
 	}
 
 	void Renderer::RecreateSwapchain()

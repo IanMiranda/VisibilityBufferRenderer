@@ -29,6 +29,7 @@ struct VSOutput
 struct PbrObjectData
 {
     float4x4 model;
+    Vertex *vertexData;
     uint albedoMapIndex;
     uint metallicMapIndex;
     uint roughnessMapIndex;
@@ -44,7 +45,6 @@ public struct GlobalPassData
     public float4x4 viewProjLight;
     public float4x4 viewInverse;
     PbrObjectData *objectData;
-    Vertex *vertexData;
     public uint lightCount;
     uint _pad0;
 };
@@ -55,7 +55,7 @@ public struct GlobalPassData
 VSOutput VSMain(uint vertex : SV_VulkanVertexID, uint instance : SV_VulkanInstanceID)
 {
     VSOutput output = (VSOutput)0;
-    Vertex input = gPassData.vertexData[vertex];
+    Vertex input = gPassData.objectData[instance].vertexData[vertex];
 
     float4x4 model = gPassData.objectData[instance].model;
     float4x4 mv = mul(gPassData.view, model);
