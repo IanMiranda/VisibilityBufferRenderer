@@ -32,7 +32,7 @@ namespace im
 	void App::Run()
 	{
 		double lastTime = glfwGetTime();
-		std::array<double, 100> totalMspf;
+		std::array<double, 40> totalMspf;
 		totalMspf.fill(0.0);
 		while (!mWindow.ShouldClose())
 		{
