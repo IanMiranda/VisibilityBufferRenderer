@@ -134,8 +134,12 @@ void MSMain(
     const float4x4 mvp = mul(gPassData.viewProj, model);
     const float4x4 mvpLight = mul(gPassData.viewProjLight, model);
 
+    uint vertexCount = uint(gMeshData.meshletData[meshletIdx].vertexCount);
+    uint triangleCount = uint(gMeshData.meshletData[meshletIdx].triangleCount);
+    uint indexCount = triangleCount * 3;
+
     // Copy over vertices, then copy over indices
-    for (uint vi = threadIdx; vi < gMeshData.meshletData[meshletIdx].vertexCount; vi += 32)
+    for (uint vi = threadIdx; vi < vertexCount; vi += 32)
     {
         MeshVertex v = gMeshData.vertexData[gMeshData.meshletData[meshletIdx].vertices[vi]];
         
@@ -155,14 +159,14 @@ void MSMain(
         vtxs[vi].tbn2 = N;
     }
 
-    for (uint i = threadIdx; i < gMeshData.meshletData[meshletIdx].triangleCount * 3; i += 32)
+    for (uint i = threadIdx; i < indexCount; i += 32)
     {
         const uint i1 = gMeshData.meshletData[meshletIdx].indices[i];
 
         idxs[i / 3][i % 3] = i1;
     }
 
-    SetMeshOutputCounts(gMeshData.meshletData[meshletIdx].vertexCount, gMeshData.meshletData[meshletIdx].triangleCount);
+    SetMeshOutputCounts(vertexCount, triangleCount);
 }
 
 [vk_binding(1, 0)] ConstantBuffer<LightData> gLightData;

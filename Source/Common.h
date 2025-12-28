@@ -155,9 +155,9 @@ namespace im
 	struct Meshlet
 	{
 		uint32_t vertices[MaxMeshletVertices];
-		uint32_t indices[MaxMeshletIndices];
-		uint32_t vertexCount{ 0 };
-		uint32_t triangleCount{ 0 };
+		uint8_t indices[MaxMeshletIndices];
+		uint8_t vertexCount{ 0 };
+		uint8_t triangleCount{ 0 };
 	};
 
 	struct Object

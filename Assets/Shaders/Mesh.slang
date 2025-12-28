@@ -7,7 +7,7 @@ public static const uint MaxMeshletIndices = MaxMeshletTriangles * 3;
 public struct Meshlet
 {
     public uint vertices[MaxMeshletVertices];
-    public uint indices[MaxMeshletIndices];
-    public uint vertexCount;
-    public uint triangleCount;
+    public uint8_t indices[MaxMeshletIndices];
+    public uint8_t vertexCount;
+    public uint8_t triangleCount;
 };
