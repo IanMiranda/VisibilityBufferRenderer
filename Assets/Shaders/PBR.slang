@@ -3,6 +3,7 @@
 import Common;
 import Lighting;
 import Math;
+import Mesh;
 
 struct Vertex
 {
@@ -30,6 +31,7 @@ struct PbrObjectData
 {
     float4x4 model;
     Vertex *vertexData;
+    Meshlet *meshletData;
     uint albedoMapIndex;
     uint metallicMapIndex;
     uint roughnessMapIndex;
@@ -51,7 +53,7 @@ public struct GlobalPassData
 
 [vk_binding(0, 0)] ConstantBuffer<GlobalPassData> gPassData;
 
-[shader("vertex")]
+/*[shader("vertex")]
 VSOutput VSMain(uint vertex : SV_VulkanVertexID, uint instance : SV_VulkanInstanceID)
 {
     VSOutput output = (VSOutput)0;
@@ -75,6 +77,92 @@ VSOutput VSMain(uint vertex : SV_VulkanVertexID, uint instance : SV_VulkanInstan
     output.uv = input.uv;
     output.instance = instance;
     return output;
+}*/
+
+struct MeshVertex
+{
+    float3 position;
+    float4 color;
+    float2 uv;
+    float3 normal;
+    float3 tangent;
+    float3 bitangent;
+};
+
+struct MSOutput
+{
+    float4 svPosition : SV_Position;
+    [[vk_location(0)]] float3 posView : POSITION0;
+    [[vk_location(1)]] float4 color : COLOR0;
+    [[vk_location(2)]] float2 uv : TEXCOORD0;
+    [[vk_location(3)]] float3 normal : NORMAL0;
+    [[vk_location(4)]] float4 posLight : POSITION1;
+    [[vk_location(5)]] float3 tbn0 : TBN0;
+    [[vk_location(6)]] float3 tbn1 : TBN1;
+    [[vk_location(7)]] float3 tbn2 : TBN2;
+};
+
+struct PbrMeshData
+{
+    float4x4 model;
+    MeshVertex *vertexData;
+    Meshlet *meshletData;
+    uint albedoMapIndex;
+    uint metallicMapIndex;
+    uint roughnessMapIndex;
+    uint normalMapIndex;
+    uint aoMapIndex;
+    uint emissiveMapIndex;
+};
+
+[vk_push_constant] ConstantBuffer<PbrMeshData> gMeshData;
+
+[shader("mesh")]
+[numthreads(32, 1, 1)]
+[outputtopology("triangle")]
+void MSMain(
+    out vertices MSOutput vtxs[MaxMeshletVertices],
+    out indices uint3 idxs[MaxMeshletTriangles],
+    uint3 groupId : SV_GroupID,
+    uint3 threadId : SV_GroupThreadID)
+{
+    const uint meshletIdx = groupId.x;
+    const uint threadIdx = threadId.x;
+
+    const float4x4 model = gMeshData.model;
+    const float4x4 mv = mul(gPassData.view, model);
+    const float4x4 mvp = mul(gPassData.viewProj, model);
+    const float4x4 mvpLight = mul(gPassData.viewProjLight, model);
+
+    // Copy over vertices, then copy over indices
+    for (uint vi = threadIdx; vi < gMeshData.meshletData[meshletIdx].vertexCount; vi += 32)
+    {
+        MeshVertex v = gMeshData.vertexData[gMeshData.meshletData[meshletIdx].vertices[vi]];
+        
+        float3 T = normalize(mul(mv, float4(v.tangent, 0.0))).xyz;
+        float3 B = normalize(mul(mv, float4(v.bitangent, 0.0))).xyz;
+        float3 N = normalize(mul(mv, float4(v.normal, 0.0))).xyz;
+        
+        vtxs[vi].svPosition = mul(mvp, float4(v.position, 1.0));
+        vtxs[vi].posView = mul(mv, float4(v.position, 1.0)).xyz;
+        vtxs[vi].posLight = mul(mvpLight, float4(v.position, 1.0));
+        vtxs[vi].posLight.y *= -1.0f;
+        vtxs[vi].color = v.color;
+        vtxs[vi].uv = v.uv;
+        // vtxs[vi].tbn = transpose(float3x3(T, B, N));
+        vtxs[vi].tbn0 = T;
+        vtxs[vi].tbn1 = B;
+        vtxs[vi].tbn2 = N;
+    }
+
+    for (uint i = threadIdx; i < gMeshData.meshletData[meshletIdx].triangleCount * 3; i += 32)
+    {
+        const uint i1 = gMeshData.meshletData[meshletIdx].indices[i];
+
+        idxs[i / 3][i % 3] = i1;
+    }
+
+    SetMeshOutputCounts(gMeshData.meshletData[meshletIdx].vertexCount, gMeshData.meshletData[meshletIdx].triangleCount);
 }
 
 [vk_binding(1, 0)] ConstantBuffer<LightData> gLightData;
@@ -99,16 +187,18 @@ float3 FresnelSchlickRoughness(float3 F0, float3 W, float3 H, float roughness)
 }
 
 [shader("fragment")]
-float4 FSMain(VSOutput input) : SV_Target0
+float4 FSMain(in MSOutput input) : SV_Target0
 {
-    float3 albedo = gTextures[gPassData.objectData[input.instance].albedoMapIndex].Sample(gTrilinearColor, input.uv).rgb;
-    float metallic = gTextures[gPassData.objectData[input.instance].metallicMapIndex] .Sample(gTrilinearColor, input.uv).r;
-    float roughness = gTextures[gPassData.objectData[input.instance].roughnessMapIndex] .Sample(gTrilinearColor, input.uv).g;
-    float ao = gTextures[gPassData.objectData[input.instance].aoMapIndex].Sample(gTrilinearColor, input.uv).r;
+    float3 albedo = gTextures[gMeshData.albedoMapIndex].Sample(gTrilinearColor, input.uv).rgb;
+    float metallic = gTextures[gMeshData.metallicMapIndex].Sample(gTrilinearColor, input.uv).r;
+    float roughness = gTextures[gMeshData.roughnessMapIndex].Sample(gTrilinearColor, input.uv).g;
+    float ao = gTextures[gMeshData.aoMapIndex].Sample(gTrilinearColor, input.uv).r;
 
-    float3 N = gTextures[NonUniformResourceIndex(gPassData.objectData[input.instance].normalMapIndex)].Sample(gTrilinearColor, input.uv).rgb;
+    float3x3 tbn = transpose(float3x3(input.tbn0, input.tbn1, input.tbn2));
+
+    float3 N = gTextures[NonUniformResourceIndex(gMeshData.normalMapIndex)].Sample(gTrilinearColor, input.uv).rgb;
     N = N * 2.0 - 1.0;
-    N = normalize(mul(input.tbn, N));
+    N = normalize(mul(tbn, N));
 
     float3 V = normalize(-input.posView);
 
@@ -157,7 +247,7 @@ float4 FSMain(VSOutput input) : SV_Target0
     float3 specular = prefilterColor * (F * brdfValue.x + brdfValue.y);
 
     float3 ambient = (diffuseAmbient * Kd + specular) * ao;
-    float3 emissive = gTextures[gPassData.objectData[input.instance].emissiveMapIndex].Sample(gTrilinearColor, input.uv).rgb;
+    float3 emissive = gTextures[gMeshData.emissiveMapIndex].Sample(gTrilinearColor, input.uv).rgb;
 
     float3 color = ambient + finalColor + emissive;
     color = color / (color + float3(1.0));

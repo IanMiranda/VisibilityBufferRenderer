@@ -37,7 +37,16 @@ namespace im
 		glm::vec3 tangent;
 		glm::vec3 bitangent;
 
-		bool operator<=>(const Vertex& other) const = default;
+		bool operator==(const Vertex& other) const
+		{
+			// TODO: may not be able to use spaceship due to glm
+			return position == other.position
+				&& color == other.color
+				&& uv == other.uv
+				&& normal == other.normal
+				&& tangent == other.tangent
+				&& bitangent == other.bitangent;
+		}
 
 		static std::vector<InputBinding> GetInputBindings();
 	};
@@ -51,6 +60,19 @@ namespace im
 	{
 		glm::mat4 model;
 		VkDeviceAddress vertexData;
+		uint32_t albedoMapIndex;
+		uint32_t metallicMapIndex;
+		uint32_t roughnessMapIndex;
+		uint32_t normalMapIndex;
+		uint32_t aoMapIndex;
+		uint32_t emissiveMapIndex;
+	};
+
+	struct PbrMeshData
+	{
+		glm::mat4 model;
+		VkDeviceAddress vertexData;
+		VkDeviceAddress meshletData;
 		uint32_t albedoMapIndex;
 		uint32_t metallicMapIndex;
 		uint32_t roughnessMapIndex;
@@ -119,13 +141,32 @@ namespace im
 		Mesh(std::unique_ptr<Buffer> vertexBuffer, std::unique_ptr<Buffer> indexBuffer, uint32_t indexCount);
 	};
 
+	struct MeshData // TODO: better name, perhaps remove old mesh struct?
+	{
+		std::unique_ptr<Buffer> vertexBuffer;
+		std::unique_ptr<Buffer> meshBuffer;
+		uint32_t meshletCount;
+	};
+
+	inline constexpr uint32_t MaxMeshletVertices = 64;
+	inline constexpr uint32_t MaxMeshletTriangles = 126;
+	inline constexpr uint32_t MaxMeshletIndices = MaxMeshletTriangles * 3;
+
+	struct Meshlet
+	{
+		uint32_t vertices[MaxMeshletVertices];
+		uint32_t indices[MaxMeshletIndices];
+		uint32_t vertexCount{ 0 };
+		uint32_t triangleCount{ 0 };
+	};
+
 	struct Object
 	{
-		Mesh* mesh;
+		MeshData* mesh;
 		Material material;
 		glm::mat4 transform;
 
-		Object(Mesh* mesh, Material material, const glm::mat4& transform)
+		Object(MeshData* mesh, Material material, const glm::mat4& transform)
 			: mesh(mesh), material(material), transform(transform)
 		{
 		}
@@ -138,11 +179,12 @@ namespace std
 	{
 		size_t operator()(const im::Vertex& vertex) const
 		{
-			return ((((hash<glm::vec3>()(vertex.position) ^
+			return (((((hash<glm::vec3>()(vertex.position) ^
 				(hash<glm::vec4>()(vertex.color) << 1)) >> 1) ^
 				(hash<glm::vec2>()(vertex.uv) << 1) >> 1) ^
 				(hash<glm::vec3>()(vertex.normal) << 1) >> 1) ^
-				(hash<glm::vec3>()(vertex.tangent) << 1);
+				(hash<glm::vec3>()(vertex.tangent) << 1) >> 1) ^
+				(hash<glm::vec3>()(vertex.bitangent) << 1);
 		}
 	};
 }

@@ -35,7 +35,7 @@ namespace im
 
 		void Render(Scene& scene);
 
-		void DrawObject(const Object& object);
+		void DrawMesh(const Object& object);
 
 		Device& GetDevice() { return mDevice; }
 		DescriptorSetAllocator& GetDescriptorSetAllocator() { return mSetAllocator; }
@@ -79,6 +79,13 @@ namespace im
 			uint32_t firstInstance;
 		};
 
+		struct DrawCallMesh
+		{
+			uint32_t groupsX;
+			uint32_t groupsY;
+			uint32_t groupsZ;
+		};
+
 		Window& mWindow;
 
 		Device mDevice;
@@ -86,7 +93,6 @@ namespace im
 		DescriptorSetAllocator mSetAllocator;
 		CommandPool mCommandPool;
 		std::array<Buffer, 2> mIndirectDrawBuffers;
-		std::array<Buffer, 2> mObjectDataBuffers;
 
 		std::unique_ptr<Texture2D> mDepthImage;
 
@@ -120,8 +126,7 @@ namespace im
 		bool mFramebufferResized{ false };
 
 		Camera mCamera;
-		DrawCall* mDrawCallPtr{ nullptr };
-		ObjectData* mObjectDataPtr{ nullptr };
+		DrawCallMesh* mDrawCallPtr{ nullptr };
 		uint32_t mDrawCallCount{ 0 };
 	};
 }

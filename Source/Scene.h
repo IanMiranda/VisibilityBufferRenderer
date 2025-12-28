@@ -36,9 +36,9 @@ namespace im
         App& mApp;
 
     	Material mMaterial;
-		
+
 		Camera mCamera;
-		std::vector<Mesh> mMeshes;
+		std::vector<MeshData> mMeshes;
         std::vector<Object> mObjects;
 
 		std::vector<PointLight> mPointLights;

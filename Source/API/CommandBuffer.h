@@ -102,11 +102,17 @@ namespace im
 
 		void DrawIndexedIndirect(Buffer& buffer, uint32_t offset, uint32_t drawCount, uint32_t stride);
 
+		void DrawMeshTasks(const glm::uvec3& groupDims);
+		void DrawMeshTasksIndirect(Buffer& buffer, uint32_t offset, uint32_t drawCount, uint32_t stride);
+
 		VkCommandBuffer Get() { return mCmdBuf; }
 
 	private:
 		CommandPool& mPool;
 
 		VkCommandBuffer mCmdBuf;
+
+		PFN_vkCmdDrawMeshTasksEXT mDrawMesh;
+		PFN_vkCmdDrawMeshTasksIndirectEXT mDrawMeshIndirect;
 	};
 }

@@ -245,6 +245,7 @@ namespace im
 				VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 				VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME,
 				VK_KHR_MAINTENANCE1_EXTENSION_NAME,
+				VK_EXT_MESH_SHADER_EXTENSION_NAME
 			};
 
 			bool supportsExtensions = true;
@@ -267,7 +268,12 @@ namespace im
 			queueInfo.queueCount = 1;
 			queueInfo.queueFamilyIndex = graphicsIndex.value();
 
+			VkPhysicalDeviceMeshShaderFeaturesEXT meshShaderFeatures{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT };
+			meshShaderFeatures.meshShader = VK_TRUE;
+			meshShaderFeatures.taskShader = VK_TRUE;
+
 			VkPhysicalDeviceVulkan11Features vulkan11Features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES };
+			vulkan11Features.pNext = &meshShaderFeatures;
 			vulkan11Features.shaderDrawParameters = VK_TRUE;
 
 			VkPhysicalDeviceVulkan12Features vulkan12Features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES };
@@ -281,6 +287,9 @@ namespace im
 			vulkan12Features.runtimeDescriptorArray							= VK_TRUE;
 			vulkan12Features.bufferDeviceAddress							= VK_TRUE;
 			vulkan12Features.scalarBlockLayout								= VK_TRUE;
+			vulkan12Features.shaderInt8										= VK_TRUE;
+			vulkan12Features.uniformAndStorageBuffer8BitAccess				= VK_TRUE;
+			vulkan12Features.storagePushConstant8							= VK_TRUE;
 
 			VkPhysicalDeviceSynchronization2Features syncFeatures{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES };
 			syncFeatures.pNext = &vulkan12Features;

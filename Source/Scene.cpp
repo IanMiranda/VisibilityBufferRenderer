@@ -28,6 +28,7 @@ namespace im
 		
 		CreateMesh("./Assets/Models/Helmet/DamagedHelmet2.gltf");
 
+#if 1
 		{
 			for (float z = -10.0f; z <= 10.0f; z += 1.0f)
 			{
@@ -35,7 +36,7 @@ namespace im
 				{
 					for (float y = -10.0f; y <= 10.0f; y += 1.0f)
 					{
-						glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(x * 5.0f, y * 5.0f, z * 5.0f));
+						glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(x * 0.5f, y * 0.5f, z * 0.5f));
 						model = glm::rotate(model, glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
 						model = glm::scale(model, glm::vec3(2.0f));
 						mObjects.emplace_back(&mMeshes.back(), mMaterial, model);
@@ -43,7 +44,12 @@ namespace im
 				}
 			}
 		}
-
+#else
+		glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f));
+		model = glm::rotate(model, glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+		model = glm::scale(model, glm::vec3(2.0f));
+		mObjects.emplace_back(&mMeshes.back(), mMaterial, model);
+#endif
         mPointLights.resize(8);
     }
     
@@ -77,7 +83,7 @@ namespace im
     void Scene::Render()
     {
 		for (const auto& object : mObjects)
-			mApp.GetRenderer().DrawObject(object);
+			mApp.GetRenderer().DrawMesh(object);
 
 		DrawUI();
     }
@@ -103,34 +109,36 @@ namespace im
 	void Scene::CreateMesh(const std::filesystem::path& path)
 	{
 		const auto [vertices, indices] = utils::LoadGltfModel(path.string().c_str());
+		const auto meshlets = utils::BuildMeshlets(vertices, indices);
 
 		Buffer stagingVtx(
 			mApp.GetRenderer().GetDevice(),
 			vertices.size() * sizeof(Vertex),
 			vertices.data(),
 			VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
-		Buffer stagingIdx(
+		Buffer stagingMsh(
 			mApp.GetRenderer().GetDevice(),
-			indices.size() * sizeof(uint32_t),
-			indices.data(),
+			meshlets.size() * sizeof(Meshlet),
+			meshlets.data(),
 			VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
 
-		mApp.GetRenderer().GetDevice().RunImmediateCommands([this, &stagingVtx, &stagingIdx, &indices](CommandBuffer& commandBuffer)
+		mApp.GetRenderer().GetDevice().RunImmediateCommands([this, &stagingVtx, &stagingMsh, &meshlets](CommandBuffer& commandBuffer)
 			{
 				auto vbo = std::make_unique<Buffer>(
 					mApp.GetRenderer().GetDevice(),
 					stagingVtx.GetSize(),
 					VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
 					0);
-				auto ibo = std::make_unique<Buffer>(
+				auto mbo = std::make_unique<Buffer>(
 					mApp.GetRenderer().GetDevice(),
-					stagingIdx.GetSize(),
-					VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+					stagingMsh.GetSize(),
+					VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
 					0);
 				commandBuffer.Copy(stagingVtx, *vbo);
-				commandBuffer.Copy(stagingIdx, *ibo);
-				mMeshes.push_back(Mesh(std::move(vbo), std::move(ibo), indices.size()));
-			});
+				commandBuffer.Copy(stagingMsh, *mbo);
+				mMeshes.push_back({ std::move(vbo), std::move(mbo), static_cast<uint32_t>(meshlets.size()) });
+			}
+		);
 	}
 
     void Scene::UpdateLightPositions()

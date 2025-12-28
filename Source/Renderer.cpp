@@ -19,22 +19,12 @@ namespace im
 		, mCommandPool(mDevice, mDevice.GetGraphicsIndex(), VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT)
 		, mIndirectDrawBuffers{
 			Buffer(mDevice,
-				MaxDrawCalls * sizeof(DrawCall),
+				MaxDrawCalls * sizeof(DrawCallMesh),
 				VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
 				VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT),
 			Buffer(mDevice,
-				MaxDrawCalls * sizeof(DrawCall),
+				MaxDrawCalls * sizeof(DrawCallMesh),
 				VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
-				VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT)
-		}
-		, mObjectDataBuffers{
-			Buffer(mDevice,
-				MaxDrawCalls * sizeof(ObjectData),
-				VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-				VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT),
-			Buffer(mDevice,
-				MaxDrawCalls * sizeof(ObjectData),
-				VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
 				VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT)
 		}
 		, mCamera(0.0f, 0.0f, 0.0f, 0.0f)
@@ -115,7 +105,6 @@ namespace im
 		auto& commandBuffer = *mCommandBuffers[mFrameIndex];
 
 		mIndirectDrawBuffers[mFrameIndex].Unmap();
-		mObjectDataBuffers[mFrameIndex].Unmap();
 
 		ImGui::Render();
 		ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer.Get());
@@ -155,7 +144,6 @@ namespace im
 
 		mDrawCallCount = 0;
 		mDrawCallPtr = nullptr;
-		mObjectDataPtr = nullptr;
 	}
 
 	void Renderer::BeginScene(Scene& scene)
@@ -168,7 +156,6 @@ namespace im
 		passData.view = view;
 		passData.viewProj = proj * view;
 		passData.viewInverse = glm::inverse(view);
-		passData.objectData = mObjectDataBuffers[mFrameIndex].GetAddress();
 		passData.lightCount = scene.GetPointLights().size();
 		mMainPassBuffers[mFrameIndex]->SetData(passData);
 
@@ -183,14 +170,13 @@ namespace im
 		commandBuffer.PushConstants(*mEnvMapPipeLayout, VK_SHADER_STAGE_VERTEX_BIT, CubemapData(view, proj));
 		commandBuffer.Draw(3);
 
-		mDrawCallPtr = reinterpret_cast<DrawCall*>(mIndirectDrawBuffers[mFrameIndex].Map());
-		mObjectDataPtr = reinterpret_cast<ObjectData*>(mObjectDataBuffers[mFrameIndex].Map());
+		mDrawCallPtr = reinterpret_cast<DrawCallMesh*>(mIndirectDrawBuffers[mFrameIndex].Map());
 
 		commandBuffer.BindGraphicsPipeline(*mMainPipe);
 		commandBuffer.BindGraphicsDescriptorSets(*mMainPipeLayout, 0, { *(mMainDescSets[mFrameIndex]), mBindlessSet.Get() });
 	}
 
-	void Renderer::DrawObject(const Object& object)
+	void Renderer::DrawMesh(const Object& object)
 	{
 		if (mDrawCallCount > MaxDrawCalls)
 		{
@@ -198,25 +184,25 @@ namespace im
 		}
 
 		auto& commandBuffer = *mCommandBuffers[mFrameIndex];
-		mDrawCallPtr->indexCount = object.mesh->indexCount;
-		mDrawCallPtr->instanceCount = 1;
-		mDrawCallPtr->vertexOffset = 0;
-		mDrawCallPtr->firstVertex = 0;
-		mDrawCallPtr->firstInstance = mDrawCallCount;
+		mDrawCallPtr->groupsX = object.mesh->meshletCount;
+		mDrawCallPtr->groupsY = 1;
+		mDrawCallPtr->groupsZ = 1;
 		++mDrawCallPtr;
 
-		mObjectDataPtr->model = object.transform;
-		mObjectDataPtr->vertexData = object.mesh->vertexBuffer->GetAddress();
-		mObjectDataPtr->albedoMapIndex = mBindlessSet.GetOrCreateId(object.material.albedoMap);
-		mObjectDataPtr->metallicMapIndex = mBindlessSet.GetOrCreateId(object.material.metallicMap);
-		mObjectDataPtr->roughnessMapIndex = mBindlessSet.GetOrCreateId(object.material.roughnessMap);
-		mObjectDataPtr->normalMapIndex = mBindlessSet.GetOrCreateId(object.material.normalMap);
-		mObjectDataPtr->aoMapIndex = mBindlessSet.GetOrCreateId(object.material.aoMap);
-		mObjectDataPtr->emissiveMapIndex = mBindlessSet.GetOrCreateId(object.material.emissiveMap);
-		++mObjectDataPtr;
+		PbrMeshData meshData{};
+		meshData.model = object.transform;
+		meshData.meshletData = object.mesh->meshBuffer->GetAddress();
+		meshData.vertexData = object.mesh->vertexBuffer->GetAddress();
+		meshData.albedoMapIndex = mBindlessSet.GetOrCreateId(object.material.albedoMap);
+		meshData.metallicMapIndex = mBindlessSet.GetOrCreateId(object.material.metallicMap);
+		meshData.roughnessMapIndex = mBindlessSet.GetOrCreateId(object.material.roughnessMap);
+		meshData.normalMapIndex = mBindlessSet.GetOrCreateId(object.material.normalMap);
+		meshData.aoMapIndex = mBindlessSet.GetOrCreateId(object.material.aoMap);
+		meshData.emissiveMapIndex = mBindlessSet.GetOrCreateId(object.material.emissiveMap);
+		commandBuffer.PushConstants(*mMainPipeLayout, VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT, meshData);
 
-		commandBuffer.BindIndexBuffer(*object.mesh->indexBuffer);
-		commandBuffer.DrawIndexedIndirect(mIndirectDrawBuffers[mFrameIndex], sizeof(DrawCall) * mDrawCallCount, 1, sizeof(DrawCall));
+		commandBuffer.DrawMeshTasks({ object.mesh->meshletCount, 1, 1 });
+		// commandBuffer.DrawMeshTasksIndirect(mIndirectDrawBuffers[mFrameIndex], sizeof(DrawCallMesh) * mDrawCallCount, 1, sizeof(DrawCallMesh));
 
 		++mDrawCallCount;
 	}
@@ -252,7 +238,7 @@ namespace im
 			mDevice,
 			std::initializer_list{
 				DescriptorSetLayout::Binding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-					VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT),
+					VK_SHADER_STAGE_MESH_BIT_NV | VK_SHADER_STAGE_FRAGMENT_BIT),
 				DescriptorSetLayout::Binding(1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT),
 				DescriptorSetLayout::Binding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
 				DescriptorSetLayout::Binding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
@@ -266,7 +252,9 @@ namespace im
 				std::ref(*mMainLayout),
 				std::ref(mBindlessSet.GetSetLayout())
 			},
-			std::initializer_list<VkPushConstantRange>{}
+			std::initializer_list<VkPushConstantRange>{
+				utils::PushConstantRange(VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(PbrMeshData))
+			}
 		);
 
 		mMainPipe = std::make_unique<GraphicsPipeline>(
@@ -274,7 +262,7 @@ namespace im
 			GraphicsPipelineDesc(
 				*mMainPipeLayout,
 				Shader(mDevice, "./Assets/Shaders/Bin/PBR.spv")
-					.AddStage(VK_SHADER_STAGE_VERTEX_BIT, "VSMain")
+					.AddStage(VK_SHADER_STAGE_MESH_BIT_EXT, "MSMain")
 					.AddStage(VK_SHADER_STAGE_FRAGMENT_BIT, "FSMain"),
 				{},
 				InputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST),

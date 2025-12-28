@@ -13,8 +13,12 @@
 namespace im
 {
 	CommandBuffer::CommandBuffer(CommandPool& pool, VkCommandBuffer buffer)
-		: mPool(pool), mCmdBuf(buffer)
+		: mPool(pool)
+		, mCmdBuf(buffer)
+		, mDrawMesh(reinterpret_cast<PFN_vkCmdDrawMeshTasksEXT>(vkGetDeviceProcAddr(mPool.GetDevice().Get(), "vkCmdDrawMeshTasksEXT")))
+		, mDrawMeshIndirect(reinterpret_cast<PFN_vkCmdDrawMeshTasksIndirectEXT>(vkGetDeviceProcAddr(mPool.GetDevice().Get(), "vkCmdDrawMeshTasksIndirectEXT")))
 	{
+		// TODO: very bad, do this better
 	}
 
 	CommandBuffer::~CommandBuffer()
@@ -332,5 +336,15 @@ namespace im
 	void CommandBuffer::DrawIndexedIndirect(Buffer& buffer, uint32_t offset, uint32_t drawCount, uint32_t stride)
 	{
 		vkCmdDrawIndexedIndirect(mCmdBuf, buffer.Get(), offset, drawCount, stride);
+	}
+
+	void CommandBuffer::DrawMeshTasks(const glm::uvec3& groupDims)
+	{
+		mDrawMesh(mCmdBuf, groupDims.x, groupDims.y, groupDims.z);
+	}
+
+	void CommandBuffer::DrawMeshTasksIndirect(Buffer& buffer, uint32_t offset, uint32_t drawCount, uint32_t stride)
+	{
+		mDrawMeshIndirect(mCmdBuf, buffer.Get(), offset, drawCount, stride);
 	}
 }

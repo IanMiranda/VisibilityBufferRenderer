@@ -2,6 +2,7 @@
 
 #include <fstream>
 #include <algorithm>
+#include <ranges>
 #include <tiny_gltf.h>
 
 #include "API/Buffer.h"
@@ -186,6 +187,63 @@ namespace im::utils
 		}
 
 		return { vertices, indices };
+	}
+
+	std::vector<Meshlet> BuildMeshlets(const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices)
+	{
+		std::vector<Meshlet> res;
+
+		Meshlet currentMeshlet{};
+		std::vector<uint8_t> vertexToIndex(vertices.size());
+		std::fill(vertexToIndex.begin(), vertexToIndex.end(), 0xFF);
+
+		for (size_t i = 0; i < indices.size(); i += 3)
+		{
+			uint32_t i1 = indices[i];
+			uint32_t i2 = indices[i + 1];
+			uint32_t i3 = indices[i + 2];
+
+			auto& v1 = vertexToIndex[i1];
+			auto& v2 = vertexToIndex[i2];
+			auto& v3 = vertexToIndex[i3];
+
+			bool tooManyVerts = (v1 == 0xff) + (v2 == 0xff) + (v3 == 0xff) + currentMeshlet.vertexCount > MaxMeshletVertices;
+
+			if (currentMeshlet.triangleCount == MaxMeshletTriangles || (tooManyVerts))
+			{
+				res.push_back(currentMeshlet);
+				currentMeshlet = {};
+				std::fill(vertexToIndex.begin(), vertexToIndex.end(), 0xFF);
+			}
+
+			if (v1 == 0xff)
+			{
+				v1 = currentMeshlet.vertexCount;
+				currentMeshlet.vertices[currentMeshlet.vertexCount++] = i1;
+			}
+			if (v2 == 0xff)
+			{
+				v2 = currentMeshlet.vertexCount;
+				currentMeshlet.vertices[currentMeshlet.vertexCount++] = i2;
+			}
+			if (v3 == 0xff)
+			{
+				v3 = currentMeshlet.vertexCount;
+				currentMeshlet.vertices[currentMeshlet.vertexCount++] = i3;
+			}
+			
+			currentMeshlet.indices[currentMeshlet.triangleCount * 3] = v1;
+			currentMeshlet.indices[currentMeshlet.triangleCount * 3 + 1] = v2;
+			currentMeshlet.indices[currentMeshlet.triangleCount * 3 + 2] = v3;
+			currentMeshlet.triangleCount++;
+		}
+		
+		if (currentMeshlet.triangleCount > 0)
+		{
+			res.push_back(currentMeshlet);
+		}
+
+		return res;
 	}
 
 	VkRenderingAttachmentInfo ColorAttachment(VkImageView view, VkAttachmentLoadOp load, VkAttachmentStoreOp store, VkClearValue clear)
