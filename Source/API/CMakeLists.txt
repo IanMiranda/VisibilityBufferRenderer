@@ -50,4 +50,7 @@ target_sources(
 
             DescriptorSet.h
             DescriptorSet.cpp
+
+            QueryPool.h
+            QueryPool.cpp
 )

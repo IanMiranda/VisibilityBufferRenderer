@@ -8,6 +8,7 @@
 #include "PipelineLayout.h"
 #include "DescriptorSet.h"
 #include "GraphicsPipeline.h"
+#include "QueryPool.h"
 #include "Utils.h"
 
 namespace im
@@ -346,5 +347,15 @@ namespace im
 	void CommandBuffer::DrawMeshTasksIndirect(Buffer& buffer, uint32_t offset, uint32_t drawCount, uint32_t stride)
 	{
 		mDrawMeshIndirect(mCmdBuf, buffer.Get(), offset, drawCount, stride);
+	}
+
+	void CommandBuffer::ResetQueryPool(QueryPool& queryPool, uint32_t first, uint32_t count)
+	{
+		vkCmdResetQueryPool(mCmdBuf, queryPool.Get(), first, count);
+	}
+
+	void CommandBuffer::WriteTimestamp(QueryPool& queryPool, VkPipelineStageFlagBits stage, uint32_t queryIndex)
+	{
+		vkCmdWriteTimestamp(mCmdBuf, stage, queryPool.Get(), queryIndex);
 	}
 }

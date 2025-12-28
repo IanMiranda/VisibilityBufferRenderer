@@ -76,6 +76,11 @@ namespace im
 	void Device::SubmitAndFlush(CommandBuffer& cmd)
 	{
 		Submit(cmd);
+		FlushGraphicsQueue();
+	}
+
+	void Device::FlushGraphicsQueue()
+	{
 		VK_CHECK(vkQueueWaitIdle(mGraphicsQueue));
 	}
 

@@ -28,7 +28,7 @@ namespace im
 		
 		CreateMesh("./Assets/Models/Helmet/DamagedHelmet2.gltf");
 
-#if 1
+#if 0
 		{
 			for (float z = -10.0f; z <= 10.0f; z += 1.0f)
 			{

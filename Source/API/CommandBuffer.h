@@ -13,6 +13,7 @@ namespace im
 	class PipelineLayout;
 	class DescriptorSet;
 	class Buffer;
+	class QueryPool;
 
 	class CommandBuffer
 	{
@@ -104,6 +105,9 @@ namespace im
 
 		void DrawMeshTasks(const glm::uvec3& groupDims);
 		void DrawMeshTasksIndirect(Buffer& buffer, uint32_t offset, uint32_t drawCount, uint32_t stride);
+
+		void ResetQueryPool(QueryPool& queryPool, uint32_t first, uint32_t count);
+		void WriteTimestamp(QueryPool& queryPool, VkPipelineStageFlagBits stage, uint32_t queryIndex);
 
 		VkCommandBuffer Get() { return mCmdBuf; }
 

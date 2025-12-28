@@ -41,6 +41,7 @@ namespace im
 			Semaphore* signalSemaphore = nullptr,
 			Fence* fence = nullptr);
 		void SubmitAndFlush(CommandBuffer& cmd);
+		void FlushGraphicsQueue();
 		void WaitIdle();
 
 		VkFormat GetSupportedFormat(const std::initializer_list<VkFormat>& formats, VkImageTiling tiling, VkFormatFeatureFlags flags) const;

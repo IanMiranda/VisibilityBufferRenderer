@@ -27,8 +27,16 @@ namespace im
 				VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
 				VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT)
 		}
+		, mTimestampPools{
+			QueryPool(mDevice, VK_QUERY_TYPE_TIMESTAMP, 2),
+			QueryPool(mDevice, VK_QUERY_TYPE_TIMESTAMP, 2),
+		}
 		, mCamera(0.0f, 0.0f, 0.0f, 0.0f)
 	{
+		VkPhysicalDeviceProperties props{};
+		vkGetPhysicalDeviceProperties(mDevice.GetGpu(), &props);
+		mTimestampPeriod = props.limits.timestampPeriod;
+		
 		InitDepthBuffer();
 		InitSyncPrimitives();
 		InitCommandBuffers();
@@ -76,12 +84,22 @@ namespace im
 
 		mRenderFences[mFrameIndex]->Reset();
 
+		std::array<uint64_t, 2> timestampResults;
+		mTimestampPools[mFrameIndex].GetResults(
+			0, timestampResults.size(),
+			timestampResults.size() * sizeof(timestampResults[0]),
+			timestampResults.data(), sizeof(timestampResults[0]),
+			VK_QUERY_RESULT_64_BIT);
+		mRenderTime = (timestampResults[1] - timestampResults[0]) * mTimestampPeriod * (1.0E-6);
+
 		ImGui_ImplVulkan_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
 
 		auto& commandBuffer = *mCommandBuffers[mFrameIndex];
 		commandBuffer.Begin();
+		commandBuffer.ResetQueryPool(mTimestampPools[mFrameIndex], 0, 2);
+		commandBuffer.WriteTimestamp(mTimestampPools[mFrameIndex], VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0);
 		commandBuffer.BarrierSwapchainImage(
 			swapchain.GetImages()[swapchain.GetImageIndex()],
 			VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
@@ -108,7 +126,7 @@ namespace im
 
 		ImGui::Render();
 		ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer.Get());
-
+		commandBuffer.WriteTimestamp(mTimestampPools[mFrameIndex], VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 1);
 		commandBuffer.EndRendering();
 
 		commandBuffer.BarrierSwapchainImage(

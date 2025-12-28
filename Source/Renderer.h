@@ -14,6 +14,7 @@
 #include "API/Buffer.h"
 #include "API/Texture2D.h"
 #include "API/TextureCube.h"
+#include "API/QueryPool.h"
 #include "BindlessSet.h"
 #include "DescriptorSetAllocator.h"
 #include "Light.h"
@@ -39,6 +40,8 @@ namespace im
 
 		Device& GetDevice() { return mDevice; }
 		DescriptorSetAllocator& GetDescriptorSetAllocator() { return mSetAllocator; }
+
+		float GetGpuRenderTime() { return mRenderTime; }
 
 	private:
 		bool Begin();
@@ -93,6 +96,7 @@ namespace im
 		DescriptorSetAllocator mSetAllocator;
 		CommandPool mCommandPool;
 		std::array<Buffer, 2> mIndirectDrawBuffers;
+		std::array<QueryPool, 2> mTimestampPools;
 
 		std::unique_ptr<Texture2D> mDepthImage;
 
@@ -128,5 +132,8 @@ namespace im
 		Camera mCamera;
 		DrawCallMesh* mDrawCallPtr{ nullptr };
 		uint32_t mDrawCallCount{ 0 };
+
+		float mRenderTime{ 0.0 };
+		float mTimestampPeriod{ 0.0 };
 	};
 }
