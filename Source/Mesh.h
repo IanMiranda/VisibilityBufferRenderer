@@ -27,7 +27,7 @@ namespace im
 	struct Meshlet
 	{
 		glm::vec3 coneAxis{ 0.0f, 0.0f, 0.0f };
-		float coneDir{ 0.0f };
+		float coneAngle{ 0.0f };
 		uint32_t vertices[MaxMeshletVertices];
 		uint8_t indices[MaxMeshletIndices];
 		uint8_t vertexCount{ 0 };
@@ -48,5 +48,5 @@ namespace im
 
 	std::pair<std::vector<Vertex>, std::vector<uint32_t>> LoadGltfModel(const std::filesystem::path& path);
 	std::vector<Meshlet> BuildMeshlets(const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices);
-
+	void CalculateMeshletCones(std::vector<Meshlet>& meshlets, const std::vector<Vertex>& vertices);
 }

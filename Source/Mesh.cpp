@@ -1,6 +1,6 @@
 #include "Mesh.h"
 
-
+#include <numeric>
 #include <tiny_gltf.h>
 
 #include "API/Buffer.h"
@@ -191,6 +191,41 @@ namespace im
 			res.push_back(currentMeshlet);
 		}
 
+		CalculateMeshletCones(res, vertices);
 		return res;
+	}
+
+	void CalculateMeshletCones(std::vector<Meshlet>& meshlets, const std::vector<Vertex>& vertices)
+	{
+		for (auto& meshlet : meshlets)
+		{
+			std::vector<glm::vec3> triangleNormals(meshlet.triangleCount);
+			for (size_t i = 0; i < meshlet.triangleCount; ++i)
+			{
+				const auto& v0 = vertices[meshlet.vertices[meshlet.indices[i * 3]]];
+				const auto& v1 = vertices[meshlet.vertices[meshlet.indices[i * 3 + 1]]];
+				const auto& v2 = vertices[meshlet.vertices[meshlet.indices[i * 3 + 2]]];
+
+				const auto dir0 = v1.position - v0.position;
+				const auto dir1 = v2.position - v0.position;
+
+				triangleNormals[i] = glm::normalize(glm::cross(dir0, dir1));
+			}
+
+			const auto avgNormal = glm::normalize(
+				std::accumulate(
+					triangleNormals.begin(),
+					triangleNormals.end(),
+					glm::vec3(0.0f))
+			);
+
+			const auto minAngle = *std::min_element(
+				triangleNormals.begin(),
+				triangleNormals.end(),
+				[avgNormal](const glm::vec3& normal, const glm::vec3& smallest) { return glm::dot(normal, avgNormal) < glm::dot(smallest, avgNormal); });
+
+			meshlet.coneAxis = avgNormal;
+			meshlet.coneAngle = glm::dot(minAngle, avgNormal);
+		}
 	}
 }

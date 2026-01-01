@@ -117,6 +117,23 @@ struct PbrMeshData
 
 [vk_push_constant] ConstantBuffer<PbrMeshData> gMeshData;
 
+bool IsConeCulled(float3 coneAxis, float coneAngle, float3 V)
+{
+    return dot(coneAxis, V) < coneAngle;
+}
+
+// https://gist.github.com/badboy/6267743
+uint MeshletColorHash(uint a)
+{
+    a = (a + 0x7ed55d16) + (a << 12);
+    a = (a ^ 0xc761c23c) ^ (a >> 19);
+    a = (a + 0x165667b1) + (a << 5);
+    a = (a + 0xd3a2646c) ^ (a << 9);
+    a = (a + 0xfd7046c5) + (a << 3);
+    a = (a ^ 0xb55a4f09) ^ (a >> 16);
+    return a;
+}
+
 [shader("mesh")]
 [numthreads(32, 1, 1)]
 [outputtopology("triangle")]
@@ -134,6 +151,15 @@ void MSMain(
     const float4x4 mvp = mul(gPassData.viewProj, model);
     const float4x4 mvpLight = mul(gPassData.viewProjLight, model);
 
+    const float3 coneAxis = normalize(mul(mv, float4(gMeshData.meshletData[meshletIdx].coneData.rgb, 0.0)).rgb);
+    const float coneAngle = gMeshData.meshletData[meshletIdx].coneData.a;
+
+    if (IsConeCulled(coneAxis, coneAngle, float3(0, 0, 1)))
+    {
+        SetMeshOutputCounts(0, 0);
+        return;
+    }
+
     uint vertexCount = uint(gMeshData.meshletData[meshletIdx].vertexCount);
     uint triangleCount = uint(gMeshData.meshletData[meshletIdx].triangleCount);
     uint indexCount = triangleCount * 3;
@@ -146,12 +172,20 @@ void MSMain(
         float3 T = normalize(mul(mv, float4(v.tangent, 0.0))).xyz;
         float3 B = normalize(mul(mv, float4(v.bitangent, 0.0))).xyz;
         float3 N = normalize(mul(mv, float4(v.normal, 0.0))).xyz;
-        
+
+        const uint hash = MeshletColorHash(meshletIdx);
+        const float4 hashColor = float4(
+            (hash & 0xFF) / 255.0,
+            ((hash >> 8) & 0xFF) / 255.0,
+            ((hash >> 16) & 0xFF) / 255.0,
+            1.0
+        );
+
         vtxs[vi].svPosition = mul(mvp, float4(v.position, 1.0));
         vtxs[vi].posView = mul(mv, float4(v.position, 1.0)).xyz;
         vtxs[vi].posLight = mul(mvpLight, float4(v.position, 1.0));
         vtxs[vi].posLight.y *= -1.0f;
-        vtxs[vi].color = v.color;
+        //vtxs[vi].color = IsConeCulled(coneAxis, coneAngle, float3(0, 0, -1)) ? float4(1) : float4(0);
         vtxs[vi].uv = v.uv;
         // vtxs[vi].tbn = transpose(float3x3(T, B, N));
         vtxs[vi].tbn0 = T;
