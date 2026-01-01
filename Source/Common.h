@@ -131,46 +131,6 @@ namespace im
 		std::shared_ptr<Texture2D> aoMap;
 		std::shared_ptr<Texture2D> emissiveMap;
 	};
-
-	struct Mesh
-	{
-		std::unique_ptr<Buffer> vertexBuffer;
-		std::unique_ptr<Buffer> indexBuffer;
-		uint32_t indexCount;
-		
-		Mesh(std::unique_ptr<Buffer> vertexBuffer, std::unique_ptr<Buffer> indexBuffer, uint32_t indexCount);
-	};
-
-	struct MeshData // TODO: better name, perhaps remove old mesh struct?
-	{
-		std::unique_ptr<Buffer> vertexBuffer;
-		std::unique_ptr<Buffer> meshBuffer;
-		uint32_t meshletCount;
-	};
-
-	inline constexpr uint32_t MaxMeshletVertices = 64;
-	inline constexpr uint32_t MaxMeshletTriangles = 126;
-	inline constexpr uint32_t MaxMeshletIndices = MaxMeshletTriangles * 3;
-
-	struct Meshlet
-	{
-		uint32_t vertices[MaxMeshletVertices];
-		uint8_t indices[MaxMeshletIndices];
-		uint8_t vertexCount{ 0 };
-		uint8_t triangleCount{ 0 };
-	};
-
-	struct Object
-	{
-		MeshData* mesh;
-		Material material;
-		glm::mat4 transform;
-
-		Object(MeshData* mesh, Material material, const glm::mat4& transform)
-			: mesh(mesh), material(material), transform(transform)
-		{
-		}
-	};
 }
 
 namespace std

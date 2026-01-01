@@ -20,14 +20,4 @@ namespace im
 				}, VK_VERTEX_INPUT_RATE_VERTEX, sizeof(Vertex))
 		};
 	}
-
-	Mesh::Mesh(
-		std::unique_ptr<Buffer> vertexBuffer,
-		std::unique_ptr<Buffer> indexBuffer,
-		uint32_t indexCount)
-		: vertexBuffer(std::move(vertexBuffer))
-		, indexBuffer(std::move(indexBuffer))
-		, indexCount(indexCount)
-	{
-	}
 }

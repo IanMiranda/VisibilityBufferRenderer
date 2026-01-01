@@ -12,9 +12,6 @@ namespace im::utils
 	std::pair<VkViewport, VkRect2D> ViewportAndScissor(VkExtent2D size);
 
 	std::vector<char> ReadFile(const std::filesystem::path& path);
-
-	std::pair<std::vector<Vertex>, std::vector<uint32_t>> LoadGltfModel(const std::filesystem::path& path);
-	std::vector<Meshlet> BuildMeshlets(const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices);
 	
 	VkClearValue ClearColor(const glm::vec4& value = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
 	VkClearValue ClearDepth(float depth = 1.0f, uint32_t stencil = 0);

@@ -108,8 +108,8 @@ namespace im
 
 	void Scene::CreateMesh(const std::filesystem::path& path)
 	{
-		const auto [vertices, indices] = utils::LoadGltfModel(path.string().c_str());
-		const auto meshlets = utils::BuildMeshlets(vertices, indices);
+		const auto [vertices, indices] = LoadGltfModel(path.string().c_str());
+		const auto meshlets = BuildMeshlets(vertices, indices);
 
 		Buffer stagingVtx(
 			mApp.GetRenderer().GetDevice(),

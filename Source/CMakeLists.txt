@@ -24,6 +24,9 @@ target_sources(
             Common.h
             Common.cpp
 
+            Mesh.h
+            Mesh.cpp
+
             BindlessSet.h
             BindlessSet.cpp
 

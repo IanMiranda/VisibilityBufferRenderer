@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Common.h"
+#include "Mesh.h"
 #include "Window.h"
 #include "API/Device.h"
 #include "API/CommandPool.h"

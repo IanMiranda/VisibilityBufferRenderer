@@ -47,7 +47,7 @@ namespace im
 			std::shift_left(totalMspf.begin(), totalMspf.end(), 1);
 			totalMspf.back() = deltaTimeMs;
 			mWindow.SetTitle(
-				std::format("Vulkan App - CPU: {:.1f}ms, GPU: {:.1f}ms",
+				std::format("Vulkan App - CPU: {:.2f}ms, GPU: {:.2f}ms",
 					std::accumulate(totalMspf.begin(), totalMspf.end(), 0.0) / (double)totalMspf.size(),
 					mRenderer.GetGpuRenderTime())
 			);
