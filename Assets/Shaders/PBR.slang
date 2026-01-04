@@ -119,7 +119,7 @@ struct PbrMeshData
 
 bool IsConeCulled(float3 coneAxis, float coneAngle, float3 V)
 {
-    return dot(coneAxis, V) < coneAngle;
+    return dot(coneAxis, V) > coneAngle;
 }
 
 // https://gist.github.com/badboy/6267743
@@ -153,8 +153,10 @@ void MSMain(
 
     const float3 coneAxis = normalize(mul(mv, float4(gMeshData.meshletData[meshletIdx].coneData.rgb, 0.0)).rgb);
     const float coneAngle = gMeshData.meshletData[meshletIdx].coneData.a;
+    // const float3 dir = mul(mv, float4(0, 0, 1, 1)).rgb;
+    const float3 dir = float3(0, 0, -1);
 
-    if (IsConeCulled(coneAxis, coneAngle, float3(0, 0, 1)))
+    if (IsConeCulled(coneAxis, coneAngle, dir))
     {
         SetMeshOutputCounts(0, 0);
         return;
@@ -185,7 +187,6 @@ void MSMain(
         vtxs[vi].posView = mul(mv, float4(v.position, 1.0)).xyz;
         vtxs[vi].posLight = mul(mvpLight, float4(v.position, 1.0));
         vtxs[vi].posLight.y *= -1.0f;
-        //vtxs[vi].color = IsConeCulled(coneAxis, coneAngle, float3(0, 0, -1)) ? float4(1) : float4(0);
         vtxs[vi].uv = v.uv;
         // vtxs[vi].tbn = transpose(float3x3(T, B, N));
         vtxs[vi].tbn0 = T;

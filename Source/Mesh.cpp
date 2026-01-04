@@ -225,7 +225,9 @@ namespace im
 				[avgNormal](const glm::vec3& normal, const glm::vec3& smallest) { return glm::dot(normal, avgNormal) < glm::dot(smallest, avgNormal); });
 
 			meshlet.coneAxis = avgNormal;
-			meshlet.coneAngle = glm::dot(minAngle, avgNormal);
+			// Add pi/2 to minAngle threshold to ensure back-facing
+			const auto minDotProd = glm::dot(minAngle, avgNormal);
+			meshlet.coneAngle = minDotProd <= 0.0f ? 1.0f : -glm::sqrt(1 - minDotProd * minDotProd);
 		}
 	}
 }
