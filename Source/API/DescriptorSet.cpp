@@ -3,8 +3,7 @@
 #include "Device.h"
 #include "DescriptorPool.h"
 #include "Buffer.h"
-#include "Texture2D.h"
-#include "TextureCube.h"
+#include "ImageView.h"
 
 namespace im
 {
@@ -42,13 +41,13 @@ namespace im
     DescriptorSet& DescriptorSet::PushWrite(
         uint32_t binding,
         VkDescriptorType type,
-        const Texture& texture,
+        const ImageView& texture,
         VkImageLayout imageLayout,
         uint32_t arrayIndex)
     {
         auto imageInfo = std::make_unique<VkDescriptorImageInfo>();
         imageInfo->imageLayout = imageLayout;
-        imageInfo->imageView = texture.GetView();
+        imageInfo->imageView = texture.Get();
         imageInfo->sampler = VK_NULL_HANDLE;
         mImageWrites.emplace_back(std::move(imageInfo));
 
@@ -79,14 +78,14 @@ namespace im
     DescriptorSet& DescriptorSet::PushWrite(
         uint32_t binding,
         VkDescriptorType type,
-        const Texture& texture,
+        const ImageView& texture,
         VkSampler sampler,
         VkImageLayout imageLayout,
         uint32_t arrayIndex)
     {
         auto imageInfo = std::make_unique<VkDescriptorImageInfo>();
         imageInfo->imageLayout = imageLayout;
-        imageInfo->imageView = texture.GetView();
+        imageInfo->imageView = texture.Get();
         imageInfo->sampler = sampler;
         mImageWrites.emplace_back(std::move(imageInfo));
 

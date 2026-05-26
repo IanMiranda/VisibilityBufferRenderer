@@ -3,6 +3,8 @@
 #include "Common.h"
 #include "Camera.h"
 #include "Light.h"
+#include "API/Image.h"
+#include "API/ImageView.h"
 
 namespace im
 {

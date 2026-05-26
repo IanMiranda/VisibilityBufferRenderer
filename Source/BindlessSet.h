@@ -11,7 +11,7 @@
 namespace im
 {
 	class Device;
-	class Texture2D;
+	struct Texture2D;
 	
 	class BindlessSet
 	{

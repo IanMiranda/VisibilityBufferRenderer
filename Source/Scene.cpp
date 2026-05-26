@@ -130,33 +130,46 @@ namespace im
 		VkDeviceSize size = width * height * 4;
 		Buffer stagingTex(mApp.GetRenderer().GetDevice(), size, data);
 
-		auto resTex = std::make_unique<Texture2D>(mApp.GetRenderer().GetDevice(),
+		auto resTex = std::make_unique<Image>(mApp.GetRenderer().GetDevice(),
 			format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-			width, height, generateMipmaps ? Texture::GetMaxMipLevels(width, height) : 1);
+			width, height, 1, 1, VK_IMAGE_TYPE_2D, generateMipmaps ? Image::GetMaxMipLevels(width, height) : 1);
+		auto resTexView = std::make_unique<ImageView>(
+			mApp.GetRenderer().GetDevice(),
+			*resTex, VK_IMAGE_VIEW_TYPE_2D,
+			VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, resTex->GetMipLevels()
+		);
 
 		mApp.GetRenderer().GetDevice().RunImmediateCommands([&resTex, &stagingTex, generateMipmaps](CommandBuffer& cmds)
 		{
 			cmds.Barrier(*resTex,
 				VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 				VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE,
-				VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT);
+				VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+				VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, resTex->GetMipLevels()
+			);
 
-			cmds.Copy(stagingTex, *resTex);
+			cmds.Copy(stagingTex, *resTex, VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0);
 
 			if (generateMipmaps)
 			{
-				cmds.GenerateMipmaps(*resTex, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_READ_BIT);
+				cmds.GenerateMipmaps(
+					*resTex, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+					VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_READ_BIT,
+					VK_IMAGE_ASPECT_COLOR_BIT
+				);
 			}
 			else
 			{
 				cmds.Barrier(*resTex,
 					VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
 					VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
-					VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_READ_BIT);
+					VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_READ_BIT,
+					VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, resTex->GetMipLevels()
+				);
 			}
 		});
 
-		return resTex;
+		return std::make_unique<Texture2D>(std::move(resTex), std::move(resTexView));
 	}
 
 	void Scene::CombineMeshBuffers()

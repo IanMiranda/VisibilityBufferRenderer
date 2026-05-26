@@ -12,8 +12,8 @@
 #include "API/GraphicsPipeline.h"
 #include "API/DescriptorPool.h"
 #include "API/Buffer.h"
-#include "API/Texture2D.h"
-#include "API/TextureCube.h"
+#include "API/Image.h"
+#include "API/ImageView.h"
 #include "BindlessSet.h"
 #include "DescriptorSetAllocator.h"
 #include "Light.h"
@@ -59,10 +59,10 @@ namespace im
 		void InitDescriptors();
 		void InitImGui();
 
-		std::unique_ptr<TextureCube> EquirectangularToCubemap(Texture2D& eqMap);
-		std::unique_ptr<TextureCube> CalculateDiffuseIrradiance(TextureCube& cubeMap);
-		std::unique_ptr<TextureCube> PrefilterEnvMap(TextureCube& cubeMap);
-		std::unique_ptr<Texture2D> GenerateBrdfLut();
+		TextureCube EquirectangularToCubemap(ImageView& eqMap);
+		TextureCube CalculateDiffuseIrradiance(ImageView& cubeMap);
+		TextureCube PrefilterEnvMap(ImageView& cubeMap);
+		Texture2D GenerateBrdfLut();
 
 		Buffer CreateCubeVertexBuffer();
 
@@ -88,7 +88,7 @@ namespace im
 		std::array<Buffer, 2> mIndirectDrawBuffers;
 		std::array<Buffer, 2> mObjectDataBuffers;
 
-		std::unique_ptr<Texture2D> mDepthImage;
+		Texture2D mDepthImage;
 
 		std::unique_ptr<DescriptorSetLayout> mMainLayout;
 		std::unique_ptr<PipelineLayout> mMainPipeLayout;
@@ -99,17 +99,17 @@ namespace im
 		std::vector<std::unique_ptr<Buffer>> mMainPassBuffers;
 		std::vector<std::unique_ptr<Buffer>> mLightBuffers;
 
-		std::unique_ptr<Texture2D> mEquirectangularMap;
+		Texture2D mEquirectangularMap;
 
-		std::unique_ptr<TextureCube> mEnvMap;
+		TextureCube mEnvMap;
 		std::unique_ptr<DescriptorSetLayout> mEnvMapSetLayout;
 		std::unique_ptr<PipelineLayout> mEnvMapPipeLayout;
 		std::unique_ptr<GraphicsPipeline> mEnvMapPipe;
 		std::unique_ptr<DescriptorSet> mEnvMapSet;
 
-		std::unique_ptr<TextureCube> mIrradianceMap;
-		std::unique_ptr<TextureCube> mPrefilteredEnvMap;
-		std::unique_ptr<Texture2D> mBrdfLut;
+		TextureCube mIrradianceMap;
+		TextureCube mPrefilteredEnvMap;
+		Texture2D mBrdfLut;
 
 		std::vector<std::unique_ptr<CommandBuffer>> mCommandBuffers;
 		std::vector<std::unique_ptr<Semaphore>> mAcquireSemaphores;

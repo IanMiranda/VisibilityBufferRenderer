@@ -4,7 +4,7 @@
 #include <numeric>
 
 #include "API/Device.h"
-#include "API/Texture2D.h"
+#include "API/ImageView.h"
 #include "API/DescriptorSetLayout.h"
 
 namespace im
@@ -64,7 +64,7 @@ namespace im
 
 			mBindlessSet->PushWrite(
 				1, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-				*texture, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, idx)
+				*texture->view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, idx)
 				.Update();
 
 			mTexMap[texture] = idx;

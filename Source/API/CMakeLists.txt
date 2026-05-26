@@ -22,13 +22,11 @@ target_sources(
             Buffer.h
             Buffer.cpp
 
-            Texture.h
+            Image.h
+            Image.cpp
 
-            Texture2D.h
-            Texture2D.cpp
-
-            TextureCube.h
-            TextureCube.cpp
+            ImageView.h
+            ImageView.cpp
 
             Sampler.h
             Sampler.cpp

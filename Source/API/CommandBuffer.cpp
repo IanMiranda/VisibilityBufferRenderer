@@ -3,8 +3,7 @@
 #include "CommandPool.h"
 #include "Device.h"
 #include "Buffer.h"
-#include "Texture2D.h"
-#include "TextureCube.h"
+#include "Image.h"
 #include "PipelineLayout.h"
 #include "DescriptorSet.h"
 #include "GraphicsPipeline.h"
@@ -65,40 +64,14 @@ namespace im
     }
 
     void CommandBuffer::Barrier(
-		Texture2D& texture,
-		VkImageLayout oldLayout, VkImageLayout newLayout,
-		VkPipelineStageFlags2 srcStage, VkAccessFlags2 srcAccess,
-		VkPipelineStageFlags2 dstStage, VkAccessFlags2 dstAccess)
-	{
-		VkImageMemoryBarrier2 imageBarrier{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2 };
-		imageBarrier.image = texture.Get();
-		imageBarrier.oldLayout = oldLayout;
-		imageBarrier.newLayout = newLayout;
-		imageBarrier.srcStageMask = srcStage;
-		imageBarrier.srcAccessMask = srcAccess;
-		imageBarrier.dstStageMask = dstStage;
-		imageBarrier.dstAccessMask = dstAccess;
-		imageBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		imageBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		imageBarrier.subresourceRange.aspectMask = texture.GetAspect();
-		imageBarrier.subresourceRange.baseArrayLayer = 0;
-		imageBarrier.subresourceRange.layerCount = 1;
-		imageBarrier.subresourceRange.baseMipLevel = 0;
-		imageBarrier.subresourceRange.levelCount = texture.GetMipLevels();
-
-		VkDependencyInfo depInfo{ VK_STRUCTURE_TYPE_DEPENDENCY_INFO };
-		depInfo.imageMemoryBarrierCount = 1;
-		depInfo.pImageMemoryBarriers = &imageBarrier;
-
-		vkCmdPipelineBarrier2(mCmdBuf, &depInfo);
-	}
-
-	void CommandBuffer::Barrier(
-		Texture2D& texture,
+		Image& texture,
 		VkImageLayout oldLayout, VkImageLayout newLayout,
 		VkPipelineStageFlags2 srcStage, VkAccessFlags2 srcAccess,
 		VkPipelineStageFlags2 dstStage, VkAccessFlags2 dstAccess,
-		uint32_t mipLevel)
+		VkImageAspectFlags aspect,
+		uint32_t firstLayer, uint32_t layerCount,
+		uint32_t firstLevel, uint32_t levelCount
+	)
 	{
 		VkImageMemoryBarrier2 imageBarrier{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2 };
 		imageBarrier.image = texture.Get();
@@ -110,11 +83,11 @@ namespace im
 		imageBarrier.dstAccessMask = dstAccess;
 		imageBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 		imageBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		imageBarrier.subresourceRange.aspectMask = texture.GetAspect();
-		imageBarrier.subresourceRange.baseArrayLayer = 0;
-		imageBarrier.subresourceRange.layerCount = 1;
-		imageBarrier.subresourceRange.baseMipLevel = mipLevel;
-		imageBarrier.subresourceRange.levelCount = 1;
+		imageBarrier.subresourceRange.aspectMask = aspect;
+		imageBarrier.subresourceRange.baseArrayLayer = firstLayer;
+		imageBarrier.subresourceRange.layerCount = layerCount;
+		imageBarrier.subresourceRange.baseMipLevel = firstLevel;
+		imageBarrier.subresourceRange.levelCount = levelCount;
 
 		VkDependencyInfo depInfo{ VK_STRUCTURE_TYPE_DEPENDENCY_INFO };
 		depInfo.imageMemoryBarrierCount = 1;
@@ -123,32 +96,11 @@ namespace im
 		vkCmdPipelineBarrier2(mCmdBuf, &depInfo);
 	}
 
-	void CommandBuffer::Barrier(TextureCube& texture, VkImageLayout oldLayout, VkImageLayout newLayout, VkPipelineStageFlags2 srcStage, VkAccessFlags2 srcAccess, VkPipelineStageFlags2 dstStage, VkAccessFlags2 dstAccess)
-	{
-		VkImageMemoryBarrier2 imageBarrier{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2 };
-		imageBarrier.image = texture.Get();
-		imageBarrier.oldLayout = oldLayout;
-		imageBarrier.newLayout = newLayout;
-		imageBarrier.srcStageMask = srcStage;
-		imageBarrier.srcAccessMask = srcAccess;
-		imageBarrier.dstStageMask = dstStage;
-		imageBarrier.dstAccessMask = dstAccess;
-		imageBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		imageBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		imageBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		imageBarrier.subresourceRange.baseArrayLayer = 0;
-		imageBarrier.subresourceRange.layerCount = 6;
-		imageBarrier.subresourceRange.baseMipLevel = 0;
-		imageBarrier.subresourceRange.levelCount = texture.GetMipLevels();
-
-		VkDependencyInfo depInfo{ VK_STRUCTURE_TYPE_DEPENDENCY_INFO };
-		depInfo.imageMemoryBarrierCount = 1;
-		depInfo.pImageMemoryBarriers = &imageBarrier;
-
-		vkCmdPipelineBarrier2(mCmdBuf, &depInfo);
-	}
-
-	void CommandBuffer::GenerateMipmaps(Texture2D& texture, VkImageLayout newLayout, VkPipelineStageFlags2 dstStage, VkAccessFlags2 dstAccess)
+	void CommandBuffer::GenerateMipmaps(
+		Image& texture, VkImageLayout newLayout,
+		VkPipelineStageFlags2 dstStage, VkAccessFlags2 dstAccess,
+		VkImageAspectFlags aspect
+	)
 	{
 		VkFormatProperties props{};
 		vkGetPhysicalDeviceFormatProperties(mPool.GetDevice().GetGpu(), texture.GetFormat(), &props);
@@ -167,14 +119,16 @@ namespace im
 				VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
 				VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
 				VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_READ_BIT,
-				i - 1);
+				aspect, 0, 1,
+				i - 1, 1
+			);
 
 			VkImageBlit blit{};
 			blit.srcOffsets[0] = { 0, 0, 0 };
 			blit.srcOffsets[1] = { currentWidth, currentHeight, 1 };
 			blit.dstOffsets[0] = { 0, 0, 0 };
 			blit.dstOffsets[1] = { currentWidth > 1 ? currentWidth / 2 : 1, currentHeight > 1 ? currentHeight / 2 : 1, 1 };
-			blit.srcSubresource.aspectMask = texture.GetAspect();
+			blit.srcSubresource.aspectMask = aspect;
 			blit.srcSubresource.baseArrayLayer = 0;
 			blit.srcSubresource.layerCount = 1;
 			blit.srcSubresource.mipLevel = i - 1;
@@ -190,7 +144,7 @@ namespace im
 			Barrier(texture,
 				VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, newLayout,
 				VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_READ_BIT,
-				dstStage, dstAccess, i - 1);
+				dstStage, dstAccess, aspect, 0, 1, i - 1, 1);
 
 			if (currentWidth > 1) currentWidth /= 2;
 			if (currentHeight > 1) currentHeight /= 2;
@@ -199,7 +153,8 @@ namespace im
 		Barrier(texture,
 			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, newLayout,
 			VK_PIPELINE_STAGE_2_TRANSFER_BIT_KHR, VK_ACCESS_2_TRANSFER_WRITE_BIT,
-			dstStage, dstAccess, texture.GetMipLevels() - 1);
+			dstStage, dstAccess, aspect, 0, 1, texture.GetMipLevels() - 1, 1
+		);
 	}
 
 	void CommandBuffer::Copy(Buffer& src, Buffer& dst)
@@ -216,30 +171,20 @@ namespace im
 		vkCmdCopyBuffer(mCmdBuf, src.Get(), dst.Get(), 1, &copy);
 	}
 
-	void CommandBuffer::Copy(Buffer& src, Texture2D& dst)
+	void CommandBuffer::Copy(
+		Buffer& src, Image& dst,
+		VkImageAspectFlags aspect,
+		uint32_t firstLayer, uint32_t layerCount,
+		uint32_t mipLevel
+	)
 	{
 		VkBufferImageCopy buffer2Image{};
-		buffer2Image.imageExtent = { dst.GetWidth(), dst.GetHeight(), 1};
+		buffer2Image.imageExtent = { dst.GetWidth(), dst.GetHeight(), dst.GetDepth()};
 		buffer2Image.imageOffset = { 0, 0, 0 };
-		buffer2Image.imageSubresource.aspectMask = dst.GetAspect();
-		buffer2Image.imageSubresource.baseArrayLayer = 0;
-		buffer2Image.imageSubresource.layerCount = 1;
-		buffer2Image.imageSubresource.mipLevel = 0;
-		buffer2Image.bufferImageHeight = 0;
-		buffer2Image.bufferOffset = 0;
-		buffer2Image.bufferRowLength = 0;
-		vkCmdCopyBufferToImage(mCmdBuf, src.Get(), dst.Get(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &buffer2Image);
-	}
-
-	void CommandBuffer::Copy(Buffer& src, TextureCube& dst)
-	{
-		VkBufferImageCopy buffer2Image{};
-		buffer2Image.imageExtent = { dst.GetWidth(), dst.GetHeight(), 1};
-		buffer2Image.imageOffset = { 0, 0, 0 };
-		buffer2Image.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		buffer2Image.imageSubresource.baseArrayLayer = 0;
-		buffer2Image.imageSubresource.layerCount = 6;
-		buffer2Image.imageSubresource.mipLevel = 0;
+		buffer2Image.imageSubresource.aspectMask = aspect;
+		buffer2Image.imageSubresource.baseArrayLayer = firstLayer;
+		buffer2Image.imageSubresource.layerCount = layerCount;
+		buffer2Image.imageSubresource.mipLevel = mipLevel;
 		buffer2Image.bufferImageHeight = 0;
 		buffer2Image.bufferOffset = 0;
 		buffer2Image.bufferRowLength = 0;

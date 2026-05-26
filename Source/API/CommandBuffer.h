@@ -7,8 +7,7 @@ namespace im
 {
 	class Device;
 	class CommandPool;
-	class Texture2D;
-	class TextureCube;
+	class Image;
 	class GraphicsPipeline;
 	class PipelineLayout;
 	class DescriptorSet;
@@ -33,30 +32,24 @@ namespace im
 			VkPipelineStageFlags2 dstStage, VkAccessFlags2 dstAccess);
 
 		void Barrier(
-			Texture2D& texture,
-			VkImageLayout oldLayout, VkImageLayout newLayout,
-			VkPipelineStageFlags2 srcStage, VkAccessFlags2 srcAccess,
-			VkPipelineStageFlags2 dstStage, VkAccessFlags2 dstAccess);
-
-		void Barrier(
-			Texture2D& texture,
+			Image& texture,
 			VkImageLayout oldLayout, VkImageLayout newLayout,
 			VkPipelineStageFlags2 srcStage, VkAccessFlags2 srcAccess,
 			VkPipelineStageFlags2 dstStage, VkAccessFlags2 dstAccess,
-			uint32_t mipLevel);
+			VkImageAspectFlags aspect,
+			uint32_t firstLayer, uint32_t layerCount,
+			uint32_t firstLevel, uint32_t levelCount
+		);
 
-		void Barrier(
-			TextureCube& texture,
-			VkImageLayout oldLayout, VkImageLayout newLayout,
-			VkPipelineStageFlags2 srcStage, VkAccessFlags2 srcAccess,
-			VkPipelineStageFlags2 dstStage, VkAccessFlags2 dstAccess);
-
-		void GenerateMipmaps(Texture2D& texture, VkImageLayout newLayout, VkPipelineStageFlags2 dstStage, VkAccessFlags2 dstAccess);
+		void GenerateMipmaps(
+			Image& texture, VkImageLayout newLayout,
+			VkPipelineStageFlags2 dstStage, VkAccessFlags2 dstAccess,
+			VkImageAspectFlags aspect
+		);
 
 		void Copy(Buffer& src, Buffer& dst);
 		void Copy(Buffer& src, Buffer& dst, VkDeviceSize size);
-		void Copy(Buffer& src, Texture2D& dst);
-		void Copy(Buffer& src, TextureCube& dst);
+		void Copy(Buffer& src, Image& dst, VkImageAspectFlags aspect, uint32_t firstLayer, uint32_t layerCount, uint32_t mipLevel);
 
 		void SetViewportAndScissor(VkViewport viewport, VkRect2D scissor);
 		void SetViewportAndScissor(VkExtent2D renderArea);
