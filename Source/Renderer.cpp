@@ -428,7 +428,7 @@ namespace im
 				VK_IMAGE_ASPECT_COLOR_BIT, 0, Image::CubemapFaces, 0, 1
 			);
 			cmds.SetViewportAndScissor({ cubeMap->GetWidth(), cubeMap->GetHeight() });
-			for (uint32_t i = 0; i < 6; ++i)
+			for (uint32_t i = 0; i < Image::CubemapFaces; ++i)
 			{
 				cmds.BeginRendering(
 					{
@@ -456,7 +456,7 @@ namespace im
 			);
 		});
 
-		auto cubeMapView = std::make_unique<ImageView>(mDevice, *cubeMap, VK_IMAGE_VIEW_TYPE_CUBE, VK_IMAGE_ASPECT_COLOR_BIT, 0, 6, 0, 1);
+		auto cubeMapView = std::make_unique<ImageView>(mDevice, *cubeMap, VK_IMAGE_VIEW_TYPE_CUBE, VK_IMAGE_ASPECT_COLOR_BIT, 0, Image::CubemapFaces, 0, 1);
 		return {
 			std::move(cubeMap),
 			std::move(cubeMapView)
@@ -561,7 +561,7 @@ namespace im
 			*irradianceMap,
 			VK_IMAGE_VIEW_TYPE_CUBE,
 			VK_IMAGE_ASPECT_COLOR_BIT,
-			0, 6, 0, 1
+			0, Image::CubemapFaces, 0, 1
 		);
 		return {
 			std::move(irradianceMap),

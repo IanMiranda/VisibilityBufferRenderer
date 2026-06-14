@@ -79,7 +79,6 @@ namespace im
 
 	void App::MousePositionCallback(GLFWwindow* window, double xpos, double ypos)
 	{
-		// TODO: Move to scene
 		static bool firstTouch = true;
 		static double lastX;
 		static double lastY;
