@@ -57,9 +57,8 @@ namespace im
 		const bool fast = glfwGetKey(mApp.GetWindow().Get(), GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS;
 
 		const float moveFactor = fast ? 7.5f : 2.5f;
-		const auto front = mCamera.front;
-		constexpr glm::vec3 up(0.0f, 1.0f, 0.0f);
-		const glm::vec3 right = glm::normalize(glm::cross(front, up));
+		const auto front = mCamera.rotation * glm::vec3(0.0f, 0.0f, -1.0f);
+		const glm::vec3 right = glm::normalize(glm::cross(front, Camera::WorldUpVector));
 
 		if (glfwGetKey(mApp.GetWindow().Get(), GLFW_KEY_W) == GLFW_PRESS)
 			mCamera.position += front * deltaTime * moveFactor;
@@ -70,8 +69,6 @@ namespace im
 			mCamera.position += -right * deltaTime * moveFactor;
 		else if (glfwGetKey(mApp.GetWindow().Get(), GLFW_KEY_D) == GLFW_PRESS)
 			mCamera.position += right * deltaTime * moveFactor;
-
-		mCamera.UpdateFrontVector();
 
 		UpdateLightPositions();
     }

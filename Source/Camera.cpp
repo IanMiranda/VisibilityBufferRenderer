@@ -16,28 +16,14 @@ namespace im
 		, nearDistance(nearDistance)
 		, farDistance(farDistance)
 		, position(position)
+		, rotation(1.0f, 0.0f, 0.0f, 0.0f)
 	{
-		UpdateFrontVector();
-	}
-
-	void Camera::UpdateFrontVector()
-	{
-		pitch = std::clamp(pitch, -89.99f, 89.99f);
-		yaw = std::fmodf(yaw, 360.0f);
-
-		// Recalculate front vector
-		front.y = glm::sin(glm::radians(pitch));
-		front.x = glm::cos(glm::radians(yaw)) * glm::cos(glm::radians(pitch));
-		front.z = glm::sin(glm::radians(yaw)) * glm::cos(glm::radians(pitch));
-		front = glm::normalize(front);
 	}
 
 	glm::mat4 Camera::GetViewMatrix() const
 	{
-		return glm::lookAt(
-			position,
-			position + front,
-			WorldUpVector);
+		// The camera rotates the objects in the opposite direction, so take the conjugate
+		return glm::mat4_cast(glm::conjugate(rotation)) * glm::translate(glm::mat4(1.0), -position);
 	}
 
 	glm::mat4 Camera::GetProjectionMatrix() const

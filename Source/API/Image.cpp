@@ -11,7 +11,8 @@ namespace im
         uint32_t depth,
         uint32_t arrayLayers,
         VkImageType type,
-        uint32_t mipLevels)
+        uint32_t mipLevels,
+        VkImageCreateFlags flags)
         : mDevice(device)
         , mFormat(format)
         , mWidth(width)
@@ -30,6 +31,7 @@ namespace im
 		imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 		imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
 		imageInfo.usage = usage;
+        imageInfo.flags = flags;
 
 		VmaAllocationCreateInfo allocInfo{};
 		allocInfo.usage = VMA_MEMORY_USAGE_AUTO;

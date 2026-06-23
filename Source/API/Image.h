@@ -19,7 +19,8 @@ namespace im
 			uint32_t depth,
 			uint32_t arrayLayers,
 			VkImageType type,
-			uint32_t mipLevels);
+			uint32_t mipLevels,
+			VkImageCreateFlags flags = 0);
 		~Image();
 		
 		Image(const Image& other) = delete;

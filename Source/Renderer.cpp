@@ -405,7 +405,9 @@ namespace im
 			PushWrite(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, eqMap, mDevice.GetSamplers().TrilinearColor())
 			.Update();
 		
-		auto cubeMap = std::make_unique<Image>(mDevice, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 1024, 1024, 1, Image::CubemapFaces, VK_IMAGE_TYPE_2D, 1);
+		auto cubeMap = std::make_unique<Image>(mDevice, VK_FORMAT_R32G32B32A32_SFLOAT,
+			VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 1024, 1024, 1,
+			Image::CubemapFaces, VK_IMAGE_TYPE_2D, 1, VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT);
 		auto cubeMapFaces = ImageView::CreateFacesForCubemap(mDevice, *cubeMap, VK_IMAGE_ASPECT_COLOR_BIT, 0, 1);
 		std::array views
 		{
@@ -506,7 +508,9 @@ namespace im
 			PushWrite(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, cubeMap, mDevice.GetSamplers().TrilinearColor())
 			.Update();
 
-		auto irradianceMap = std::make_unique<Image>(mDevice, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 32, 32, 1, Image::CubemapFaces, VK_IMAGE_TYPE_2D, 1);
+		auto irradianceMap = std::make_unique<Image>(mDevice, VK_FORMAT_R32G32B32A32_SFLOAT,
+			VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 32, 32, 1,
+			Image::CubemapFaces, VK_IMAGE_TYPE_2D, 1, VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT);
 		auto irradianceMapFaces = ImageView::CreateFacesForCubemap(mDevice, *irradianceMap, VK_IMAGE_ASPECT_COLOR_BIT);
 		std::array views
 		{
@@ -616,7 +620,8 @@ namespace im
 			mDevice, VK_FORMAT_R32G32B32A32_SFLOAT,
 			VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
 			128, 128, 1, Image::CubemapFaces, VK_IMAGE_TYPE_2D,
-			std::min(Image::GetMaxMipLevels(128, 128), 5u)
+			std::min(Image::GetMaxMipLevels(128, 128), 5u),
+			VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT
 		);
 		auto resViews = ImageView::CreateFacesForCubemap(
 			mDevice, *res, VK_IMAGE_ASPECT_COLOR_BIT, 0, res->GetMipLevels()

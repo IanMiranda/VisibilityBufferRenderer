@@ -92,12 +92,14 @@ namespace im
 			lastY = ypos;
 		}
 
-		float deltaX = xpos - lastX;
+		float deltaX = lastX - xpos;
 		float deltaY = lastY - ypos;
 
 		constexpr float sensitivity = 0.2f;
-		app->mScene.mCamera.yaw += sensitivity * deltaX;
-		app->mScene.mCamera.pitch += sensitivity * deltaY;
+		auto& rotation = app->mScene.mCamera.rotation;
+		rotation = glm::angleAxis(glm::radians(sensitivity * deltaY), rotation * glm::vec3(1.0f, 0.0f, 0.0f)) * rotation;
+		rotation = glm::angleAxis(glm::radians(sensitivity * deltaX), glm::vec3(0.0f, 1.0f, 0.0f)) * rotation;
+		rotation = glm::normalize(rotation);
 		glfwSetCursorPos(window, lastX, lastY);
 	}
 
