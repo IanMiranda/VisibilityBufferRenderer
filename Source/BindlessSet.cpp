@@ -41,13 +41,9 @@ namespace im
 		variableDescInfo.descriptorSetCount = 1;
 		variableDescInfo.pDescriptorCounts = &mMaxTextures;
 
-		mBindlessSet = mBindlessPool.Allocate({ mBindlessSetLayout }, &variableDescInfo);
+		mBindlessSet = mBindlessPool.Allocate(mBindlessSetLayout, &variableDescInfo);
 
 		std::iota(mTexFreeList.begin(), mTexFreeList.end(), 0);
-	}
-
-	BindlessSet::~BindlessSet()
-	{
 	}
 
 	uint32_t BindlessSet::GetOrCreateId(std::shared_ptr<Texture2D> texture)

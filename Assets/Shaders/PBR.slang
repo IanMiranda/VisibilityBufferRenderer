@@ -102,8 +102,8 @@ float3 FresnelSchlickRoughness(float3 F0, float3 W, float3 H, float roughness)
 float4 FSMain(VSOutput input) : SV_Target0
 {
     float3 albedo = gTextures[gPassData.objectData[input.instance].albedoMapIndex].Sample(gTrilinearColor, input.uv).rgb;
-    float metallic = gTextures[gPassData.objectData[input.instance].metallicMapIndex] .Sample(gTrilinearColor, input.uv).r;
-    float roughness = gTextures[gPassData.objectData[input.instance].roughnessMapIndex] .Sample(gTrilinearColor, input.uv).g;
+    float metallic = gTextures[gPassData.objectData[input.instance].metallicMapIndex].Sample(gTrilinearColor, input.uv).r;
+    float roughness = gTextures[gPassData.objectData[input.instance].roughnessMapIndex].Sample(gTrilinearColor, input.uv).g;
     float ao = gTextures[gPassData.objectData[input.instance].aoMapIndex].Sample(gTrilinearColor, input.uv).r;
 
     float3 N = gTextures[NonUniformResourceIndex(gPassData.objectData[input.instance].normalMapIndex)].Sample(gTrilinearColor, input.uv).rgb;

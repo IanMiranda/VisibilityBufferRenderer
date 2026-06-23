@@ -20,7 +20,6 @@ namespace im
 
 	public:
 		BindlessSet(Device& device, uint32_t maxTextures = MaxTextures);
-		~BindlessSet();
 
 		DescriptorSetLayout& GetSetLayout() { return mBindlessSetLayout; }
 		DescriptorSet& Get() { return *mBindlessSet; }

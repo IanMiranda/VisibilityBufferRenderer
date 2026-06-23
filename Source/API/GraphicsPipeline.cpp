@@ -37,10 +37,11 @@ namespace im
     {
 		VkPipelineColorBlendAttachmentState colorAttachment{};
 		colorAttachment.blendEnable = VK_FALSE;
-		colorAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT
-			| VK_COLOR_COMPONENT_G_BIT
-			| VK_COLOR_COMPONENT_B_BIT
-			| VK_COLOR_COMPONENT_A_BIT;
+		colorAttachment.colorWriteMask =
+			VK_COLOR_COMPONENT_R_BIT |
+			VK_COLOR_COMPONENT_G_BIT |
+			VK_COLOR_COMPONENT_B_BIT |
+			VK_COLOR_COMPONENT_A_BIT;
 		return { format, colorAttachment };
     }
 

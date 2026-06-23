@@ -29,18 +29,16 @@ namespace im
 		const auto [helmetVertices, helmetIndices] = utils::LoadGltfModel("./Assets/Models/Helmet/DamagedHelmet2.gltf");
 		mMeshes.emplace_back(helmetVertices, helmetIndices, 0);
 
+		for (float z = -3.0f; z <= 3.0f; z += 1.0f)
 		{
-			for (float z = -3.0f; z <= 3.0f; z += 1.0f)
+			for (float x = -5.0f; x <= 5.0f; x += 1.0f)
 			{
-				for (float x = -5.0f; x <= 5.0f; x += 1.0f)
+				for (float y = -5.0f; y <= 5.0f; y += 1.0f)
 				{
-					for (float y = -5.0f; y <= 5.0f; y += 1.0f)
-					{
-						glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(x * 5.0f, y * 5.0f, z * 5.0f));
-						model = glm::rotate(model, glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
-						model = glm::scale(model, glm::vec3(2.0f));
-						mObjects.emplace_back(&mMeshes.back(), mMaterial, model);
-					}
+					glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(x * 5.0f, y * 5.0f, z * 5.0f));
+					model = glm::rotate(model, glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+					model = glm::scale(model, glm::vec3(2.0f));
+					mObjects.emplace_back(&mMeshes.back(), mMaterial, model);
 				}
 			}
 		}
