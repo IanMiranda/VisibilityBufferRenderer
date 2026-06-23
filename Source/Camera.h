@@ -25,6 +25,9 @@ namespace im
 			const glm::vec3& position = glm::vec3(0.0f)
 		);
 
+		glm::vec3 GetFrontVector() const { return rotation * glm::vec3{ 0.0f, 0.0f, -1.0f }; }
+		glm::vec3 GetRightVector() const { return rotation * glm::vec3{ 1.0f, 0.0f, 0.0f }; }
+
 		glm::mat4 GetViewMatrix() const;
 		glm::mat4 GetProjectionMatrix() const;
 	};
