@@ -9,13 +9,14 @@
 namespace im
 {
     class App;
+    class Renderer;
 
     class Scene
     {
         friend App;
 
     public:
-        Scene(App& app);
+        Scene(Renderer& renderer);
 
         void Update(float deltaTime);
         void Render();
@@ -37,7 +38,7 @@ namespace im
 			bool generateMipmaps);
 
     private:
-        App& mApp;
+        Renderer& mRenderer;
 
     	Material mMaterial;
 
@@ -45,7 +46,6 @@ namespace im
         std::unique_ptr<Buffer> mIndexBuffer;
 		
 		Camera mCamera;
-		std::vector<Mesh> mMeshes;
         std::vector<Object> mObjects;
 
 		std::vector<PointLight> mPointLights;

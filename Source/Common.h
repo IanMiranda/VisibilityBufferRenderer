@@ -128,11 +128,11 @@ namespace im
 
 	struct Object
 	{
-		Mesh* mesh;
+		std::shared_ptr<Mesh> mesh;
 		Material material;
 		glm::mat4 transform;
 
-		Object(Mesh* mesh, Material material, const glm::mat4& transform)
+		Object(std::shared_ptr<Mesh> mesh, Material material, const glm::mat4& transform)
 			: mesh(mesh), material(material), transform(transform)
 		{
 		}

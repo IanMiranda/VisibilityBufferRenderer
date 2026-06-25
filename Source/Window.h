@@ -25,6 +25,8 @@ namespace im
 		bool ShouldClose() const;
 		bool IsCursorLocked() const { return mCursorLocked; }
 
+		bool IsKeyPressed(int keyCode) const;
+
 		void WaitForNonMinimized();
 
 		void SetCursorLocked(bool locked);

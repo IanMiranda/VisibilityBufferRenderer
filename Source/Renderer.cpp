@@ -421,7 +421,7 @@ namespace im
 		
 		mDevice.RunImmediateCommands([&](CommandBuffer& cmds)
 		{
-			glm::mat4 proj = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 100.0f);
+			glm::mat4 proj = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 10.0f);
 			cmds.Barrier(
 				*cubeMap,
 				VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,

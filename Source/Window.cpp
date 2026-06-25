@@ -24,6 +24,11 @@ namespace im
 		return glfwWindowShouldClose(mWindow) == GLFW_TRUE;
 	}
 
+	bool Window::IsKeyPressed(int keyCode) const
+	{
+		return glfwGetKey(mWindow, keyCode) == GLFW_PRESS;
+	}
+
 	void Window::WaitForNonMinimized()
 	{
 		int width = 0;

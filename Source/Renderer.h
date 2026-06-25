@@ -37,6 +37,7 @@ namespace im
 
 		void DrawBatch(const std::vector<Object>& batch);
 
+		Window& GetWindow() { return mWindow; }
 		Device& GetDevice() { return mDevice; }
 		DescriptorSetAllocator& GetDescriptorSetAllocator() { return mSetAllocator; }
 

@@ -19,7 +19,7 @@ namespace im
 	App::App()
 		: mWindow("Vulkan App")
 		, mRenderer(mWindow)
-		, mScene(*this)
+		, mScene(mRenderer)
 	{
 		InitWindow();
 		mRenderer.InitImGui();
@@ -37,23 +37,25 @@ namespace im
 		while (!mWindow.ShouldClose())
 		{
 			glfwPollEvents();
-			const double currentTime = glfwGetTime();
-			const double deltaTime = currentTime - lastTime;
-			const double deltaTimeMs = deltaTime * 1000.0;
+
+			const auto currentTime = glfwGetTime();
+			const auto deltaTimeSecs = currentTime - lastTime;
+			lastTime = currentTime;
 			
-			Update(deltaTime);
+			Update(deltaTimeSecs);
 			Render();
 
 			std::shift_left(totalMspf.begin(), totalMspf.end(), 1);
-			totalMspf.back() = deltaTimeMs;
-			mWindow.SetTitle(std::format("Vulkan App - {:.1f} ms", std::accumulate(totalMspf.begin(), totalMspf.end(), 0.0) / (double)totalMspf.size()));
-			
-			lastTime = currentTime;
+			totalMspf.back() = deltaTimeSecs * 1000.0;
+			mWindow.SetTitle(fmt::format("Vulkan App - {:.1f} ms", std::accumulate(totalMspf.begin(), totalMspf.end(), 0.0) / (double)totalMspf.size()));
 		}
 	}
 
 	void App::Update(float deltaTime)
 	{
+		if (glfwGetKey(mWindow.Get(), GLFW_KEY_ESCAPE) == GLFW_PRESS)
+			glfwSetWindowShouldClose(mWindow.Get(), GLFW_TRUE);
+
 		mScene.Update(deltaTime);
 	}
 

@@ -3,17 +3,19 @@
 #include <imgui.h>
 #include <stb_image.h>
 #include <numeric>
+#include <numbers>
+#include <set>
 
-#include "App.h"
+#include "Renderer.h"
 #include "Utils.h"
 
 namespace im
 {
-    Scene::Scene(App& app)
-        : mApp(app)
+    Scene::Scene(Renderer& renderer)
+        : mRenderer(renderer)
         , mCamera(
 			75,
-			static_cast<float>(mApp.GetRenderer().GetDevice().GetSwapchain().GetExtent().width) / mApp.GetRenderer().GetDevice().GetSwapchain().GetExtent().height,
+			static_cast<float>(renderer.GetDevice().GetSwapchain().GetExtent().width) / renderer.GetDevice().GetSwapchain().GetExtent().height,
 			0.1f, 100.0f
 		)
     {
@@ -27,7 +29,7 @@ namespace im
 		};
 		
 		const auto [helmetVertices, helmetIndices] = utils::LoadGltfModel("./Assets/Models/Helmet/DamagedHelmet2.gltf");
-		mMeshes.emplace_back(helmetVertices, helmetIndices, 0);
+		auto helmetMesh = std::make_shared<Mesh>(helmetVertices, helmetIndices, 0);
 
 		for (float z = -3.0f; z <= 3.0f; z += 1.0f)
 		{
@@ -38,7 +40,7 @@ namespace im
 					glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(x * 5.0f, y * 5.0f, z * 5.0f));
 					model = glm::rotate(model, glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
 					model = glm::scale(model, glm::vec3(2.0f));
-					mObjects.emplace_back(&mMeshes.back(), mMaterial, model);
+					mObjects.emplace_back(helmetMesh, mMaterial, model);
 				}
 			}
 		}
@@ -49,21 +51,17 @@ namespace im
     
     void Scene::Update(float deltaTime)
     {
-        if (glfwGetKey(mApp.GetWindow().Get(), GLFW_KEY_ESCAPE) == GLFW_PRESS)
-			glfwSetWindowShouldClose(mApp.GetWindow().Get(), GLFW_TRUE);
-
-		const bool fast = glfwGetKey(mApp.GetWindow().Get(), GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS;
-
+		const bool fast = glfwGetKey(mRenderer.GetWindow().Get(), GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS;
 		const float moveFactor = fast ? 7.5f : 2.5f;
 
-		if (glfwGetKey(mApp.GetWindow().Get(), GLFW_KEY_W) == GLFW_PRESS)
+		if (mRenderer.GetWindow().IsKeyPressed(GLFW_KEY_W))
 			mCamera.position += mCamera.GetFrontVector() * deltaTime * moveFactor;
-		else if (glfwGetKey(mApp.GetWindow().Get(), GLFW_KEY_S) == GLFW_PRESS)
+		else if (mRenderer.GetWindow().IsKeyPressed(GLFW_KEY_S))
 			mCamera.position += -mCamera.GetFrontVector() * deltaTime * moveFactor;
 
-		if (glfwGetKey(mApp.GetWindow().Get(), GLFW_KEY_A) == GLFW_PRESS)
+		if (mRenderer.GetWindow().IsKeyPressed(GLFW_KEY_A))
 			mCamera.position += -mCamera.GetRightVector() * deltaTime * moveFactor;
-		else if (glfwGetKey(mApp.GetWindow().Get(), GLFW_KEY_D) == GLFW_PRESS)
+		else if (mRenderer.GetWindow().IsKeyPressed(GLFW_KEY_D))
 			mCamera.position += mCamera.GetRightVector() * deltaTime * moveFactor;
 
 		UpdateLightPositions();
@@ -71,7 +69,7 @@ namespace im
 
     void Scene::Render()
     {
-		mApp.GetRenderer().DrawBatch(mObjects);
+		mRenderer.DrawBatch(mObjects);
 
 		DrawUI();
     }
@@ -101,7 +99,7 @@ namespace im
 		for (auto& light : mPointLights)
 		{
 			light.position = glm::vec3(distance * sin(glfwGetTime() + offset), 1.0f, -distance * cos(glfwGetTime() + offset));
-			offset += (2 * 3.14159) / mPointLights.size();
+			offset += (2 * std::numbers::pi) / mPointLights.size();
 		}
     }
 
@@ -120,19 +118,19 @@ namespace im
 			return nullptr;
 		}
 
-		VkDeviceSize size = width * height * 4;
-		Buffer stagingTex(mApp.GetRenderer().GetDevice(), size, data);
+		VkDeviceSize size = width * height * 4; // 4 bytes per pixel (RGBA8)
+		Buffer stagingTex(mRenderer.GetDevice(), size, data);
 
-		auto resTex = std::make_unique<Image>(mApp.GetRenderer().GetDevice(),
+		auto resTex = std::make_unique<Image>(mRenderer.GetDevice(),
 			format, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
 			width, height, 1, 1, VK_IMAGE_TYPE_2D, generateMipmaps ? Image::GetMaxMipLevels(width, height) : 1);
 		auto resTexView = std::make_unique<ImageView>(
-			mApp.GetRenderer().GetDevice(),
+			mRenderer.GetDevice(),
 			*resTex, VK_IMAGE_VIEW_TYPE_2D,
 			VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, resTex->GetMipLevels()
 		);
 
-		mApp.GetRenderer().GetDevice().RunImmediateCommands([&resTex, &stagingTex, generateMipmaps](CommandBuffer& cmds)
+		mRenderer.GetDevice().RunImmediateCommands([&resTex, &stagingTex, generateMipmaps](CommandBuffer& cmds)
 		{
 			cmds.Barrier(*resTex,
 				VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
@@ -167,16 +165,20 @@ namespace im
 
 	void Scene::CombineMeshBuffers()
 	{
-		auto totalVertices = std::accumulate(mMeshes.begin(), mMeshes.end(), 0z, [](size_t res, const Mesh& mesh) { return res + mesh.vertices.size(); });
-		auto totalIndices = std::accumulate(mMeshes.begin(), mMeshes.end(), 0z, [](size_t res, const Mesh& mesh) { return res + mesh.indices.size(); });
+		std::set<std::shared_ptr<Mesh>> meshes;
+		for (const auto& object : mObjects) {
+			meshes.insert(object.mesh);
+		}
+		auto totalVertices = std::accumulate(meshes.begin(), meshes.end(), 0z, [](size_t res, const std::shared_ptr<Mesh>& mesh) { return res + mesh->vertices.size(); });
+		auto totalIndices = std::accumulate(meshes.begin(), meshes.end(), 0z, [](size_t res, const std::shared_ptr<Mesh>& mesh) { return res + mesh->indices.size(); });
 
 		Buffer stagingVtx(
-			mApp.GetRenderer().GetDevice(),
+			mRenderer.GetDevice(),
 			totalVertices * sizeof(Vertex),
 			VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
 			VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
 		Buffer stagingIdx(
-			mApp.GetRenderer().GetDevice(),
+			mRenderer.GetDevice(),
 			totalIndices * sizeof(uint32_t),
 			VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
 			VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
@@ -184,27 +186,27 @@ namespace im
 		auto vertexData = reinterpret_cast<Vertex*>(stagingVtx.Map());
 		auto indexData = reinterpret_cast<uint32_t*>(stagingIdx.Map());
 		uint32_t sceneBufferIndex = 0;
-		for (auto& mesh : mMeshes)
+		for (const auto& mesh : meshes)
 		{
-			std::memcpy(vertexData, mesh.vertices.data(), mesh.vertices.size() * sizeof(Vertex));
-			std::memcpy(indexData, mesh.indices.data(), mesh.indices.size() * sizeof(uint32_t));
-			vertexData += mesh.vertices.size();
-			indexData += mesh.indices.size();
-			mesh.sceneBufferIndex = sceneBufferIndex;
-			sceneBufferIndex += mesh.vertices.size();
+			std::memcpy(vertexData, mesh->vertices.data(), mesh->vertices.size() * sizeof(Vertex));
+			std::memcpy(indexData, mesh->indices.data(), mesh->indices.size() * sizeof(uint32_t));
+			vertexData += mesh->vertices.size();
+			indexData += mesh->indices.size();
+			mesh->sceneBufferIndex = sceneBufferIndex;
+			sceneBufferIndex += mesh->vertices.size();
 		}
 		stagingVtx.Unmap();
 		stagingIdx.Unmap();
 
-		mApp.GetRenderer().GetDevice().RunImmediateCommands([this, &stagingVtx, &stagingIdx](CommandBuffer& commandBuffer)
+		mRenderer.GetDevice().RunImmediateCommands([this, &stagingVtx, &stagingIdx](CommandBuffer& commandBuffer)
 			{
 				mVertexBuffer = std::make_unique<Buffer>(
-					mApp.GetRenderer().GetDevice(),
+					mRenderer.GetDevice(),
 					stagingVtx.GetSize(),
 					VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
 					0);
 				mIndexBuffer = std::make_unique<Buffer>(
-					mApp.GetRenderer().GetDevice(),
+					mRenderer.GetDevice(),
 					stagingIdx.GetSize(),
 					VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
 					0);
