@@ -134,6 +134,11 @@ namespace im
 
 		mCommandBuffers[mFrameIndex]->End();
 
+		// NOTE: With Vulkan 1.4.350, validation layers report errors since we don't wait
+		// for the swapchain image to be acquired on the first round before transitioning it
+		// to color attachment optimal. However, the official Vulkan tutorial states that this is
+		// fine (https://docs.vulkan.org/tutorial/latest/03_Drawing_a_triangle/03_Drawing/02_Rendering_and_presentation.html),
+		// so I'll leave it as-is for now. Regardless, the app still works just fine.
 		mDevice.Submit(*(mCommandBuffers[mFrameIndex]),
 			mAcquireSemaphores[mSemaphoreIndex].get(), VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
 			mRenderSemaphores[mDevice.GetSwapchain().GetImageIndex()].get(), mRenderFences[mFrameIndex].get());

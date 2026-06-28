@@ -8,7 +8,7 @@ namespace im
 	class Image
 	{
 	public:
-		constexpr static size_t CubemapFaces = 6;
+		constexpr static uint32_t CubemapFaces = 6;
 	public:
 		Image(
 			Device& device,

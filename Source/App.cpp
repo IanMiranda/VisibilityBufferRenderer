@@ -25,10 +25,6 @@ namespace im
 		mRenderer.InitImGui();
 	}
 
-	App::~App()
-	{
-	}
-
 	void App::Run()
 	{
 		double lastTime = glfwGetTime();

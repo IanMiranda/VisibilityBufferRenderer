@@ -11,7 +11,7 @@ namespace im
 		static constexpr uint32_t DefaultHeight{ 720 };
 
 	public:
-		Window(const char* title, uint32_t width = DefaultWidth, uint32_t height = DefaultHeight);
+		Window(std::string_view title, uint32_t width = DefaultWidth, uint32_t height = DefaultHeight);
 		~Window();
 
 		Window(Window&& other) noexcept = delete;

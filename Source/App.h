@@ -16,7 +16,6 @@ namespace im
 	{
 	public:
 		App();
-		~App();
 
 		App(App&& other) noexcept = delete;
 		App& operator=(App&& other) noexcept = delete;

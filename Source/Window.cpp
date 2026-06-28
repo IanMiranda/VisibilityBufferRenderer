@@ -2,11 +2,11 @@
 
 namespace im
 {
-	Window::Window(const char* title, uint32_t width, uint32_t height)
+	Window::Window(std::string_view title, uint32_t width, uint32_t height)
 	{
 		glfwInit();
 		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-		mWindow = glfwCreateWindow(width, height, title, nullptr, nullptr);
+		mWindow = glfwCreateWindow(width, height, title.data(), nullptr, nullptr);
 		if (!mWindow)
 		{
 			fmt::println(stderr, "Failed to create window!");

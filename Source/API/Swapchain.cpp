@@ -47,7 +47,6 @@ namespace im
 	void Swapchain::Init()
 	{
 		const auto dev = mDevice.Get();
-		const auto gpu = mDevice.GetGpu();
 		const auto surf = mDevice.GetSurface();
 
 		const auto format = ChooseSurfaceFormat();
@@ -55,7 +54,7 @@ namespace im
 		const auto extent = ChooseSurfaceExtent();
 
 		VkSurfaceCapabilitiesKHR caps{};
-		VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(gpu, surf, &caps));
+		VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(mDevice.GetGpu(), surf, &caps));
 
 		VkSwapchainCreateInfoKHR swapchainInfo{ VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR };
 		swapchainInfo.clipped = VK_TRUE;
@@ -156,11 +155,8 @@ namespace im
 
 	VkExtent2D Swapchain::ChooseSurfaceExtent()
 	{
-		const auto gpu = mDevice.GetGpu();
-		const auto surf = mDevice.GetSurface();
-
 		VkSurfaceCapabilitiesKHR caps{};
-		VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(gpu, surf, &caps));
+		VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(mDevice.GetGpu(), mDevice.GetSurface(), &caps));
 		if (caps.currentExtent.width != UINT32_MAX && caps.currentExtent.height != UINT32_MAX)
 		{
 			return caps.currentExtent;

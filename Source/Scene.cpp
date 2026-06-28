@@ -4,7 +4,7 @@
 #include <stb_image.h>
 #include <numeric>
 #include <numbers>
-#include <set>
+#include <unordered_set>
 
 #include "Renderer.h"
 #include "Utils.h"
@@ -165,7 +165,7 @@ namespace im
 
 	void Scene::CombineMeshBuffers()
 	{
-		std::set<std::shared_ptr<Mesh>> meshes;
+		std::unordered_set<std::shared_ptr<Mesh>> meshes;
 		for (const auto& object : mObjects) {
 			meshes.insert(object.mesh);
 		}
