@@ -882,7 +882,6 @@ namespace im
 
 		stbi_image_free(data);
 
-		// TODO: Update view matrices for environment maps, technically incorrect now
 		mEnvMap = EquirectangularToCubemap(*mEquirectangularMap.view);
 		mIrradianceMap = CalculateDiffuseIrradiance(*mEnvMap.view);
 		mPrefilteredEnvMap = PrefilterEnvMap(*mEnvMap.view);
