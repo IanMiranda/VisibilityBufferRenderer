@@ -90,6 +90,9 @@ namespace im
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
 
+
+		ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode);
+
 		auto& commandBuffer = *mCommandBuffers[mFrameIndex];
 		commandBuffer.Begin();
 		commandBuffer.BarrierSwapchainImage(
@@ -357,12 +360,12 @@ namespace im
 		imguiVulkanInfo.ImageCount = mDevice.GetSwapchain().GetViews().size();
 		imguiVulkanInfo.MinImageCount = MaxFramesInFlight;
 		imguiVulkanInfo.Instance = mDevice.GetInstance();
-		imguiVulkanInfo.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
 		imguiVulkanInfo.PhysicalDevice = mDevice.GetGpu();
 		imguiVulkanInfo.UseDynamicRendering = true;
-		imguiVulkanInfo.PipelineRenderingCreateInfo = renderingInfo;
 		imguiVulkanInfo.Queue = mDevice.GetGraphicsQueue();
 		imguiVulkanInfo.QueueFamily = mDevice.GetGraphicsIndex();
+		imguiVulkanInfo.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+		imguiVulkanInfo.PipelineInfoMain.PipelineRenderingCreateInfo = renderingInfo;
 
 		ImGui_ImplVulkan_Init(&imguiVulkanInfo);
 	}

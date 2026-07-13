@@ -11,15 +11,15 @@
 
 namespace im
 {
-    Scene::Scene(Renderer& renderer)
-        : mRenderer(renderer)
-        , mCamera(
+	Scene::Scene(Renderer& renderer)
+		: mRenderer(renderer)
+		, mCamera(
 			75,
 			static_cast<float>(renderer.GetDevice().GetSwapchain().GetExtent().width) / renderer.GetDevice().GetSwapchain().GetExtent().height,
 			0.1f, 100.0f
 		)
-    {
-        mMaterial = Material{
+	{
+		mMaterial = Material{
 			CreateAndStageTexture("./Assets/Models/Helmet/Default_albedo.jpg", VK_FORMAT_R8G8B8A8_SRGB, false),
 			CreateAndStageTexture("./Assets/Models/Helmet/Default_metalRoughness.jpg", VK_FORMAT_R8G8B8A8_UNORM, false),
 			CreateAndStageTexture("./Assets/Models/Helmet/Default_metalRoughness.jpg", VK_FORMAT_R8G8B8A8_UNORM, false),
@@ -27,7 +27,7 @@ namespace im
 			CreateAndStageTexture("./Assets/Models/Helmet/Default_AO.jpg", VK_FORMAT_R8G8B8A8_UNORM, false),
 			CreateAndStageTexture("./Assets/Models/Helmet/Default_emissive.jpg", VK_FORMAT_R8G8B8A8_SRGB, false),
 		};
-		
+
 		const auto [helmetVertices, helmetIndices] = utils::LoadGltfModel("./Assets/Models/Helmet/DamagedHelmet2.gltf");
 		auto helmetMesh = std::make_shared<Mesh>(helmetVertices, helmetIndices, 0);
 
@@ -45,8 +45,64 @@ namespace im
 			}
 		}
 
-        mPointLights.resize(8);
+		mPointLights.resize(8);
 		CombineMeshBuffers();
+
+		// Info to create the Blas
+		VkAccelerationStructureGeometryTrianglesDataKHR triData{ VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR };
+		triData.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
+		triData.vertexData.deviceAddress = mVertexBuffer->GetAddress();
+		triData.vertexStride = sizeof(Vertex);
+		triData.maxVertex = helmetVertices.size() - 1;
+		triData.indexType = VK_INDEX_TYPE_UINT32;
+		triData.indexData.deviceAddress = mIndexBuffer->GetAddress();
+
+		VkAccelerationStructureGeometryKHR blasGeom{ VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR };
+		blasGeom.geometry.triangles = triData;
+		blasGeom.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
+		blasGeom.flags = VK_GEOMETRY_OPAQUE_BIT_KHR;
+
+		VkAccelerationStructureBuildGeometryInfoKHR buildBlasInfo{ VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR };
+		buildBlasInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+		buildBlasInfo.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
+		buildBlasInfo.geometryCount = 1;
+		buildBlasInfo.pGeometries = &blasGeom;
+
+		VkAccelerationStructureBuildSizesInfoKHR blasSizeInfo{ VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR };
+		const uint32_t primCount = helmetIndices.size() / 3;
+		vkGetAccelerationStructureBuildSizesKHR(mRenderer.GetDevice().Get(),
+			VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,
+			&buildBlasInfo, &primCount, &blasSizeInfo
+		);
+
+		Buffer blasBuffer(mRenderer.GetDevice(), blasSizeInfo.accelerationStructureSize, VK_BUFFER_USAGE_2_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR, 0);
+		Buffer scratchBuffer(mRenderer.GetDevice(), blasSizeInfo.buildScratchSize, VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT, 0);
+		buildBlasInfo.scratchData.deviceAddress = scratchBuffer.GetAddress();
+
+		VkAccelerationStructureCreateInfoKHR blasInfo{ VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR };
+		blasInfo.buffer = blasBuffer.Get();
+		blasInfo.size = blasSizeInfo.accelerationStructureSize;
+		blasInfo.offset = 0;
+		blasInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+		
+		VkAccelerationStructureKHR blas;
+		VK_CHECK(vkCreateAccelerationStructureKHR(mRenderer.GetDevice().Get(), &blasInfo, nullptr, &blas));
+		buildBlasInfo.dstAccelerationStructure = blas;
+
+		VkAccelerationStructureBuildRangeInfoKHR buildRange{};
+		buildRange.firstVertex = 0;
+		buildRange.primitiveOffset = 0;
+		buildRange.primitiveCount = primCount;
+		buildRange.transformOffset = 0;
+
+		mRenderer.GetDevice().RunImmediateCommands([&](CommandBuffer& cmd)
+			{
+				VkAccelerationStructureBuildRangeInfoKHR* buildRanges[] = { &buildRange };
+				vkCmdBuildAccelerationStructuresKHR(cmd.Get(), 1, &buildBlasInfo, buildRanges);
+			}
+		);
+
+		vkDestroyAccelerationStructureKHR(mRenderer.GetDevice().Get(), blas, nullptr);
     }
     
     void Scene::Update(float deltaTime)
@@ -88,8 +144,9 @@ namespace im
 
 				lightNumber++;
 			}
-			ImGui::End();
 		}
+		
+		ImGui::End();
     }
 
     void Scene::UpdateLightPositions()
@@ -203,12 +260,12 @@ namespace im
 				mVertexBuffer = std::make_unique<Buffer>(
 					mRenderer.GetDevice(),
 					stagingVtx.GetSize(),
-					VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+					VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_2_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
 					0);
 				mIndexBuffer = std::make_unique<Buffer>(
 					mRenderer.GetDevice(),
 					stagingIdx.GetSize(),
-					VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+					VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_2_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
 					0);
 				commandBuffer.Copy(stagingVtx, *mVertexBuffer);
 				commandBuffer.Copy(stagingIdx, *mIndexBuffer);

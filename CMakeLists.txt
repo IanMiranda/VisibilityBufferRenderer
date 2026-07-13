@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-find_package(Vulkan REQUIRED)
+find_package(Vulkan REQUIRED COMPONENTS volk)
 
 include(FetchContent)
 
@@ -28,7 +28,7 @@ FetchContent_Declare(
 FetchContent_Declare(
     imgui
     GIT_REPOSITORY https://github.com/ocornut/imgui
-    GIT_TAG a4cd45f44c4888cf064dfdfb49efc2844640899c
+    GIT_TAG docking
 )
 
 FetchContent_Declare(
@@ -77,6 +77,13 @@ target_sources(imgui
         ${imgui_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp
 )
 
+target_compile_definitions(
+    imgui
+        PUBLIC
+            IMGUI_IMPL_VULKAN_USE_VOLK=1
+            IMGUI_IMPL_VULKAN_VOLK_FILENAME=<Volk/volk.h>
+)
+
 target_include_directories(
     imgui
         PUBLIC
@@ -97,15 +104,15 @@ target_include_directories(
 target_compile_definitions(
     VulkanApp
         PRIVATE
-            GLFW_INCLUDE_VULKAN=1
             GLM_FORCE_DEPTH_ZERO_TO_ONE=1
             GLM_ENABLE_EXPERIMENTAL=1
+            VK_NO_PROTOTYPES=1
 )
 
 target_link_libraries(
     VulkanApp
         PRIVATE
-            ${Vulkan_LIBRARIES}
+            Vulkan::volk
             glfw
             glm::glm
             GPUOpen::VulkanMemoryAllocator

@@ -8,6 +8,8 @@
 #include "Fence.h"
 #include "Semaphore.h"
 
+#define VOLK_IMPLEMENTATION 1
+
 namespace im
 {
 #ifndef NDEBUG
@@ -43,13 +45,7 @@ namespace im
 
 		if constexpr (gEnableValidationLayers)
 		{
-			if (const auto destroy = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(
-					vkGetInstanceProcAddr(mInstance, "vkDestroyDebugUtilsMessengerEXT")
-				);
-				destroy)
-				destroy(mInstance, mDebugMessenger, nullptr);
-			else
-				fmt::println(stderr, "Failed to load vkDestroyDebugUtilsMessengerEXT!");
+			vkDestroyDebugUtilsMessengerEXT(mInstance, mDebugMessenger, nullptr);
 		}
 
 		vkDestroyInstance(mInstance, nullptr);
@@ -126,6 +122,8 @@ namespace im
 
 	void Device::InitInstance()
 	{
+		VK_CHECK(volkInitialize());
+
 		VkApplicationInfo appInfo{ VK_STRUCTURE_TYPE_APPLICATION_INFO };
 		appInfo.apiVersion = VK_API_VERSION_1_4;
 		appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
@@ -181,6 +179,7 @@ namespace im
 		}
 
 		VK_CHECK(vkCreateInstance(&instanceInfo, nullptr, &mInstance));
+		volkLoadInstanceOnly(mInstance);
 
 		if constexpr (gEnableValidationLayers)
 		{
@@ -243,6 +242,9 @@ namespace im
 			std::vector<const char*> deviceExtensions =
 			{
 				VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+				VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
+				VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
+				VK_KHR_RAY_QUERY_EXTENSION_NAME,
 			};
 
 			bool supportsExtensions = true;
@@ -265,8 +267,12 @@ namespace im
 			queueInfo.queueCount = 1;
 			queueInfo.queueFamilyIndex = graphicsIndex.value();
 
+			VkPhysicalDeviceAccelerationStructureFeaturesKHR accelFeatures{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR };
+			accelFeatures.accelerationStructure = VK_TRUE;
+
 			VkPhysicalDeviceVulkan11Features vulkan11Features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES };
 			vulkan11Features.shaderDrawParameters = VK_TRUE;
+			vulkan11Features.pNext = &accelFeatures;
 
 			VkPhysicalDeviceVulkan12Features vulkan12Features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES };
 			vulkan12Features.pNext = &vulkan11Features;
@@ -305,6 +311,7 @@ namespace im
 			deviceInfo.ppEnabledExtensionNames = deviceExtensions.data();
 
 			VK_CHECK(vkCreateDevice(gpu, &deviceInfo, nullptr, &mDevice));
+			volkLoadDevice(mDevice);
 
 			mGpu = gpu;
 			mGraphicsIndex = graphicsIndex.value();
@@ -312,11 +319,35 @@ namespace im
 			vkGetDeviceQueue(mDevice, mGraphicsIndex, 0, &mGraphicsQueue);
 			vkGetDeviceQueue(mDevice, mPresentIndex, 0, &mPresentQueue);
 
+			VmaVulkanFunctions vulkanFunctions{};
+			vulkanFunctions.vkAllocateMemory = vkAllocateMemory;
+			vulkanFunctions.vkBindBufferMemory = vkBindBufferMemory;
+			vulkanFunctions.vkBindImageMemory = vkBindImageMemory;
+			vulkanFunctions.vkCmdCopyBuffer = vkCmdCopyBuffer;
+			vulkanFunctions.vkCreateBuffer = vkCreateBuffer;
+			vulkanFunctions.vkCreateImage = vkCreateImage;
+			vulkanFunctions.vkDestroyBuffer = vkDestroyBuffer;
+			vulkanFunctions.vkDestroyImage = vkDestroyImage;
+			vulkanFunctions.vkFlushMappedMemoryRanges = vkFlushMappedMemoryRanges;
+			vulkanFunctions.vkFreeMemory = vkFreeMemory;
+			vulkanFunctions.vkGetBufferMemoryRequirements = vkGetBufferMemoryRequirements;
+			vulkanFunctions.vkGetDeviceBufferMemoryRequirements = vkGetDeviceBufferMemoryRequirements;
+			vulkanFunctions.vkGetDeviceImageMemoryRequirements = vkGetDeviceImageMemoryRequirements;
+			vulkanFunctions.vkGetDeviceProcAddr = vkGetDeviceProcAddr;
+			vulkanFunctions.vkGetImageMemoryRequirements = vkGetImageMemoryRequirements;
+			vulkanFunctions.vkGetInstanceProcAddr = vkGetInstanceProcAddr;
+			vulkanFunctions.vkGetPhysicalDeviceMemoryProperties = vkGetPhysicalDeviceMemoryProperties;
+			vulkanFunctions.vkGetPhysicalDeviceProperties = vkGetPhysicalDeviceProperties;
+			vulkanFunctions.vkInvalidateMappedMemoryRanges = vkInvalidateMappedMemoryRanges;
+			vulkanFunctions.vkMapMemory = vkMapMemory;
+			vulkanFunctions.vkUnmapMemory = vkUnmapMemory;
+
 			VmaAllocatorCreateInfo allocatorInfo{};
 			allocatorInfo.instance = mInstance;
 			allocatorInfo.physicalDevice = mGpu;
 			allocatorInfo.device = mDevice;
-			allocatorInfo.flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
+			allocatorInfo.flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT | VMA_ALLOCATOR_CREATE_KHR_MAINTENANCE5_BIT;
+			allocatorInfo.pVulkanFunctions = &vulkanFunctions;
 			VK_CHECK(vmaCreateAllocator(&allocatorInfo, &mAllocator));
 
 			return;
