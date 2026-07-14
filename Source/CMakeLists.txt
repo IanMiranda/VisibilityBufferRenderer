@@ -15,6 +15,9 @@ target_sources(
             Renderer.h
             Renderer.cpp
 
+            DrawIndirectBackend.h
+            DrawIndirectBackend.cpp
+
             Camera.h
             Camera.cpp
 

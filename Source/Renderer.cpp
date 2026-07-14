@@ -6,6 +6,7 @@
 #include <stb_image.h>
 
 #include "API/Shader.h"
+#include "API/RenderPass.h"
 #include "Utils.h"
 #include "Scene.h"
 
@@ -14,38 +15,12 @@ namespace im
 	Renderer::Renderer(Window& window)
 		: mWindow(window)
 		, mDevice(mWindow.Get())
-		, mBindlessSet(mDevice)
-		, mSetAllocator(mDevice)
 		, mCommandPool(mDevice, mDevice.GetGraphicsIndex(), VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT)
-		, mIndirectDrawBuffers{
-			Buffer(mDevice,
-				MaxDrawCalls * sizeof(DrawCall),
-				VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
-				VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT),
-			Buffer(mDevice,
-				MaxDrawCalls * sizeof(DrawCall),
-				VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
-				VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT)
-		}
-		, mObjectDataBuffers{
-			Buffer(mDevice,
-				MaxDrawCalls * sizeof(ObjectData),
-				VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-				VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT),
-			Buffer(mDevice,
-				MaxDrawCalls * sizeof(ObjectData),
-				VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-				VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT)
-		}
-		, mCamera(0.0f, 0.0f, 0.0f, 0.0f)
+		, mDepthImage(InitDepthBuffer())
+		, mBackend(*this, MaxFramesInFlight, *mDepthImage.image)
 	{
-		InitDepthBuffer();
 		InitSyncPrimitives();
 		InitCommandBuffers();
-		InitPipeline();
-		InitUniformBuffers();
-		InitPbr();
-		InitDescriptors();
 	}
 
 	Renderer::~Renderer()
@@ -90,7 +65,6 @@ namespace im
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
 
-
 		ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode);
 
 		auto& commandBuffer = *mCommandBuffers[mFrameIndex];
@@ -105,9 +79,9 @@ namespace im
 
 		commandBuffer.SetViewportAndScissor(swapchain.GetExtent());
 		commandBuffer.BeginRendering(
-			{ utils::ColorAttachment(swapchain.GetViews()[swapchain.GetImageIndex()], VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE) },
-			utils::DepthAttachment(mDepthImage.view->Get(), VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_DONT_CARE),
-			utils::Scissor(swapchain.GetExtent())
+			{ ColorAttachment(swapchain.GetViews()[swapchain.GetImageIndex()], VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE) },
+			DepthAttachment(mDepthImage.view->Get(), VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_DONT_CARE),
+			Scissor(swapchain.GetExtent())
 		);
 
 		return true;
@@ -117,10 +91,7 @@ namespace im
 	{
 		auto& commandBuffer = *mCommandBuffers[mFrameIndex];
 
-		mIndirectDrawBuffers[mFrameIndex].Unmap();
-		mObjectDataBuffers[mFrameIndex].Unmap();
-
-		commandBuffer.DrawIndexedIndirect(mIndirectDrawBuffers[mFrameIndex], 0, mDrawCallCount, sizeof(DrawCall));
+		mBackend.End(commandBuffer, mFrameIndex);
 
 		ImGui::Render();
 		ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer.Get());
@@ -162,76 +133,16 @@ namespace im
 
 		mSemaphoreIndex = (mSemaphoreIndex + 1) % mAcquireSemaphores.size();
 		mFrameIndex = (mFrameIndex + 1) % MaxFramesInFlight;
-
-		mDrawCallCount = 0;
-		mInstanceIndex = 0;
-		mDrawCallPtr = nullptr;
-		mObjectDataPtr = nullptr;
 	}
 
 	void Renderer::BeginScene(Scene& scene)
 	{
-		mCamera = scene.GetCamera();
-		const auto view = mCamera.GetViewMatrix();
-		const auto proj = mCamera.GetProjectionMatrix();
-
-		MainPassData passData{};
-		passData.view = view;
-		passData.viewProj = proj * view;
-		passData.viewInverse = glm::inverse(view);
-		passData.objectData = mObjectDataBuffers[mFrameIndex].GetAddress();
-		passData.vertexData = scene.GetVertexBuffer().GetAddress();
-		passData.lightCount = scene.GetPointLights().size();
-		mMainPassBuffers[mFrameIndex]->SetData(passData);
-
-		LightData lightData{};
-		for (int i = 0; i < scene.GetPointLights().size(); ++i)
-			lightData.lights[i] = { glm::vec3(view * glm::vec4(scene.GetPointLights()[i].position, 1.0f)), 0, scene.GetPointLights()[i].i };
-		mLightBuffers[mFrameIndex]->SetData(lightData);
-
-		auto& commandBuffer = *mCommandBuffers[mFrameIndex];
-		commandBuffer.BindGraphicsPipeline(*mEnvMapPipe);
-		commandBuffer.BindGraphicsDescriptorSets(*mEnvMapPipeLayout, 0, { *mEnvMapSet });
-		commandBuffer.PushConstants(*mEnvMapPipeLayout, VK_SHADER_STAGE_VERTEX_BIT, CubemapData(view, proj));
-		commandBuffer.Draw(3);
-
-		mDrawCallPtr = reinterpret_cast<DrawCall*>(mIndirectDrawBuffers[mFrameIndex].Map());
-		mObjectDataPtr = reinterpret_cast<ObjectData*>(mObjectDataBuffers[mFrameIndex].Map());
-
-		commandBuffer.BindGraphicsPipeline(*mMainPipe);
-		commandBuffer.BindGraphicsDescriptorSets(*mMainPipeLayout, 0, { *(mMainDescSets[mFrameIndex]), mBindlessSet.Get() });
-		commandBuffer.BindIndexBuffer(scene.GetIndexBuffer());
+		mBackend.BeginScene(scene, *mCommandBuffers[mFrameIndex], mFrameIndex);
 	}
 
 	void Renderer::DrawBatch(const std::vector<Object>& batch)
 	{
-		if (mDrawCallCount > MaxDrawCalls)
-		{
-			fmt::println(stderr, "Exceeded maximum draw call count ({})", MaxDrawCalls);
-		}
-
-		auto& commandBuffer = *mCommandBuffers[mFrameIndex];
-		mDrawCallPtr->indexCount = batch[0].mesh->indices.size();
-		mDrawCallPtr->instanceCount = batch.size();
-		mDrawCallPtr->vertexOffset = batch[0].mesh->sceneBufferIndex;
-		mDrawCallPtr->firstVertex = 0;
-		mDrawCallPtr->firstInstance = mInstanceIndex;
-		++mDrawCallPtr;
-
-		for (const auto& object : batch)
-		{
-			mObjectDataPtr->model = object.transform;
-			mObjectDataPtr->albedoMapIndex = mBindlessSet.GetOrCreateId(object.material.albedoMap);
-			mObjectDataPtr->metallicMapIndex = mBindlessSet.GetOrCreateId(object.material.metallicMap);
-			mObjectDataPtr->roughnessMapIndex = mBindlessSet.GetOrCreateId(object.material.roughnessMap);
-			mObjectDataPtr->normalMapIndex = mBindlessSet.GetOrCreateId(object.material.normalMap);
-			mObjectDataPtr->aoMapIndex = mBindlessSet.GetOrCreateId(object.material.aoMap);
-			mObjectDataPtr->emissiveMapIndex = mBindlessSet.GetOrCreateId(object.material.emissiveMap);
-			++mObjectDataPtr;
-		}
-
-		++mDrawCallCount;
-		mInstanceIndex += batch.size();
+		mBackend.DrawBatch(batch);
 	}
 
 	void Renderer::RecreateSwapchain()
@@ -243,74 +154,36 @@ namespace im
 		InitDepthBuffer();
 	}
 
-	void Renderer::InitDepthBuffer()
+	Texture2D Renderer::InitDepthBuffer()
 	{
 		const auto swapExtent = mDevice.GetSwapchain().GetExtent();
-		mDepthImage.image = std::make_unique<Image>(
+		Texture2D res;
+		res.image = std::make_unique<Image>(
 			mDevice,
 			mDevice.GetDepthFormat(),
 			VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
 			swapExtent.width, swapExtent.height, 1,
 			1, VK_IMAGE_TYPE_2D, 1
 		);
-		mDepthImage.view = std::make_unique<ImageView>(
+		res.view = std::make_unique<ImageView>(
 			mDevice,
-			*mDepthImage.image,
+			*res.image,
 			VK_IMAGE_VIEW_TYPE_2D,
 			VK_IMAGE_ASPECT_DEPTH_BIT,
 			0, 1, 0, 1
 		);
 
-		mDevice.RunImmediateCommands([this](CommandBuffer& cmds)
+		mDevice.RunImmediateCommands([&res](CommandBuffer& cmds)
 			{
-				cmds.Barrier(*mDepthImage.image,
+				cmds.Barrier(*res.image,
 					VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
 					VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE,
 					VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
-					VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+					VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
 					VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1
 				);
 			});
-	}
-
-	void Renderer::InitPipeline()
-	{
-		mMainLayout = std::make_unique<DescriptorSetLayout>(
-			mDevice,
-			std::initializer_list{
-				DescriptorSetLayout::Binding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-					VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT),
-				DescriptorSetLayout::Binding(1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT),
-				DescriptorSetLayout::Binding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-				DescriptorSetLayout::Binding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-				DescriptorSetLayout::Binding(4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-			}
-		);
-
-		mMainPipeLayout = std::make_unique<PipelineLayout>(
-			mDevice,
-			std::initializer_list{
-				std::ref(*mMainLayout),
-				std::ref(mBindlessSet.GetSetLayout())
-			},
-			std::initializer_list<VkPushConstantRange>{}
-		);
-
-		mMainPipe = std::make_unique<GraphicsPipeline>(
-			mDevice,
-			GraphicsPipelineDesc(
-				*mMainPipeLayout,
-				Shader(mDevice, "./Assets/Shaders/Bin/PBR.spv")
-					.AddStage(VK_SHADER_STAGE_VERTEX_BIT, "VSMain")
-					.AddStage(VK_SHADER_STAGE_FRAGMENT_BIT, "FSMain"),
-				{},
-				InputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST),
-				Rasterizer(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE, VK_POLYGON_MODE_FILL),
-				Multisample(VK_SAMPLE_COUNT_1_BIT),
-				{ ColorAttachment(mDevice.GetSwapchain().GetFormat()) },
-				{ DepthStencil(mDepthImage.image->GetFormat()) }
-			)
-		);
+		return res;
 	}
 
 	void Renderer::InitCommandBuffers()
@@ -368,592 +241,5 @@ namespace im
 		imguiVulkanInfo.PipelineInfoMain.PipelineRenderingCreateInfo = renderingInfo;
 
 		ImGui_ImplVulkan_Init(&imguiVulkanInfo);
-	}
-
-    TextureCube Renderer::EquirectangularToCubemap(ImageView& eqMap)
-    {
-		auto cubeVertexBuffer = CreateCubeVertexBuffer();
-
-		DescriptorSetLayout cubeSetLayout(
-			mDevice,
-			{
-				DescriptorSetLayout::Binding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1)
-			}
-		);
-		PipelineLayout cubePipeLayout(
-			mDevice,
-			{ std::ref(cubeSetLayout) },
-			{ utils::PushConstantRange(VK_SHADER_STAGE_VERTEX_BIT, sizeof(EqMapData)) }
-		);
-
-		GraphicsPipeline cubePipe(
-			mDevice,
-			GraphicsPipelineDesc(
-				cubePipeLayout,
-				Shader(mDevice, "./Assets/Shaders/Bin/EquirectangularToCubemap.spv")
-					.AddStage(VK_SHADER_STAGE_VERTEX_BIT, "VSMain")
-					.AddStage(VK_SHADER_STAGE_FRAGMENT_BIT, "FSMain"),
-				{
-					InputBinding(
-						{ InputAttribute(0, VK_FORMAT_R32G32B32_SFLOAT, 0) },
-						VK_VERTEX_INPUT_RATE_VERTEX,
-						sizeof(float) * 3
-					)
-				},
-				InputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST),
-				Rasterizer(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE, VK_POLYGON_MODE_FILL),
-				Multisample(VK_SAMPLE_COUNT_1_BIT),
-				{ ColorAttachment(VK_FORMAT_R32G32B32A32_SFLOAT) },
-				{ DepthStencil(mDepthImage.image->GetFormat()) }
-			)
-		);
-
-		auto cubeDescSet = mSetAllocator.Allocate(cubeSetLayout);
-		cubeDescSet->
-			PushWrite(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, eqMap, mDevice.GetSamplers().TrilinearColor())
-			.Update();
-		
-		auto cubeMap = std::make_unique<Image>(mDevice, VK_FORMAT_R32G32B32A32_SFLOAT,
-			VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 1024, 1024, 1,
-			Image::CubemapFaces, VK_IMAGE_TYPE_2D, 1, VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT);
-		auto cubeMapFaces = ImageView::CreateFacesForCubemap(mDevice, *cubeMap, VK_IMAGE_ASPECT_COLOR_BIT, 0, 1);
-		std::array views
-		{
-   			glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 1.0f,  0.0f,  0.0f), glm::vec3(0.0f, 1.0f,  0.0f)),
-   			glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(-1.0f,  0.0f,  0.0f), glm::vec3(0.0f, 1.0f,  0.0f)),
-   			glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 0.0f,  1.0f,  0.0f), glm::vec3(0.0f,  0.0f,  1.0f)),
-   			glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 0.0f, -1.0f,  0.0f), glm::vec3(0.0f,  0.0f, -1.0f)),
-   			glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 0.0f,  0.0f, -1.0f), glm::vec3(0.0f, 1.0f,  0.0f)),
-   			glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 0.0f,  0.0f,  1.0f), glm::vec3(0.0f, 1.0f,  0.0f)),
-		};
-		
-		mDevice.RunImmediateCommands([&](CommandBuffer& cmds)
-		{
-			glm::mat4 proj = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 10.0f);
-			cmds.Barrier(
-				*cubeMap,
-				VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-				VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, VK_ACCESS_2_NONE,
-				VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-				VK_IMAGE_ASPECT_COLOR_BIT, 0, Image::CubemapFaces, 0, 1
-			);
-			cmds.SetViewportAndScissor({ cubeMap->GetWidth(), cubeMap->GetHeight() });
-			for (uint32_t i = 0; i < Image::CubemapFaces; ++i)
-			{
-				cmds.BeginRendering(
-					{
-						utils::ColorAttachment(cubeMapFaces[i]->Get(), VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE)
-					},
-					utils::Scissor({ cubeMap->GetWidth(), cubeMap->GetHeight() })
-				);
-				cmds.BindGraphicsPipeline(cubePipe);
-				cmds.BindGraphicsDescriptorSets(cubePipeLayout, 0, { std::ref(*cubeDescSet) });
-				cmds.PushConstants(
-					cubePipeLayout,
-					VK_SHADER_STAGE_VERTEX_BIT,
-					EqMapData(proj * glm::mat4(glm::mat3(views[i])))
-				);
-				cmds.BindVertexBuffer(cubeVertexBuffer);
-				cmds.Draw(36);
-				cmds.EndRendering();
-			}
-			cmds.Barrier(
-				*cubeMap,
-				VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-				VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-				VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_READ_BIT,
-				VK_IMAGE_ASPECT_COLOR_BIT, 0, Image::CubemapFaces, 0, 1
-			);
-		});
-
-		auto cubeMapView = std::make_unique<ImageView>(mDevice, *cubeMap, VK_IMAGE_VIEW_TYPE_CUBE, VK_IMAGE_ASPECT_COLOR_BIT, 0, Image::CubemapFaces, 0, 1);
-		return {
-			std::move(cubeMap),
-			std::move(cubeMapView)
-		};
-    }
-
-    TextureCube Renderer::CalculateDiffuseIrradiance(ImageView& cubeMap)
-    {
-		auto cubeVertexBuffer = CreateCubeVertexBuffer();
-
-		DescriptorSetLayout cubeSetLayout(
-			mDevice,
-			{
-				DescriptorSetLayout::Binding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1)
-			}
-		);
-		PipelineLayout cubePipeLayout(
-			mDevice,
-			{ std::ref(cubeSetLayout) },
-			{ utils::PushConstantRange(VK_SHADER_STAGE_VERTEX_BIT, sizeof(EqMapData)) }
-		);
-
-		GraphicsPipeline cubePipe(
-			mDevice,
-			GraphicsPipelineDesc(
-				cubePipeLayout,
-				Shader(mDevice, "./Assets/Shaders/Bin/DiffuseIrradiance.spv")
-					.AddStage(VK_SHADER_STAGE_VERTEX_BIT, "VSMain")
-					.AddStage(VK_SHADER_STAGE_FRAGMENT_BIT, "FSMain"),
-				{
-					InputBinding(
-						{ InputAttribute(0, VK_FORMAT_R32G32B32_SFLOAT, 0) },
-						VK_VERTEX_INPUT_RATE_VERTEX,
-						sizeof(float) * 3
-					)
-				},
-				InputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST),
-				Rasterizer(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE, VK_POLYGON_MODE_FILL),
-				Multisample(VK_SAMPLE_COUNT_1_BIT),
-				{ ColorAttachment(VK_FORMAT_R32G32B32A32_SFLOAT) },
-				{ DepthStencil(mDepthImage.image->GetFormat()) }
-			)
-		);
-
-		auto cubeDescSet = mSetAllocator.Allocate(cubeSetLayout);
-		cubeDescSet->
-			PushWrite(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, cubeMap, mDevice.GetSamplers().TrilinearColor())
-			.Update();
-
-		auto irradianceMap = std::make_unique<Image>(mDevice, VK_FORMAT_R32G32B32A32_SFLOAT,
-			VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 32, 32, 1,
-			Image::CubemapFaces, VK_IMAGE_TYPE_2D, 1, VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT);
-		auto irradianceMapFaces = ImageView::CreateFacesForCubemap(mDevice, *irradianceMap, VK_IMAGE_ASPECT_COLOR_BIT);
-		std::array views
-		{
-   			glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 1.0f,  0.0f,  0.0f), glm::vec3(0.0f, 1.0f,  0.0f)),
-   			glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(-1.0f,  0.0f,  0.0f), glm::vec3(0.0f, 1.0f,  0.0f)),
-   			glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 0.0f,  1.0f,  0.0f), glm::vec3(0.0f,  0.0f,  1.0f)),
-   			glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 0.0f, -1.0f,  0.0f), glm::vec3(0.0f,  0.0f, -1.0f)),
-   			glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 0.0f,  0.0f, -1.0f), glm::vec3(0.0f, 1.0f,  0.0f)),
-   			glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 0.0f,  0.0f,  1.0f), glm::vec3(0.0f, 1.0f,  0.0f)),
-		};
-		
-		mDevice.RunImmediateCommands([&](CommandBuffer& cmds)
-		{
-			glm::mat4 proj = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 100.0f);
-			cmds.Barrier(
-				*irradianceMap,
-				VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-				VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, VK_ACCESS_2_NONE,
-				VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-				VK_IMAGE_ASPECT_COLOR_BIT, 0, Image::CubemapFaces, 0, 1
-			);
-			cmds.SetViewportAndScissor({ irradianceMap->GetWidth(), irradianceMap->GetHeight() });
-			for (uint32_t i = 0; i < 6; ++i)
-			{
-				cmds.BeginRendering(
-					{
-						utils::ColorAttachment(irradianceMapFaces[i]->Get(), VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE)
-					},
-					utils::Scissor({ irradianceMap->GetWidth(), irradianceMap->GetHeight() })
-				);
-				cmds.BindGraphicsPipeline(cubePipe);
-				cmds.BindGraphicsDescriptorSets(cubePipeLayout, 0, { std::ref(*cubeDescSet) });
-				cmds.PushConstants(
-					cubePipeLayout,
-					VK_SHADER_STAGE_VERTEX_BIT,
-					EqMapData(proj * glm::mat4(glm::mat3(views[i])))
-				);
-				cmds.BindVertexBuffer(cubeVertexBuffer);
-				cmds.Draw(36);
-				cmds.EndRendering();
-			}
-			cmds.Barrier(
-				*irradianceMap,
-				VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-				VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-				VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_READ_BIT,
-				VK_IMAGE_ASPECT_COLOR_BIT, 0, Image::CubemapFaces, 0, 1
-			);
-		});
-		auto irradianceMapView = std::make_unique<ImageView>(
-			mDevice,
-			*irradianceMap,
-			VK_IMAGE_VIEW_TYPE_CUBE,
-			VK_IMAGE_ASPECT_COLOR_BIT,
-			0, Image::CubemapFaces, 0, 1
-		);
-		return {
-			std::move(irradianceMap),
-			std::move(irradianceMapView)
-		};
-    }
-
-	TextureCube Renderer::PrefilterEnvMap(ImageView& cubeMap)
-	{
-		auto cubeVertexBuffer = CreateCubeVertexBuffer();
-
-		DescriptorSetLayout cubeSetLayout(
-			mDevice,
-			{
-				DescriptorSetLayout::Binding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1)
-			}
-		);
-		PipelineLayout cubePipeLayout(
-			mDevice,
-			{ std::ref(cubeSetLayout) },
-			{ utils::PushConstantRange(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(PrefilterData)) }
-		);
-
-		GraphicsPipeline cubePipe(
-			mDevice,
-			GraphicsPipelineDesc(
-				cubePipeLayout,
-				Shader(mDevice, "./Assets/Shaders/Bin/Prefilter.spv")
-				.AddStage(VK_SHADER_STAGE_VERTEX_BIT, "VSMain")
-				.AddStage(VK_SHADER_STAGE_FRAGMENT_BIT, "FSMain"),
-				{
-					InputBinding(
-						{ InputAttribute(0, VK_FORMAT_R32G32B32_SFLOAT, 0) },
-						VK_VERTEX_INPUT_RATE_VERTEX,
-						sizeof(float) * 3
-					)
-				},
-				InputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST),
-				Rasterizer(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE, VK_POLYGON_MODE_FILL),
-				Multisample(VK_SAMPLE_COUNT_1_BIT),
-				{ ColorAttachment(VK_FORMAT_R32G32B32A32_SFLOAT) },
-				{ DepthStencil(mDepthImage.image->GetFormat()) }
-			)
-		);
-
-		auto cubeDescSet = mSetAllocator.Allocate(cubeSetLayout);
-		cubeDescSet->
-			PushWrite(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, cubeMap, mDevice.GetSamplers().TrilinearColor())
-			.Update();
-
-		auto res = std::make_unique<Image>(
-			mDevice, VK_FORMAT_R32G32B32A32_SFLOAT,
-			VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-			128, 128, 1, Image::CubemapFaces, VK_IMAGE_TYPE_2D,
-			std::min(Image::GetMaxMipLevels(128, 128), 5u),
-			VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT
-		);
-		auto resViews = ImageView::CreateFacesForCubemap(
-			mDevice, *res, VK_IMAGE_ASPECT_COLOR_BIT, 0, res->GetMipLevels()
-		);
-
-		std::array views
-		{
-			glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(1.0f,  0.0f,  0.0f), glm::vec3(0.0f, 1.0f,  0.0f)),
-			glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(-1.0f,  0.0f,  0.0f), glm::vec3(0.0f, 1.0f,  0.0f)),
-			glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f,  1.0f,  0.0f), glm::vec3(0.0f,  0.0f,  1.0f)),
-			glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, -1.0f,  0.0f), glm::vec3(0.0f,  0.0f, -1.0f)),
-			glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f,  0.0f, -1.0f), glm::vec3(0.0f, 1.0f,  0.0f)),
-			glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f,  0.0f,  1.0f), glm::vec3(0.0f, 1.0f,  0.0f)),
-		};
-
-		mDevice.RunImmediateCommands([&](CommandBuffer& cmds)
-			{
-				glm::mat4 proj = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 100.0f);
-				cmds.Barrier(
-					*res,
-					VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-					VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, VK_ACCESS_2_NONE,
-					VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-					VK_IMAGE_ASPECT_COLOR_BIT, 0, Image::CubemapFaces,
-					0, res->GetMipLevels()
-				);
-
-				for (uint32_t level = 0; level < res->GetMipLevels(); ++level)
-				{
-					uint32_t levelWidth = res->GetWidth() * std::pow(0.5, level);
-					uint32_t levelHeight = res->GetHeight() * std::pow(0.5, level);
-					cmds.SetViewportAndScissor({ levelWidth, levelHeight });
-					const float roughness = level / (float)(res->GetMipLevels() - 1);
-
-					for (uint32_t i = 0; i < 6; ++i)
-					{
-						cmds.BeginRendering(
-							{
-								utils::ColorAttachment(resViews[level * 6 + i]->Get(), VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE)
-							},
-							utils::Scissor({ levelWidth, levelHeight })
-						);
-						cmds.BindGraphicsPipeline(cubePipe);
-						cmds.BindGraphicsDescriptorSets(cubePipeLayout, 0, { std::ref(*cubeDescSet) });
-						cmds.PushConstants(
-							cubePipeLayout,
-							VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-							PrefilterData(proj * glm::mat4(glm::mat3(views[i])), roughness)
-						);
-						cmds.BindVertexBuffer(cubeVertexBuffer);
-						cmds.Draw(36);
-						cmds.EndRendering();
-					}
-				}
-
-				cmds.Barrier(
-					*res,
-					VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-					VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-					VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_READ_BIT,
-					VK_IMAGE_ASPECT_COLOR_BIT, 0, Image::CubemapFaces,
-					0, res->GetMipLevels()
-				);
-			}
-		);
-		
-		auto resView = std::make_unique<ImageView>(
-			mDevice, *res,
-			VK_IMAGE_VIEW_TYPE_CUBE, VK_IMAGE_ASPECT_COLOR_BIT,
-			0, 6, 0, res->GetMipLevels()
-		);
-		return {
-			std::move(res),
-			std::move(resView)
-		};
-	}
-
-	Texture2D Renderer::GenerateBrdfLut()
-	{
-		PipelineLayout cubePipeLayout(mDevice, {}, {});
-
-		GraphicsPipeline cubePipe(
-			mDevice,
-			GraphicsPipelineDesc(
-				cubePipeLayout,
-				Shader(mDevice, "./Assets/Shaders/Bin/IntegrateBRDF.spv")
-				.AddStage(VK_SHADER_STAGE_VERTEX_BIT, "VSMain")
-				.AddStage(VK_SHADER_STAGE_FRAGMENT_BIT, "FSMain"),
-				{},
-				InputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST),
-				Rasterizer(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE, VK_POLYGON_MODE_FILL),
-				Multisample(VK_SAMPLE_COUNT_1_BIT),
-				{ ColorAttachment(VK_FORMAT_R32G32B32A32_SFLOAT) },
-				{ DepthStencil(mDepthImage.image->GetFormat()) }
-			)
-		);
-
-		auto res = std::make_unique<Image>(
-			mDevice, VK_FORMAT_R32G32B32A32_SFLOAT,
-			VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-			512, 512, 1, 1, VK_IMAGE_TYPE_2D, 1
-		);
-		auto resView = std::make_unique<ImageView>(
-			mDevice, *res,
-			VK_IMAGE_VIEW_TYPE_2D, VK_IMAGE_ASPECT_COLOR_BIT,
-			0, 1, 0, 1
-		);
-
-		mDevice.RunImmediateCommands([&](CommandBuffer& cmds)
-			{
-				cmds.Barrier(
-					*res,
-					VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-					VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, VK_ACCESS_2_NONE,
-					VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-					resView->GetAspect(), 0, 1, 0, 1
-				);
-				cmds.SetViewportAndScissor({ res->GetWidth(), res->GetHeight() });
-				cmds.BeginRendering(
-					{
-						utils::ColorAttachment(resView->Get(), VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE)
-					},
-					utils::Scissor({ res->GetWidth(), res->GetHeight() })
-				);
-				cmds.BindGraphicsPipeline(cubePipe);
-				cmds.Draw(6);
-				cmds.EndRendering();
-				cmds.Barrier(
-					*res,
-					VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-					VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-					VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_READ_BIT,
-					resView->GetAspect(), 0, 1, 0, 1
-				);
-			});
-		return { std::move(res), std::move(resView) };
-	}
-
-    Buffer Renderer::CreateCubeVertexBuffer()
-    {
-		constexpr std::array cubeVertices
-		{
-			// back face
-			-1.0f, -1.0f, -1.0f,
-			 1.0f,  1.0f, -1.0f,
-			 1.0f, -1.0f, -1.0f,       
-			 1.0f,  1.0f, -1.0f,
-			-1.0f, -1.0f, -1.0f,
-			-1.0f,  1.0f, -1.0f,
-			// front face
-			-1.0f, -1.0f,  1.0f,
-			 1.0f, -1.0f,  1.0f,
-			 1.0f,  1.0f,  1.0f,
-			 1.0f,  1.0f,  1.0f,
-			-1.0f,  1.0f,  1.0f,
-			-1.0f, -1.0f,  1.0f,
-			// left face
-			-1.0f,  1.0f,  1.0f,
-			-1.0f,  1.0f, -1.0f,
-			-1.0f, -1.0f, -1.0f,
-			-1.0f, -1.0f, -1.0f,
-			-1.0f, -1.0f,  1.0f,
-			-1.0f,  1.0f,  1.0f,
-			// right face
-			 1.0f,  1.0f,  1.0f,
-			 1.0f, -1.0f, -1.0f,
-			 1.0f,  1.0f, -1.0f,    
-			 1.0f, -1.0f, -1.0f,
-			 1.0f,  1.0f,  1.0f,
-			 1.0f, -1.0f,  1.0f,  
-			 // bottom face
-			 -1.0f, -1.0f, -1.0f,
-			  1.0f, -1.0f, -1.0f,
-			  1.0f, -1.0f,  1.0f,
-			  1.0f, -1.0f,  1.0f,
-			 -1.0f, -1.0f,  1.0f,
-			 -1.0f, -1.0f, -1.0f,
-			 // top face
-			 -1.0f,  1.0f, -1.0f,
-			  1.0f,  1.0f , 1.0f,
-			  1.0f,  1.0f, -1.0f,
-			  1.0f,  1.0f,  1.0f,
-			 -1.0f,  1.0f, -1.0f,
-			 -1.0f,  1.0f,  1.0f,
-		};
-
-		return Buffer(
-			mDevice,
-			cubeVertices.size() * sizeof(cubeVertices[0]),
-			cubeVertices.data(),
-			VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
-		);
-    }
-
-    void Renderer::InitUniformBuffers()
-	{
-		mMainPassBuffers.reserve(MaxFramesInFlight);
-		mLightBuffers.reserve(MaxFramesInFlight);
-		for (int i = 0; i < MaxFramesInFlight; ++i)
-		{
-			mMainPassBuffers.emplace_back(
-				std::make_unique<Buffer>(mDevice, sizeof(MainPassData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-					VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT)
-			);
-			mLightBuffers.emplace_back(
-				std::make_unique<Buffer>(mDevice, sizeof(LightData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-					VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT)
-			);
-		}
-	}
-
-	void Renderer::InitPbr()
-	{
-		stbi_set_flip_vertically_on_load(true);
-		int width, height, channels;
-		float* data = stbi_loadf("./Assets/Textures/stadium_exterior_4k.hdr", &width, &height, &channels, STBI_rgb_alpha);
-		if (!data)
-		{
-			fmt::println(stderr, "Failed to load HDR environment map!");
-			return;
-		}
-
-		auto eqMapImage = std::make_unique<Image>(
-			mDevice,
-			VK_FORMAT_R32G32B32A32_SFLOAT,
-			VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-			width, height, 1, 1, VK_IMAGE_TYPE_2D, 1);
-		auto eqMapView = std::make_unique<ImageView>(
-			mDevice, *eqMapImage, VK_IMAGE_VIEW_TYPE_2D,
-			VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1);
-		
-		mEquirectangularMap = { std::move(eqMapImage), std::move(eqMapView) };
-		Buffer staging(mDevice, width * height * 4 * sizeof(float), data);
-		mDevice.RunImmediateCommands([&staging, this](CommandBuffer& cmds)
-			{
-				cmds.Barrier(
-					*mEquirectangularMap.image,
-					VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-					VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, VK_ACCESS_2_NONE,
-					VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
-					mEquirectangularMap.view->GetAspect(), 0, 1, 0, 1
-				);
-				cmds.Copy(staging, *mEquirectangularMap.image, mEquirectangularMap.view->GetAspect(), 0, 1, 0);
-				cmds.Barrier(
-					*mEquirectangularMap.image,
-					VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-					VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
-					VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_READ_BIT,
-					mEquirectangularMap.view->GetAspect(), 0, 1, 0, 1
-				);
-			}
-		);
-
-		stbi_image_free(data);
-
-		mEnvMap = EquirectangularToCubemap(*mEquirectangularMap.view);
-		mIrradianceMap = CalculateDiffuseIrradiance(*mEnvMap.view);
-		mPrefilteredEnvMap = PrefilterEnvMap(*mEnvMap.view);
-		mBrdfLut = GenerateBrdfLut();
-
-		// Create environment pipeline
-		mEnvMapSetLayout = std::make_unique<DescriptorSetLayout>(
-			mDevice,
-			std::initializer_list{
-				DescriptorSetLayout::Binding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
-			}
-		);
-
-		mEnvMapPipeLayout = std::make_unique<PipelineLayout>(
-			mDevice,
-			std::initializer_list{ std::ref(*mEnvMapSetLayout) },
-			std::initializer_list{ utils::PushConstantRange(VK_SHADER_STAGE_VERTEX_BIT, sizeof(CubemapData)) }
-		);
-
-		mEnvMapPipe = std::make_unique<GraphicsPipeline>(
-			mDevice,
-			GraphicsPipelineDesc(
-				*mEnvMapPipeLayout,
-				Shader(mDevice, "./Assets/Shaders/Bin/Cubemap.spv")
-				.AddStage(VK_SHADER_STAGE_VERTEX_BIT, "VSMain")
-				.AddStage(VK_SHADER_STAGE_FRAGMENT_BIT, "FSMain"),
-				{},
-				InputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST),
-				Rasterizer(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE, VK_POLYGON_MODE_FILL),
-				Multisample(VK_SAMPLE_COUNT_1_BIT),
-				{ ColorAttachment(mDevice.GetSwapchain().GetFormat()) },
-				{ DepthStencil(mDevice.GetDepthFormat(), false) }
-			)
-		);
-
-		mEnvMapSet = mSetAllocator.Allocate(*mEnvMapSetLayout);
-		mEnvMapSet->
-			PushWrite(
-				0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-				*mEnvMap.view, mDevice.GetSamplers().TrilinearColor(),
-				VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-			.Update();
-	}
-
-	void Renderer::InitDescriptors()
-	{
-		mMainDescSets = mSetAllocator.Allocate({ *mMainLayout, *mMainLayout }); // TODO: Convert to vector?
-
-		for (int i = 0; i < MaxFramesInFlight; ++i)
-		{
-			mMainDescSets[i]->
-				PushWrite(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, *(mMainPassBuffers[i]))
-				.PushWrite(1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, *(mLightBuffers[i]))
-				.PushWrite(
-					2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-					*mIrradianceMap.view, mDevice.GetSamplers().TrilinearColor(),
-					VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-				)
-				.PushWrite(
-					3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-					*mPrefilteredEnvMap.view, mDevice.GetSamplers().TrilinearColorClamp(),
-					VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-				)
-				.PushWrite(
-					4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-					*mBrdfLut.view, mDevice.GetSamplers().TrilinearColorClamp(),
-					VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-				)
-				.Update();
-		}
 	}
 }

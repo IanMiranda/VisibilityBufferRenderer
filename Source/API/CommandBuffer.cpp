@@ -7,7 +7,7 @@
 #include "PipelineLayout.h"
 #include "DescriptorSet.h"
 #include "GraphicsPipeline.h"
-#include "Utils.h"
+#include "RenderPass.h"
 
 namespace im
 {
@@ -199,7 +199,7 @@ namespace im
 
 	void CommandBuffer::SetViewportAndScissor(VkExtent2D renderArea)
 	{
-		const auto [viewport, scissor] = utils::ViewportAndScissor(renderArea);
+		const auto [viewport, scissor] = ViewportAndScissor(renderArea);
 		SetViewportAndScissor(viewport, scissor);
 	}
 

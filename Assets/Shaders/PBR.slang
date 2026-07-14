@@ -77,6 +77,13 @@ VSOutput VSMain(uint vertex : SV_VulkanVertexID, uint instance : SV_VulkanInstan
     return output;
 }
 
+static const int gNumLights = 1024;
+
+struct LightData
+{
+    PointLight lights[gNumLights];
+};
+
 [vk_binding(1, 0)] ConstantBuffer<LightData> gLightData;
 [vk_binding(2, 0)] SamplerCube gIrradianceMap;
 [vk_binding(3, 0)] SamplerCube gPrefilterMap;

@@ -40,6 +40,9 @@ target_sources(
             PipelineLayout.h
             PipelineLayout.cpp
 
+            RenderPass.h
+            RenderPass.cpp
+
             GraphicsPipeline.h
             GraphicsPipeline.cpp
 

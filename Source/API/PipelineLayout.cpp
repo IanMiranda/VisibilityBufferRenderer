@@ -5,6 +5,15 @@
 
 namespace im
 {
+	VkPushConstantRange PushConstantRange(VkShaderStageFlags stages, uint32_t size, uint32_t offset)
+	{
+		VkPushConstantRange pushRange{};
+		pushRange.stageFlags = stages;
+		pushRange.size = size;
+		pushRange.offset = offset;
+		return pushRange;
+	}
+
 	PipelineLayout::PipelineLayout(
 		Device& device,
 		std::initializer_list<std::reference_wrapper<DescriptorSetLayout>> setLayouts,

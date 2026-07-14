@@ -7,6 +7,8 @@ namespace im
 	class Device;
 	class DescriptorSetLayout;
 
+	VkPushConstantRange PushConstantRange(VkShaderStageFlags stages, uint32_t size, uint32_t offset = 0);
+
 	class PipelineLayout
 	{
 	public:
