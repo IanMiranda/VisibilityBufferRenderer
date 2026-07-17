@@ -69,20 +69,6 @@ namespace im
 
 		auto& commandBuffer = *mCommandBuffers[mFrameIndex];
 		commandBuffer.Begin();
-		commandBuffer.BarrierSwapchainImage(
-			swapchain.GetImages()[swapchain.GetImageIndex()],
-			VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-			VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-			VK_ACCESS_2_NONE,
-			VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-			VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT);
-
-		commandBuffer.SetViewportAndScissor(swapchain.GetExtent());
-		commandBuffer.BeginRendering(
-			{ ColorAttachment(swapchain.GetViews()[swapchain.GetImageIndex()], VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE) },
-			DepthAttachment(mDepthImage.view->Get(), VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_DONT_CARE),
-			Scissor(swapchain.GetExtent())
-		);
 
 		return true;
 	}
@@ -91,7 +77,7 @@ namespace im
 	{
 		auto& commandBuffer = *mCommandBuffers[mFrameIndex];
 
-		mBackend.End(commandBuffer, mFrameIndex);
+		// mBackend.End(commandBuffer, mFrameIndex);
 
 		ImGui::Render();
 		ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer.Get());
@@ -137,12 +123,12 @@ namespace im
 
 	void Renderer::BeginScene(Scene& scene)
 	{
-		mBackend.BeginScene(scene, *mCommandBuffers[mFrameIndex], mFrameIndex);
+		mBackend.BeginScene(*mCommandBuffers[mFrameIndex], *mDepthImage.view, mFrameIndex);
 	}
 
-	void Renderer::DrawBatch(const std::vector<Object>& batch)
+	void Renderer::DrawBatch(Scene& scene, const std::vector<VbObject>& batch)
 	{
-		mBackend.DrawBatch(batch);
+		mBackend.DrawBatch(scene, *mCommandBuffers[mFrameIndex], batch);
 	}
 
 	void Renderer::RecreateSwapchain()

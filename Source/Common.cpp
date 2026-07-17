@@ -2,6 +2,7 @@
 
 #include "Utils.h"
 #include "API/GraphicsPipeline.h"
+#include "API/Buffer.h"
 
 namespace im
 {
@@ -18,5 +19,12 @@ namespace im
 					InputAttribute(5, VK_FORMAT_R32G32B32_SFLOAT, sizeof(float) * 15)
 				}, VK_VERTEX_INPUT_RATE_VERTEX, sizeof(Vertex))
 		};
+	}
+
+	VbMesh::VbMesh(std::unique_ptr<Buffer> vertexBuffer, std::unique_ptr<Buffer> indexBuffer, uint32_t indexCount)
+		: vertexBuffer(std::move(vertexBuffer))
+		, indexBuffer(std::move(indexBuffer))
+		, indexCount(indexCount)
+	{
 	}
 }

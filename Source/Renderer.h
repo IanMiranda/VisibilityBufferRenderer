@@ -18,7 +18,7 @@
 #include "DescriptorSetAllocator.h"
 #include "Light.h"
 #include "Camera.h"
-#include "DrawIndirectBackend.h"
+#include "VisibilityBufferBackend.h"
 
 namespace im
 {
@@ -36,7 +36,7 @@ namespace im
 
 		void Render(Scene& scene);
 
-		void DrawBatch(const std::vector<Object>& batch);
+		void DrawBatch(Scene& scene, const std::vector<VbObject>& batch);
 
 		Window& GetWindow() { return mWindow; }
 		Device& GetDevice() { return mDevice; }
@@ -74,6 +74,6 @@ namespace im
 		uint32_t mSemaphoreIndex{ 0 };
 		bool mFramebufferResized{ false };
 
-		DrawIndirectBackend mBackend;
+		VisibilityBufferBackend mBackend;
 	};
 }

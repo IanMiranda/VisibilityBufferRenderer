@@ -29,13 +29,24 @@ namespace im
 		};
 
 		const auto [helmetVertices, helmetIndices] = utils::LoadGltfModel("./Assets/Models/Helmet/DamagedHelmet2.gltf");
-		auto helmetMesh = std::make_shared<Mesh>(helmetVertices, helmetIndices, 0);
+
+		Buffer stagingVbo(renderer.GetDevice(), helmetVertices.size() * sizeof(helmetVertices[0]), helmetVertices.data(), VK_BUFFER_USAGE_2_TRANSFER_SRC_BIT);
+		Buffer stagingIbo(renderer.GetDevice(), helmetIndices.size() * sizeof(helmetIndices[0]), helmetIndices.data(), VK_BUFFER_USAGE_2_TRANSFER_SRC_BIT);
+		auto vertexBuffer = std::make_unique<Buffer>(renderer.GetDevice(), helmetVertices.size() * sizeof(helmetVertices[0]), VK_BUFFER_USAGE_2_TRANSFER_DST_BIT | VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT, 0);
+		auto indexBuffer = std::make_unique<Buffer>(renderer.GetDevice(), helmetIndices.size() * sizeof(helmetIndices[0]), VK_BUFFER_USAGE_2_TRANSFER_DST_BIT | VK_BUFFER_USAGE_2_INDEX_BUFFER_BIT, 0);
+		mRenderer.GetDevice().RunImmediateCommands([&](CommandBuffer& cmd) {
+
+			cmd.Copy(stagingVbo, *vertexBuffer);
+			cmd.Copy(stagingIbo, *indexBuffer);
+		});
+
+		auto helmetMesh = std::make_shared<VbMesh>(std::move(vertexBuffer), std::move(indexBuffer), helmetIndices.size());
 
 		for (float z = -3.0f; z <= 3.0f; z += 1.0f)
 		{
-			for (float x = -5.0f; x <= 5.0f; x += 1.0f)
+			for (float x = -3.0f; x <= 3.0f; x += 1.0f)
 			{
-				for (float y = -5.0f; y <= 5.0f; y += 1.0f)
+				for (float y = -3.0f; y <= 3.0f; y += 1.0f)
 				{
 					glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(x * 5.0f, y * 5.0f, z * 5.0f));
 					model = glm::rotate(model, glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
@@ -46,10 +57,10 @@ namespace im
 		}
 
 		mPointLights.resize(8);
-		CombineMeshBuffers();
+		// CombineMeshBuffers();
 
 		// Info to create the Blas
-		VkAccelerationStructureGeometryTrianglesDataKHR triData{ VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR };
+		/*VkAccelerationStructureGeometryTrianglesDataKHR triData{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR};
 		triData.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
 		triData.vertexData.deviceAddress = mVertexBuffer->GetAddress();
 		triData.vertexStride = sizeof(Vertex);
@@ -102,7 +113,7 @@ namespace im
 			}
 		);
 
-		vkDestroyAccelerationStructureKHR(mRenderer.GetDevice().Get(), blas, nullptr);
+		vkDestroyAccelerationStructureKHR(mRenderer.GetDevice().Get(), blas, nullptr);*/
     }
     
     void Scene::Update(float deltaTime)
@@ -125,7 +136,7 @@ namespace im
 
     void Scene::Render()
     {
-		mRenderer.DrawBatch(mObjects);
+		mRenderer.DrawBatch(*this, mObjects);
 
 		DrawUI();
     }
@@ -222,7 +233,7 @@ namespace im
 
 	void Scene::CombineMeshBuffers()
 	{
-		std::unordered_set<std::shared_ptr<Mesh>> meshes;
+		/*std::unordered_set<std::shared_ptr<Mesh>> meshes;
 		for (const auto& object : mObjects) {
 			meshes.insert(object.mesh);
 		}
@@ -269,6 +280,6 @@ namespace im
 					0);
 				commandBuffer.Copy(stagingVtx, *mVertexBuffer);
 				commandBuffer.Copy(stagingIdx, *mIndexBuffer);
-			});
+			});*/
 	}
 }

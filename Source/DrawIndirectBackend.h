@@ -25,7 +25,7 @@ namespace im
 			Image& depthImage
 		);
 
-		void BeginScene(Scene& scene, CommandBuffer& cmd, uint32_t frameIndex);
+		void BeginScene(Renderer& renderer, Scene& scene, CommandBuffer& cmd, ImageView& depthView, uint32_t frameIndex);
 		void DrawBatch(const std::vector<Object>& batch);
 		void End(CommandBuffer& cmd, uint32_t frameIndex);
 

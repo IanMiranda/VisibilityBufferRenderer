@@ -192,11 +192,28 @@ namespace im
 		}
 	}
 
-	void DrawIndirectBackend::BeginScene(Scene& scene, CommandBuffer& cmd, uint32_t frameIndex)
+	void DrawIndirectBackend::BeginScene(Renderer& renderer, Scene& scene, CommandBuffer& cmd, ImageView& depthView, uint32_t frameIndex)
 	{
 		const auto& camera = scene.GetCamera();
 		const auto view = camera.GetViewMatrix();
 		const auto proj = camera.GetProjectionMatrix();
+
+		const auto& swapchain = renderer.GetDevice().GetSwapchain();
+
+		cmd.BarrierSwapchainImage(
+			swapchain.GetImages()[swapchain.GetImageIndex()],
+			VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+			VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+			VK_ACCESS_2_NONE,
+			VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+			VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT);
+
+		cmd.SetViewportAndScissor(swapchain.GetExtent());
+		cmd.BeginRendering(
+			{ ColorAttachment(swapchain.GetViews()[swapchain.GetImageIndex()], VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE) },
+			DepthAttachment(depthView.Get(), VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_DONT_CARE),
+			Scissor(swapchain.GetExtent())
+		);
 
 		cmd.BindGraphicsPipeline(*mEnvMapPipe);
 		cmd.BindGraphicsDescriptorSets(*mEnvMapPipeLayout, 0, { *mEnvMapSet });
@@ -205,14 +222,14 @@ namespace im
 
 		cmd.BindGraphicsPipeline(*mMainPipe);
 		cmd.BindGraphicsDescriptorSets(*mMainPipeLayout, 0, { *(mMainDescSets[frameIndex]), mBindlessSet.Get() });
-		cmd.BindIndexBuffer(scene.GetIndexBuffer());
+		// cmd.BindIndexBuffer(scene.GetIndexBuffer());
 
 		MainPassData passData{};
 		passData.view = view;
 		passData.viewProj = proj * view;
 		passData.viewInverse = glm::inverse(view);
 		passData.objectData = mObjectDataBuffers[frameIndex]->GetAddress();
-		passData.vertexData = scene.GetVertexBuffer().GetAddress();
+		// passData.vertexData = scene.GetVertexBuffer().GetAddress();
 		passData.lightCount = scene.GetPointLights().size();
 		mMainPassBuffers[frameIndex]->SetData(passData);
 

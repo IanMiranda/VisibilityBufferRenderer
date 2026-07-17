@@ -23,8 +23,8 @@ namespace im
 
         Camera& GetCamera() { return mCamera; }
         std::vector<PointLight>& GetPointLights() { return mPointLights; }
-        Buffer& GetVertexBuffer() { return *mVertexBuffer; }
-        Buffer& GetIndexBuffer() { return *mIndexBuffer; }
+        // Buffer& GetVertexBuffer() { return *mVertexBuffer; }
+        // Buffer& GetIndexBuffer() { return *mIndexBuffer; }
 
     private:
     	void UpdateLightPositions();
@@ -41,12 +41,12 @@ namespace im
         Renderer& mRenderer;
 
     	Material mMaterial;
-
-        std::unique_ptr<Buffer> mVertexBuffer;
-        std::unique_ptr<Buffer> mIndexBuffer;
+        
+        // std::unique_ptr<Buffer> mVertexBuffer;
+        // std::unique_ptr<Buffer> mIndexBuffer;
 		
 		Camera mCamera;
-        std::vector<Object> mObjects;
+        std::vector<VbObject> mObjects;
 
 		std::vector<PointLight> mPointLights;
     };

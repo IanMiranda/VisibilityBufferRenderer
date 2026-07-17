@@ -18,6 +18,9 @@ target_sources(
             DrawIndirectBackend.h
             DrawIndirectBackend.cpp
 
+            VisibilityBufferBackend.h
+            VisibilityBufferBackend.cpp
+
             Camera.h
             Camera.cpp
 

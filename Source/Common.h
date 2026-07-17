@@ -111,6 +111,31 @@ namespace im
 		std::shared_ptr<Texture2D> emissiveMap;
 	};
 
+	struct VbMesh
+	{
+		std::unique_ptr<Buffer> vertexBuffer;
+		std::unique_ptr<Buffer> indexBuffer;
+		uint32_t indexCount;
+
+		VbMesh(
+			std::unique_ptr<Buffer> vertexBuffer,
+			std::unique_ptr<Buffer> indexBuffer,
+			uint32_t indexCount
+		);
+	};
+
+	struct VbObject
+	{
+		std::shared_ptr<VbMesh> mesh;
+		Material material;
+		glm::mat4 transform;
+
+		VbObject(std::shared_ptr<VbMesh> mesh, Material material, const glm::mat4& transform)
+			: mesh(mesh), material(material), transform(transform)
+		{
+		}
+	};
+
 	struct Mesh
 	{
 		std::vector<Vertex> vertices;
