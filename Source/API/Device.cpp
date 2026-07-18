@@ -51,27 +51,60 @@ namespace im
 		vkDestroyInstance(mInstance, nullptr);
 	}
 
-	void Device::Submit(CommandBuffer& cmd, Semaphore* waitSemaphore, VkPipelineStageFlags waitDstStage, Semaphore* signalSemaphore, Fence* fence)
+	void Device::Submit(
+		std::vector<std::reference_wrapper<CommandBuffer>> cmds,
+		std::vector<SemaphoreSubmitInfo> waitSemaphores,
+		std::vector<SemaphoreSubmitInfo> signalSemaphores,
+		Fence* fence)
 	{
-		const std::array cmds{ cmd.Get() };
-		const std::array waitSems{ waitSemaphore ? waitSemaphore->Get() : nullptr };
-		const std::array signalSems{ signalSemaphore ? signalSemaphore->Get() : nullptr };
+		std::vector<VkCommandBufferSubmitInfo> cmdInfos;
+		cmdInfos.reserve(cmds.size());
+		for (const auto& cmd : cmds)
+		{
+			VkCommandBufferSubmitInfo cmdInfo{ VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO };
+			cmdInfo.commandBuffer = cmd.get().Get();
+			cmdInfo.deviceMask = 0;
+			cmdInfos.emplace_back(cmdInfo);
+		}
 
-		VkSubmitInfo submitInfo{ VK_STRUCTURE_TYPE_SUBMIT_INFO };
-		submitInfo.commandBufferCount = cmds.size();
-		submitInfo.pCommandBuffers = cmds.data();
-		submitInfo.waitSemaphoreCount = waitSemaphore ? 1 : 0;
-		submitInfo.pWaitSemaphores = waitSems.data();
-		submitInfo.pWaitDstStageMask = &waitDstStage;
-		submitInfo.signalSemaphoreCount = signalSemaphore ? 1 : 0;
-		submitInfo.pSignalSemaphores = signalSems.data();
+		std::vector<VkSemaphoreSubmitInfo> waitSems;
+		waitSems.reserve(waitSemaphores.size());
+		for (const auto& semaphore : waitSemaphores)
+		{
+			VkSemaphoreSubmitInfo waitSem{ VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO };
+			waitSem.deviceIndex = 0;
+			waitSem.semaphore = semaphore.semaphore.get().Get();
+			waitSem.stageMask = semaphore.stageMask;
+			waitSem.value = semaphore.waitValue;
+			waitSems.emplace_back(waitSem);
+		}
 
-		VK_CHECK(vkQueueSubmit(mGraphicsQueue, 1, &submitInfo, (fence ? fence->Get() : nullptr)));
+		std::vector<VkSemaphoreSubmitInfo> signalSems;
+		signalSems.reserve(signalSemaphores.size());
+		for (const auto& semaphore : signalSemaphores)
+		{
+			VkSemaphoreSubmitInfo signalSem{ VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO };
+			signalSem.deviceIndex = 0;
+			signalSem.semaphore = semaphore.semaphore.get().Get();
+			signalSem.stageMask = semaphore.stageMask;
+			signalSem.value = semaphore.waitValue;
+			signalSems.emplace_back(signalSem);
+		}
+
+		VkSubmitInfo2 submitInfo{ VK_STRUCTURE_TYPE_SUBMIT_INFO_2 };
+		submitInfo.commandBufferInfoCount = cmdInfos.size();
+		submitInfo.pCommandBufferInfos = cmdInfos.data();
+		submitInfo.waitSemaphoreInfoCount = waitSems.size();
+		submitInfo.pWaitSemaphoreInfos = waitSems.data();
+		submitInfo.signalSemaphoreInfoCount = signalSems.size();
+		submitInfo.pSignalSemaphoreInfos = signalSems.data();
+
+		VK_CHECK(vkQueueSubmit2(mGraphicsQueue, 1, &submitInfo, (fence ? fence->Get() : nullptr)));
 	}
 
 	void Device::SubmitAndFlush(CommandBuffer& cmd)
 	{
-		Submit(cmd);
+		Submit({ cmd }, {}, {});
 		VK_CHECK(vkQueueWaitIdle(mGraphicsQueue));
 	}
 
@@ -221,7 +254,7 @@ namespace im
 			std::vector<VkQueueFamilyProperties> queueFams(queueFamCount);
 			vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queueFamCount, queueFams.data());
 
-			std::optional<uint32_t> graphicsIndex, presentIndex;
+			std::optional<uint32_t> graphicsIndex, presentIndex, computeIndex;
 			for (uint32_t i = 0; i < queueFamCount; ++i)
 			{
 				if ((queueFams[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) == VK_QUEUE_GRAPHICS_BIT)
@@ -232,11 +265,19 @@ namespace im
 				if (presentSupport)
 					presentIndex = i;
 
-				if (graphicsIndex.has_value() && presentIndex.has_value())
+				if ((queueFams[i].queueFlags & VK_QUEUE_COMPUTE_BIT) == VK_QUEUE_COMPUTE_BIT)
+				{
+					if (!graphicsIndex.has_value() || graphicsIndex.value() != i)
+					{
+						computeIndex = i;
+					}
+				}
+
+				if (graphicsIndex.has_value() && presentIndex.has_value() && computeIndex.has_value())
 					break;
 			}
 
-			if (!graphicsIndex.has_value() || !presentIndex.has_value())
+			if (!graphicsIndex.has_value() || !presentIndex.has_value() || !computeIndex.has_value())
 				continue;
 
 			std::vector<const char*> deviceExtensions =
@@ -262,10 +303,16 @@ namespace im
 
 			// Assume graphics and present queue fam index are the same, as per the Vulkan Tutorial
 			constexpr float queuePriority = 1.0f;
-			VkDeviceQueueCreateInfo queueInfo{ VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO };
-			queueInfo.pQueuePriorities = &queuePriority;
-			queueInfo.queueCount = 1;
-			queueInfo.queueFamilyIndex = graphicsIndex.value();
+			std::vector<VkDeviceQueueCreateInfo> queueInfos;
+			queueInfos.reserve(2);
+			for (const auto index : { graphicsIndex.value(), computeIndex.value() })
+			{
+				VkDeviceQueueCreateInfo queueInfo{ VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO };
+				queueInfo.pQueuePriorities = &queuePriority;
+				queueInfo.queueCount = 1;
+				queueInfo.queueFamilyIndex = index;
+				queueInfos.emplace_back(queueInfo);
+			}
 
 			VkPhysicalDeviceAccelerationStructureFeaturesKHR accelFeatures{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR };
 			accelFeatures.accelerationStructure = VK_TRUE;
@@ -285,6 +332,7 @@ namespace im
 			vulkan12Features.runtimeDescriptorArray							= VK_TRUE;
 			vulkan12Features.bufferDeviceAddress							= VK_TRUE;
 			vulkan12Features.scalarBlockLayout								= VK_TRUE;
+			vulkan12Features.timelineSemaphore								= VK_TRUE;
 
 			VkPhysicalDeviceSynchronization2Features syncFeatures{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES };
 			syncFeatures.pNext = &vulkan12Features;
@@ -306,8 +354,8 @@ namespace im
 
 			VkDeviceCreateInfo deviceInfo{ VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO };
 			deviceInfo.pNext = &features;
-			deviceInfo.queueCreateInfoCount = 1;
-			deviceInfo.pQueueCreateInfos = &queueInfo;
+			deviceInfo.queueCreateInfoCount = static_cast<uint32_t>(queueInfos.size());
+			deviceInfo.pQueueCreateInfos = queueInfos.data();
 			deviceInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
 			deviceInfo.ppEnabledExtensionNames = deviceExtensions.data();
 
@@ -317,8 +365,10 @@ namespace im
 			mGpu = gpu;
 			mGraphicsIndex = graphicsIndex.value();
 			mPresentIndex = presentIndex.value();
+			mComputeIndex = computeIndex.value();
 			vkGetDeviceQueue(mDevice, mGraphicsIndex, 0, &mGraphicsQueue);
 			vkGetDeviceQueue(mDevice, mPresentIndex, 0, &mPresentQueue);
+			vkGetDeviceQueue(mDevice, mComputeIndex, 0, &mComputeQueue);
 
 			VmaVulkanFunctions vulkanFunctions{};
 			vulkanFunctions.vkAllocateMemory = vkAllocateMemory;

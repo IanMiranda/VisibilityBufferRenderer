@@ -27,6 +27,8 @@ namespace im
 
 		void BeginScene(CommandBuffer& cmd, ImageView& depthView, uint32_t frameIndex);
 		void DrawBatch(Scene& scene, CommandBuffer& cmd, const std::vector<VbObject>& objects);
+		void End(Renderer& renderer, CommandBuffer& cmd);
+
 		void ResizeBuffers(Renderer& renderer, size_t maxFramesInFlight);
 
 	private:

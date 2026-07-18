@@ -36,8 +36,8 @@ namespace im
 
 	void VisibilityBufferBackend::BeginScene(CommandBuffer& cmd, ImageView& depthView, uint32_t frameIndex)
 	{
-
 		cmd.SetViewportAndScissor(mVisBuffers[frameIndex].image->GetExtent());
+
 		cmd.BeginRendering(
 			{ ColorAttachment(mVisBuffers[frameIndex].view->Get(), VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE) },
 			DepthAttachment(depthView.Get(), VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_DONT_CARE),
@@ -64,6 +64,11 @@ namespace im
 		}
 	}
 
+	void VisibilityBufferBackend::End(Renderer& renderer, CommandBuffer& cmd)
+	{
+		cmd.EndRendering();
+	}
+
 	void VisibilityBufferBackend::ResizeBuffers(Renderer& renderer, size_t maxFramesInFlight)
 	{
 		mVisBuffers = InitVisBuffers(renderer, maxFramesInFlight);
@@ -84,6 +89,25 @@ namespace im
 				0, 1, 0, 1);
 			res.emplace_back(std::move(visBuf));
 		}
+
+		renderer.GetDevice().RunImmediateCommands([&](CommandBuffer& cmd)
+		{
+			// TODO: global barrier?
+			for (const auto& visBuf : res)
+			{
+				cmd.Barrier(
+					*visBuf.image,
+					VK_IMAGE_LAYOUT_UNDEFINED,
+					VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+					VK_PIPELINE_STAGE_2_NONE,
+					VK_ACCESS_2_NONE,
+					VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+					VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+					VK_IMAGE_ASPECT_COLOR_BIT,
+					0, 1, 0, 1
+				);
+			}
+		});
 
 		return res;
 	}

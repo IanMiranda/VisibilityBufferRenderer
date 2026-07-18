@@ -40,7 +40,7 @@ namespace im
 			cmd.Copy(stagingIbo, *indexBuffer);
 		});
 
-		auto helmetMesh = std::make_shared<VbMesh>(std::move(vertexBuffer), std::move(indexBuffer), helmetIndices.size());
+		auto helmetMesh = std::make_shared<VbMesh>(std::move(vertexBuffer), std::move(indexBuffer), static_cast<uint32_t>(helmetIndices.size()));
 
 		for (float z = -3.0f; z <= 3.0f; z += 1.0f)
 		{

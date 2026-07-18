@@ -59,19 +59,26 @@ namespace im
 	private:
 		static constexpr int MaxFramesInFlight = 2;
 
+		struct FrameContext
+		{
+			std::unique_ptr<CommandBuffer> commandBuffer;
+			std::unique_ptr<Semaphore> acquireSemaphore;
+			uint64_t timestampOfCompletion{ 0 };
+		};
+
+	private:
 		Window& mWindow;
 
 		Device mDevice;
 		CommandPool mCommandPool;
+		Semaphore mTimelineSemaphore;
 
 		Texture2D mDepthImage;
 
-		std::vector<std::unique_ptr<CommandBuffer>> mCommandBuffers;
-		std::vector<std::unique_ptr<Semaphore>> mAcquireSemaphores;
+		std::array<FrameContext, MaxFramesInFlight> mFrames;
 		std::vector<std::unique_ptr<Semaphore>> mRenderSemaphores;
-		std::vector<std::unique_ptr<Fence>> mRenderFences;
 		uint32_t mFrameIndex{ 0 };
-		uint32_t mSemaphoreIndex{ 0 };
+		uint32_t mNextTimestampOfCompletion{ 10 };
 		bool mFramebufferResized{ false };
 
 		VisibilityBufferBackend mBackend;

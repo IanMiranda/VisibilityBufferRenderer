@@ -16,6 +16,7 @@ namespace im
 		: mWindow(window)
 		, mDevice(mWindow.Get())
 		, mCommandPool(mDevice, mDevice.GetGraphicsIndex(), VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT)
+		, mTimelineSemaphore(mDevice, SemaphoreType::Timeline)
 		, mDepthImage(InitDepthBuffer())
 		, mBackend(*this, MaxFramesInFlight, *mDepthImage.image)
 	{
@@ -46,9 +47,9 @@ namespace im
 	{
 		Swapchain& swapchain = mDevice.GetSwapchain();
 
-		mRenderFences[mFrameIndex]->Wait();
+		mTimelineSemaphore.WaitForTime(mFrames[mFrameIndex].timestampOfCompletion);
 
-		auto [res, imageIndex] = swapchain.AcquireNextImage(*mAcquireSemaphores[mSemaphoreIndex]);
+		auto [res, imageIndex] = swapchain.AcquireNextImage(*mFrames[mFrameIndex].acquireSemaphore);
 		if (res == VK_ERROR_OUT_OF_DATE_KHR)
 		{
 			RecreateSwapchain();
@@ -59,25 +60,37 @@ namespace im
 			VK_CHECK(res);
 		}
 
-		mRenderFences[mFrameIndex]->Reset();
-
 		ImGui_ImplVulkan_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
 
 		ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode);
 
-		auto& commandBuffer = *mCommandBuffers[mFrameIndex];
+		auto& commandBuffer = *mFrames[mFrameIndex].commandBuffer;
 		commandBuffer.Begin();
+
+		commandBuffer.BarrierSwapchainImage(
+			mDevice.GetSwapchain().GetImages()[mDevice.GetSwapchain().GetImageIndex()],
+			VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+			VK_PIPELINE_STAGE_2_NONE,
+			VK_ACCESS_2_NONE,
+			VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+			VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT);
 
 		return true;
 	}
 
 	void Renderer::End()
 	{
-		auto& commandBuffer = *mCommandBuffers[mFrameIndex];
+		auto& commandBuffer = *mFrames[mFrameIndex].commandBuffer;
 
 		// mBackend.End(commandBuffer, mFrameIndex);
+		mBackend.End(*this, commandBuffer);
+
+		commandBuffer.BeginRendering(
+			{ ColorAttachment(mDevice.GetSwapchain().GetViews()[mDevice.GetSwapchain().GetImageIndex()], VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE) },
+			Scissor(mDevice.GetSwapchain().GetExtent())
+		);
 
 		ImGui::Render();
 		ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer.Get());
@@ -89,19 +102,15 @@ namespace im
 			VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
 			VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
 			VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-			VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
+			VK_PIPELINE_STAGE_2_NONE,
 			VK_ACCESS_2_NONE);
 
-		mCommandBuffers[mFrameIndex]->End();
-
-		// NOTE: With Vulkan 1.4.350, validation layers report errors since we don't wait
-		// for the swapchain image to be acquired on the first round before transitioning it
-		// to color attachment optimal. However, the official Vulkan tutorial states that this is
-		// fine (https://docs.vulkan.org/tutorial/latest/03_Drawing_a_triangle/03_Drawing/02_Rendering_and_presentation.html),
-		// so I'll leave it as-is for now. Regardless, the app still works just fine.
-		mDevice.Submit(*(mCommandBuffers[mFrameIndex]),
-			mAcquireSemaphores[mSemaphoreIndex].get(), VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-			mRenderSemaphores[mDevice.GetSwapchain().GetImageIndex()].get(), mRenderFences[mFrameIndex].get());
+		commandBuffer.End();
+		
+		mDevice.Submit(
+			{ commandBuffer },
+			{ { *mFrames[mFrameIndex].acquireSemaphore, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT } },
+			{ { mTimelineSemaphore, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, mNextTimestampOfCompletion }, { *mRenderSemaphores[mDevice.GetSwapchain().GetImageIndex()], VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT } });
 
 		ImGui::UpdatePlatformWindows();
 		ImGui::RenderPlatformWindowsDefault();
@@ -117,18 +126,19 @@ namespace im
 			VK_CHECK(res);
 		}
 
-		mSemaphoreIndex = (mSemaphoreIndex + 1) % mAcquireSemaphores.size();
+		mFrames[mFrameIndex].timestampOfCompletion = mNextTimestampOfCompletion;
+		mNextTimestampOfCompletion += 10;
 		mFrameIndex = (mFrameIndex + 1) % MaxFramesInFlight;
 	}
 
 	void Renderer::BeginScene(Scene& scene)
 	{
-		mBackend.BeginScene(*mCommandBuffers[mFrameIndex], *mDepthImage.view, mFrameIndex);
+		mBackend.BeginScene(*mFrames[mFrameIndex].commandBuffer, *mDepthImage.view, mFrameIndex);
 	}
 
 	void Renderer::DrawBatch(Scene& scene, const std::vector<VbObject>& batch)
 	{
-		mBackend.DrawBatch(scene, *mCommandBuffers[mFrameIndex], batch);
+		mBackend.DrawBatch(scene, *mFrames[mFrameIndex].commandBuffer, batch);
 	}
 
 	void Renderer::RecreateSwapchain()
@@ -174,23 +184,28 @@ namespace im
 
 	void Renderer::InitCommandBuffers()
 	{
-		mCommandBuffers = mCommandPool.Allocate(MaxFramesInFlight);
+		auto commandBuffers = mCommandPool.Allocate(MaxFramesInFlight);
+		for (int i = 0; i < MaxFramesInFlight; ++i)
+		{
+			mFrames[i].commandBuffer = std::move(commandBuffers[i]);
+		}
 	}
 
 	void Renderer::InitSyncPrimitives()
 	{
-		mAcquireSemaphores.resize(mDevice.GetSwapchain().GetViews().size());
-		mRenderSemaphores.resize(mDevice.GetSwapchain().GetViews().size());
-		mRenderFences.resize(MaxFramesInFlight);
+		assert(mRenderSemaphores.empty());
+
+		mRenderSemaphores.reserve(mDevice.GetSwapchain().GetViews().size());
 
 		for (size_t i = 0; i < mDevice.GetSwapchain().GetViews().size(); ++i)
 		{
-			mAcquireSemaphores[i] = std::make_unique<Semaphore>(mDevice);
-			mRenderSemaphores[i] = std::make_unique<Semaphore>(mDevice);
+			mRenderSemaphores.emplace_back(std::make_unique<Semaphore>(mDevice));
 		}
 
 		for (size_t i = 0; i < MaxFramesInFlight; ++i)
-			mRenderFences[i] = std::make_unique<Fence>(mDevice, true);
+		{
+			mFrames[i].acquireSemaphore = std::make_unique<Semaphore>(mDevice);
+		}
 	}
 
 	void Renderer::InitImGui()
