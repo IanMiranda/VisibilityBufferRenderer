@@ -26,7 +26,7 @@ struct VbPassData
 [vk_push_constant] ConstantBuffer<VbPassData> gPassData;
 
 [shader("vertex")]
-VSOutput VSMain(uint vertex : SV_VulkanVertexID, uint instance : SV_VulkanInstanceID)
+VSOutput VSVisibilityPass(uint vertex : SV_VulkanVertexID, uint instance : SV_VulkanInstanceID)
 {
     Vertex input = gPassData.vertexData[vertex];
 
@@ -42,7 +42,7 @@ struct FSOutput
 }
 
 [shader("fragment")]
-FSOutput FSMain(VSOutput input, uint triangleIdx : SV_PrimitiveID)
+FSOutput FSVisibilityPass(VSOutput input, uint triangleIdx : SV_PrimitiveID)
 {
     FSOutput output = (FSOutput)0;
     output.triangleInstanceIdx.x = triangleIdx;

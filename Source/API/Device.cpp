@@ -159,9 +159,9 @@ namespace im
 
 		VkApplicationInfo appInfo{ VK_STRUCTURE_TYPE_APPLICATION_INFO };
 		appInfo.apiVersion = VK_API_VERSION_1_4;
-		appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
+		appInfo.applicationVersion = VK_MAKE_VERSION(0, 0, 1);
 		appInfo.pApplicationName = "VulkanApp";
-		appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
+		appInfo.engineVersion = VK_MAKE_VERSION(0, 0, 1);
 		appInfo.pEngineName = "N/A";
 
 		uint32_t wsiExtensionCount;

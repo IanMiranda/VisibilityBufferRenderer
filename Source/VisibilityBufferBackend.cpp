@@ -20,8 +20,8 @@ namespace im
 			GraphicsPipelineDesc(
 				mVisPipeLayout,
 				Shader(renderer.GetDevice(), "./Assets/Shaders/Bin/VisibilityPass.spv")
-				.AddStage(VK_SHADER_STAGE_VERTEX_BIT, "VSMain")
-				.AddStage(VK_SHADER_STAGE_FRAGMENT_BIT, "FSMain"),
+				.AddStage(VK_SHADER_STAGE_VERTEX_BIT, "VSVisibilityPass")
+				.AddStage(VK_SHADER_STAGE_FRAGMENT_BIT, "FSVisibilityPass"),
 				{},
 				InputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST),
 				Rasterizer(VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_COUNTER_CLOCKWISE, VK_POLYGON_MODE_FILL),
@@ -60,7 +60,7 @@ namespace im
 
 			cmd.PushConstants(mVisPipeLayout, VK_SHADER_STAGE_VERTEX_BIT, passData);
 			cmd.BindIndexBuffer(*object.mesh->indexBuffer);
-			cmd.DrawIndexed(object.mesh->indexCount);
+			cmd.DrawIndexed(object.mesh->indexCount, 1, 0, 0, currentInstance++);
 		}
 	}
 

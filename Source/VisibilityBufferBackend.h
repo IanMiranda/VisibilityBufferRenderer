@@ -35,9 +35,12 @@ namespace im
 		std::vector<Texture2D> InitVisBuffers(Renderer& renderer, size_t count);
 	
 	private:
+		static constexpr uint32_t MaxDrawCalls = 0x40000;
+
 		PipelineLayout mVisPipeLayout;
 		GraphicsPipeline mVisPipe;
 
 		std::vector<Texture2D> mVisBuffers;
+		uint32_t currentInstance{ 0 };
 	};
 }
