@@ -15,6 +15,7 @@ struct VSOutput
 {
     float4 svPosition : SV_Position;
     uint instance : INSTANCE;
+    uint primitive : PRIMITIVE;
 };
 
 struct VbPassData
@@ -33,6 +34,7 @@ VSOutput VSVisibilityPass(uint vertex : SV_VulkanVertexID, uint instance : SV_Vu
     VSOutput output = (VSOutput)0;
     output.svPosition = mul(gPassData.modelViewProj, float4(input.position, 1.0));
     output.instance = instance;
+    output.primitive = vertex / 3;
     return output;
 }
 
@@ -42,15 +44,15 @@ struct FSOutput
 }
 
 [shader("fragment")]
-FSOutput FSVisibilityPass(VSOutput input, uint triangleIdx : SV_PrimitiveID)
+FSOutput FSVisibilityPass(VSOutput input)
 {
     FSOutput output = (FSOutput)0;
-    output.triangleInstanceIdx.x = triangleIdx;
+    output.triangleInstanceIdx.x = input.primitive;
     output.triangleInstanceIdx.y = input.instance;
     return output;
 }
 
-static const uint TILE_SIZE_X = 16;
+/*static const uint TILE_SIZE_X = 16;
 static const uint TILE_SIZE_Y = 16;
 static const uint PIXELS_PER_TILE = TILE_SIZE_X * TILE_SIZE_Y;
 static const uint MAX_SHADERS = 64;
@@ -123,3 +125,4 @@ void CSBuildWorklist(uint3 localId : SV_GroupThreadID, uint3 globalId : SV_Dispa
         }
     }
 }
+*/

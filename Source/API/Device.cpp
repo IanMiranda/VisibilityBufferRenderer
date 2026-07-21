@@ -2,6 +2,7 @@
 
 #include <optional>
 #include <cassert>
+#include <unordered_set>
 
 #include "CommandBuffer.h"
 #include "CommandPool.h"
@@ -277,15 +278,18 @@ namespace im
 					break;
 			}
 
+			if (!computeIndex.has_value())
+				computeIndex = graphicsIndex;
+
 			if (!graphicsIndex.has_value() || !presentIndex.has_value() || !computeIndex.has_value())
 				continue;
 
 			std::vector<const char*> deviceExtensions =
 			{
 				VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-				VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
-				VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
-				VK_KHR_RAY_QUERY_EXTENSION_NAME,
+				// VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
+				// VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
+				// VK_KHR_RAY_QUERY_EXTENSION_NAME,
 			};
 
 			bool supportsExtensions = true;
@@ -305,7 +309,7 @@ namespace im
 			constexpr float queuePriority = 1.0f;
 			std::vector<VkDeviceQueueCreateInfo> queueInfos;
 			queueInfos.reserve(2);
-			for (const auto index : { graphicsIndex.value(), computeIndex.value() })
+			for (const auto index : std::unordered_set{ graphicsIndex.value(), computeIndex.value() })
 			{
 				VkDeviceQueueCreateInfo queueInfo{ VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO };
 				queueInfo.pQueuePriorities = &queuePriority;
@@ -315,7 +319,7 @@ namespace im
 			}
 
 			VkPhysicalDeviceAccelerationStructureFeaturesKHR accelFeatures{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR };
-			accelFeatures.accelerationStructure = VK_TRUE;
+			// accelFeatures.accelerationStructure = VK_TRUE;
 
 			VkPhysicalDeviceVulkan11Features vulkan11Features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES };
 			vulkan11Features.shaderDrawParameters = VK_TRUE;
@@ -344,10 +348,10 @@ namespace im
 
 			VkPhysicalDeviceFeatures2 features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2 };
 			features.pNext = &dynamicRenderFeatures;
-			features.features.geometryShader = VK_TRUE;
+			// features.features.geometryShader = VK_TRUE;
 			features.features.multiDrawIndirect = VK_TRUE;
 
-			if (InstanceExtensionSupported("VK_KHR_portability_subset"))
+			if (DeviceExtensionSupported(gpu, "VK_KHR_portability_subset"))
 			{
 				deviceExtensions.emplace_back("VK_KHR_portability_subset");
 			}

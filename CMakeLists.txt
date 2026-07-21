@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-find_package(Vulkan REQUIRED COMPONENTS volk)
+find_package(Vulkan REQUIRED)
 
 include(FetchContent)
 
@@ -43,13 +43,19 @@ FetchContent_Declare(
     GIT_TAG main
 )
 
+FetchContent_Declare(
+    volk
+    GIT_REPOSITORY https://github.com/zeux/volk
+    GIT_TAG 3ca312a4f38baa63d8006b6905abbeeb89c8087d
+)
+
 # FetchContent_Declare(
 #     ktx
 #     GIT_REPOSITORY https://github.com/KhronosGroup/KTX-Software
 #     GIT_TAG beef80159525d9fb7abb8645ea85f4c4f6842e8f
 # )
 
-FetchContent_MakeAvailable(glfw3 glm VulkanMemoryAllocator imgui TinyGLTF fmt)
+FetchContent_MakeAvailable(glfw3 glm VulkanMemoryAllocator imgui TinyGLTF fmt volk)
 
 add_executable(VulkanApp)
 
@@ -81,14 +87,14 @@ target_compile_definitions(
     imgui
         PUBLIC
             IMGUI_IMPL_VULKAN_USE_VOLK=1
-            IMGUI_IMPL_VULKAN_VOLK_FILENAME=<Volk/volk.h>
+            IMGUI_IMPL_VULKAN_VOLK_FILENAME=<volk.h>
 )
 
 target_include_directories(
     imgui
         PUBLIC
             ${imgui_SOURCE_DIR}
-            ${Vulkan_INCLUDE_DIRS}
+            ${volk_SOURCE_DIR}
             ${VulkanMemoryAllocator_SOURCE_DIR}
             ${glfw3_SOURCE_DIR}/include
 )
@@ -96,7 +102,7 @@ target_include_directories(
 target_include_directories(
     VulkanApp
         PRIVATE
-            ${Vulkan_INCLUDE_DIRS}
+            ${volk_SOURCE_DIR}
             ${tinygltf_SOURCE_DIR}
             ${VulkanApp_SOURCE_DIR}/Source
 )
@@ -112,7 +118,7 @@ target_compile_definitions(
 target_link_libraries(
     VulkanApp
         PRIVATE
-            Vulkan::volk
+            volk
             glfw
             glm::glm
             GPUOpen::VulkanMemoryAllocator

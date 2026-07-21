@@ -7,7 +7,7 @@
 #include <utility>
 #include <memory>
 
-#include <Volk/volk.h>
+#include <volk.h>
 #include <GLFW/glfw3.h>
 #include <vk_mem_alloc.h>
 #include <glm/gtx/hash.hpp>
