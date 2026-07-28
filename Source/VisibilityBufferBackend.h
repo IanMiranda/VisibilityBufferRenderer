@@ -20,6 +20,15 @@ namespace im
 		VkDeviceAddress vertexData;
 	};
 
+	struct VbBuildData
+	{
+    	VkDeviceAddress instanceToShaderIdMap;
+    	VkDeviceAddress workListCounter;
+    	VkDeviceAddress workList;
+    	VkDeviceAddress shaderIdToTileCount;
+    	glm::uvec2 windowSize;
+	};
+
 	class VisibilityBufferBackend
 	{
 	public:

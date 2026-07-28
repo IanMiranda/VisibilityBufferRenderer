@@ -19,9 +19,13 @@ struct VbBuildData
 }
 
 [vk_push_constant] VbBuildData gBuildData;
-[vk_binding(0, 0)] Texture2D<uint2> gVisBuf;
 
-groupshared uint shaderActiveInTile[MAX_SHADERS];
+// Though we only read from this, Slang forces us to mark it
+// RW so we can use load and add its descriptor binding as
+// a storage image.
+[vk_binding(0, 0)] RWTexture2D<uint2> gVisBuf;
+
+groupshared uint gShaderActiveInTile[MAX_SHADERS];
 
 [shader("compute")]
 [numthreads(TILE_SIZE_X, TILE_SIZE_Y)]
@@ -35,7 +39,7 @@ void CSBuildWorklist(uint3 localId : SV_GroupThreadID, uint3 globalId : SV_Dispa
         {
             for (uint i = 0; i < MAX_SHADERS; ++i)
             {
-                shaderActiveInTile[i] = 0;
+                gShaderActiveInTile[i] = 0;
             }
         }
     }
@@ -44,8 +48,8 @@ void CSBuildWorklist(uint3 localId : SV_GroupThreadID, uint3 globalId : SV_Dispa
 
     if (pixelId.x < gBuildData.windowSize.x && pixelId.y < gBuildData.windowSize.y)
     {
-        const uint2 triangleInstanceIdx = gVisBuf.Load(int3(pixelId, 0));
-        shaderActiveInTile[gBuildData.instanceToShaderIdMap[triangleInstanceIdx.y]] = 1;
+        const uint2 triangleInstanceIdx = gVisBuf.Load(pixelId);
+        gShaderActiveInTile[gBuildData.instanceToShaderIdMap[triangleInstanceIdx.y]] = 1;
     }
 
     GroupMemoryBarrierWithGroupSync();
@@ -56,7 +60,7 @@ void CSBuildWorklist(uint3 localId : SV_GroupThreadID, uint3 globalId : SV_Dispa
         uint currentShaderId = localIndex;
         while (currentShaderId < MAX_SHADERS)
         {
-            if (shaderActiveInTile[currentShaderId] == 1)
+            if (gShaderActiveInTile[currentShaderId] == 1)
             {
                 uint originalTilesActive;
 

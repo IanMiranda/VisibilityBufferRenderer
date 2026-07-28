@@ -32,6 +32,27 @@ namespace im
 		)
 		, mVisBuffers(InitVisBuffers(renderer, maxFramesInFlight))
 	{
+		DescriptorSetLayout buildDsl(renderer.GetDevice(), {
+			DescriptorSetLayout::Binding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT)
+		});
+
+		PipelineLayout buildLayout(renderer.GetDevice(), {
+			buildDsl	
+		}, {
+			PushConstantRange(VK_SHADER_STAGE_COMPUTE_BIT, sizeof(VbBuildData), 0)
+		});
+
+		Shader buildShader(renderer.GetDevice(), "./Assets/Shaders/Bin/VisibilityWorklist.spv");
+		buildShader.AddStage(VK_SHADER_STAGE_COMPUTE_BIT, "CSBuildWorklist");
+
+		VkComputePipelineCreateInfo buildPipeInfo{ VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO };
+		buildPipeInfo.basePipelineHandle = VK_NULL_HANDLE;
+		buildPipeInfo.layout = buildLayout.Get();
+		buildPipeInfo.stage = buildShader.GetStages()[0];
+
+		VkPipeline buildPipe;
+		VK_CHECK(vkCreateComputePipelines(renderer.GetDevice().Get(), renderer.GetDevice().GetPipelineCache(), 1, &buildPipeInfo, nullptr, &buildPipe));
+		vkDestroyPipeline(renderer.GetDevice().Get(), buildPipe, nullptr);
 	}
 
 	void VisibilityBufferBackend::BeginScene(CommandBuffer& cmd, ImageView& depthView, uint32_t frameIndex)

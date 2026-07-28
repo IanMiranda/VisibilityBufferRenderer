@@ -22,6 +22,8 @@ namespace im
 
 		Shader& AddStage(VkShaderStageFlagBits stage, const char* entrypoint);
 
+		std::vector<VkPipelineShaderStageCreateInfo>& GetStages() { return mStages; }
+
 	private:
 		Device& mDevice;
 

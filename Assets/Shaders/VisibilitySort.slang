@@ -9,11 +9,11 @@ struct WorkItem
 
 struct VbSortData
 {
-    uint *instanceToShaderIdMap;
     uint *workListCounter;
     WorkItem *workList;
     uint *shaderIdToTileCount;
     uint *offsetTable;
+    uint *tileBuffer;
     uint2 windowSize;
     uint workListSize;
 }
@@ -22,7 +22,7 @@ struct VbSortData
 
 [numthreads(GROUP_SIZE, 1, 1)]
 [shader("compute")]
-void CSSortWorklist(uint3 globalId : SV_DispatchThreadID)
+void CSSortWorkList(uint3 globalId : SV_DispatchThreadID)
 {
     if (globalId.x == 0)
     {
@@ -40,6 +40,16 @@ void CSSortWorklist(uint3 globalId : SV_DispatchThreadID)
 
     while (localId < gSortData.workListSize)
     {
-        
+        uint workItemIdx;
+        InterlockedAdd(*gSortData.workListCounter, -1, workItemIdx);
+        workItemIdx -= 1;
+
+        WorkItem item = gSortData.workList[workItemIdx];
+        uint tileBufferIdx;
+        InterlockedAdd(gSortData.offsetTable[item.shaderId + 1], 1, tileBufferIdx);
+        gSortData.tileBuffer[tileBufferIdx] = item.tileId;
+
+
+        localId += GROUP_SIZE;
     }
 }
