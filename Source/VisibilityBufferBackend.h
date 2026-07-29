@@ -29,6 +29,17 @@ namespace im
     	glm::uvec2 windowSize;
 	};
 
+	struct VbSortData
+	{
+		VkDeviceAddress worklistCounter;
+		VkDeviceAddress workList;
+		VkDeviceAddress shaderIdToTileCount;
+		VkDeviceAddress offsetTable;
+		VkDeviceAddress tileBuffer;
+		glm::uvec2 windowSize;
+		uint32_t workListSize;
+	};
+
 	class VisibilityBufferBackend
 	{
 	public:

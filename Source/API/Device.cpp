@@ -9,8 +9,6 @@
 #include "Fence.h"
 #include "Semaphore.h"
 
-#define VOLK_IMPLEMENTATION 1
-
 namespace im
 {
 #ifndef NDEBUG
@@ -265,23 +263,12 @@ namespace im
 				VK_CHECK(vkGetPhysicalDeviceSurfaceSupportKHR(gpu, i, mSurface, &presentSupport));
 				if (presentSupport)
 					presentIndex = i;
-
-				if ((queueFams[i].queueFlags & VK_QUEUE_COMPUTE_BIT) == VK_QUEUE_COMPUTE_BIT)
-				{
-					if (!graphicsIndex.has_value() || graphicsIndex.value() != i)
-					{
-						computeIndex = i;
-					}
-				}
-
-				if (graphicsIndex.has_value() && presentIndex.has_value() && computeIndex.has_value())
+				
+				if (graphicsIndex.has_value() && presentIndex.has_value())
 					break;
 			}
 
-			if (!computeIndex.has_value())
-				computeIndex = graphicsIndex;
-
-			if (!graphicsIndex.has_value() || !presentIndex.has_value() || !computeIndex.has_value())
+			if (!graphicsIndex.has_value() || !presentIndex.has_value())
 				continue;
 
 			std::vector<const char*> deviceExtensions =
@@ -308,8 +295,8 @@ namespace im
 			// Assume graphics and present queue fam index are the same, as per the Vulkan Tutorial
 			constexpr float queuePriority = 1.0f;
 			std::vector<VkDeviceQueueCreateInfo> queueInfos;
-			queueInfos.reserve(2);
-			for (const auto index : std::unordered_set{ graphicsIndex.value(), computeIndex.value() })
+			queueInfos.reserve(1);
+			for (const auto index : std::unordered_set{ graphicsIndex.value() })
 			{
 				VkDeviceQueueCreateInfo queueInfo{ VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO };
 				queueInfo.pQueuePriorities = &queuePriority;
@@ -369,10 +356,8 @@ namespace im
 			mGpu = gpu;
 			mGraphicsIndex = graphicsIndex.value();
 			mPresentIndex = presentIndex.value();
-			mComputeIndex = computeIndex.value();
 			vkGetDeviceQueue(mDevice, mGraphicsIndex, 0, &mGraphicsQueue);
 			vkGetDeviceQueue(mDevice, mPresentIndex, 0, &mPresentQueue);
-			vkGetDeviceQueue(mDevice, mComputeIndex, 0, &mComputeQueue);
 
 			VmaVulkanFunctions vulkanFunctions{};
 			vulkanFunctions.vkAllocateMemory = vkAllocateMemory;

@@ -36,8 +36,6 @@ namespace im
 		VkQueue GetGraphicsQueue() const { return mGraphicsQueue; }
 		uint32_t GetPresentIndex() const { return mPresentIndex; }
 		VkQueue GetPresentQueue() const { return mPresentQueue; }
-		uint32_t GetComputeIndex() const { return mComputeIndex; }
-		VkQueue GetComputeQueue() const { return mComputeQueue; }
 
 		void Submit(
 			std::vector<std::reference_wrapper<CommandBuffer>> cmds,
@@ -83,11 +81,9 @@ namespace im
 
 		VkQueue mGraphicsQueue{ VK_NULL_HANDLE };
 		VkQueue mPresentQueue{ VK_NULL_HANDLE };
-		VkQueue mComputeQueue{ VK_NULL_HANDLE };
 
 		uint32_t mGraphicsIndex;
 		uint32_t mPresentIndex;
-		uint32_t mComputeIndex;
 
 		std::unique_ptr<Swapchain> mSwapchain;
 		std::unique_ptr<CommandPool> mImmediatePool;

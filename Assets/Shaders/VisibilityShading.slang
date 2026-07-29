@@ -13,6 +13,11 @@ struct Vertex
     float3 bitangent : BITANGENT;
 };
 
+struct VbMaterialData
+{
+    uint albedoMapIndex;
+};
+
 struct VbShadingData
 {
     uint *instanceToShaderIdMap;
@@ -21,25 +26,35 @@ struct VbShadingData
     float4x4 *transforms;
     uint *offsetTable;
     uint *tiles;
+    VbMaterialData *materials;
     uint shaderId;
-}
-
-// Gives the barycentric coordinates of point within the triangle.
-// Used to compute interpolated values for fragment shading.
-// Based on Real-time Rendering, 4th edition (chapter 22)
-float3 MollerTrumboreIntersect(float3 p0, float3 p1, float3 p2, float3 o, float3 d)
-{
-    float3 e1 = p1 - p0;
-    float3 e2 = p2 - p0;
-
-    float3 q = cross(d, e2);
-    float3 a = dot(e1, q);
-
-    
 }
 
 [vk_push_constant] ConstantBuffer<VbShadingData> gShadingData;
 [vk_binding(0, 0)] RWTexture2D<uint2> gVisBuf;
+[vk_binding(0, 1)] SamplerState gTrilinearColor;
+[vk_binding(1, 1)] Texture2D gTextures[];
+
+// Edge function for computing barycentrics
+float EdgeFunction(float2 pixelCoord, float2 edgeNormal, float2 pointOnEdge)
+{
+    return dot(edgeNormal, pixelCoord - pointOnEdge);
+}
+
+// Perspective-correct interpolation for vertices, as discussed in
+// Real-time Rendering Ch. 23
+float3 ComputeBarycentrics(float2 pixelCoord, float4 p0, float4 p1, float4 p2)
+{
+    float e0 = EdgeFunction(pixelCoord, p2.xy - p1.xy, p1.xy);
+    float e1 = EdgeFunction(pixelCoord, p0.xy - p2.xy, p2.xy);
+    float e2 = EdgeFunction(pixelCoord, p1.xy - p0.xy, p0.xy);
+
+    float f0 = e0 / p0.w;
+    float f1 = e1 / p1.w;
+    float f2 = e2 / p2.w;
+
+    return float3(f0, f1, f2) * rcp(f0 + f1 + f2);
+}
 
 [numthreads(TILE_SIZE_X, TILE_SIZE_Y, 1)]
 [shader("compute")]
@@ -63,5 +78,19 @@ void CSVisibilityShading(uint3 groupId : SV_GroupID, uint3 tileOffset : SV_Group
     Vertex v1 = vbo[ibo[triangleIdx * 3 + 1]];
     Vertex v2 = vbo[ibo[triangleIdx * 3 + 2]];
 
-    // Now, transform the vertices into their 
+    // Now, transform the vertices into their clip-space coords
+    let p0 = mul(gShadingData.transforms[instanceIdx], float4(v0.position, 1.0));
+    let p1 = mul(gShadingData.transforms[instanceIdx], float4(v1.position, 1.0));
+    let p2 = mul(gShadingData.transforms[instanceIdx], float4(v2.position, 1.0));
+
+    // Finally, compute bary coords and interpolate
+    let barys = ComputeBarycentrics(pixelCoord, p0, p1, p2);
+
+    // Use this to sample from the appropriate material
+    float2 uv = float2(
+        v0.uv.x * barys.x + v1.uv.x * barys.y + v2.uv.x * barys.z,
+        v0.uv.y * barys.x + v1.uv.y * barys.y + v2.uv.y * barys.z,
+    );
+    
+    gTextures[gShadingData.materials[instanceIdx].albedoMapIndex].SampleLevel(gTrilinearColor, uv, 0);
 }

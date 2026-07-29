@@ -6,12 +6,13 @@
 #include <string>
 #include <utility>
 #include <memory>
+#include <unordered_map>
 
 #include <volk.h>
 #include <GLFW/glfw3.h>
 #include <vk_mem_alloc.h>
-#include <glm/gtx/hash.hpp>
 #include <glm/glm.hpp>
+#include <glm/gtx/hash.hpp>
 #include <fmt/base.h>
 #include <fmt/std.h>
 
@@ -38,7 +39,11 @@ namespace im
 		glm::vec3 tangent;
 		glm::vec3 bitangent;
 
-		bool operator<=>(const Vertex& other) const = default;
+		bool operator==(const Vertex& other) const
+		{
+			return position == other.position && color == other.color && uv == other.uv &&
+				normal == other.normal && tangent == other.tangent && bitangent == other.bitangent;
+		}
 
 		static std::vector<InputBinding> GetInputBindings();
 	};

@@ -1,11 +1,13 @@
 #include "VisibilityBufferBackend.h"
 
+#include "API/PipelineLayout.h"
 #include "Renderer.h"
 #include "Scene.h"
 #include "API/CommandBuffer.h"
 #include "API/Buffer.h"
 #include "API/RenderPass.h"
 #include "API/Shader.h"
+#include "vulkan/vulkan_core.h"
 
 namespace im
 {
@@ -50,9 +52,23 @@ namespace im
 		buildPipeInfo.layout = buildLayout.Get();
 		buildPipeInfo.stage = buildShader.GetStages()[0];
 
-		VkPipeline buildPipe;
-		VK_CHECK(vkCreateComputePipelines(renderer.GetDevice().Get(), renderer.GetDevice().GetPipelineCache(), 1, &buildPipeInfo, nullptr, &buildPipe));
-		vkDestroyPipeline(renderer.GetDevice().Get(), buildPipe, nullptr);
+		PipelineLayout sortLayout(renderer.GetDevice(), {}, {
+			PushConstantRange(VK_SHADER_STAGE_COMPUTE_BIT, sizeof(VbSortData)),
+		});
+
+		Shader sortShader(renderer.GetDevice(), "./Assets/Shaders/Bin/VisibilitySort.spv");
+		sortShader.AddStage(VK_SHADER_STAGE_COMPUTE_BIT, "CSSortWorkList");
+
+		VkComputePipelineCreateInfo sortPipeInfo{ VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO };
+		sortPipeInfo.basePipelineHandle = VK_NULL_HANDLE;
+		sortPipeInfo.layout = sortLayout.Get();
+		sortPipeInfo.stage = sortShader.GetStages()[0];
+
+		VkComputePipelineCreateInfo infos[] = { buildPipeInfo, sortPipeInfo };
+		VkPipeline pipes[2];
+		VK_CHECK(vkCreateComputePipelines(renderer.GetDevice().Get(), renderer.GetDevice().GetPipelineCache(), 1, infos, nullptr, pipes));
+		vkDestroyPipeline(renderer.GetDevice().Get(), pipes[0], nullptr);
+		vkDestroyPipeline(renderer.GetDevice().Get(), pipes[1], nullptr);
 	}
 
 	void VisibilityBufferBackend::BeginScene(CommandBuffer& cmd, ImageView& depthView, uint32_t frameIndex)
