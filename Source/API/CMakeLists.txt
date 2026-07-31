@@ -46,6 +46,9 @@ target_sources(
             GraphicsPipeline.h
             GraphicsPipeline.cpp
 
+            ComputePipeline.h
+            ComputePipeline.cpp
+
             DescriptorPool.h
             DescriptorPool.cpp
 

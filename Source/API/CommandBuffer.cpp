@@ -7,10 +7,21 @@
 #include "PipelineLayout.h"
 #include "DescriptorSet.h"
 #include "GraphicsPipeline.h"
+#include "ComputePipeline.h"
 #include "RenderPass.h"
 
 namespace im
 {
+    VkMemoryBarrier2 MemoryBarrier(VkPipelineStageFlags2 srcStage, VkAccessFlags2 srcAccess, VkPipelineStageFlags2 dstStage, VkAccessFlags2 dstAccess)
+    {
+        VkMemoryBarrier2 res{ VK_STRUCTURE_TYPE_MEMORY_BARRIER_2 };
+		res.srcStageMask = srcStage;
+		res.srcAccessMask = srcAccess;
+		res.dstStageMask = dstStage;
+		res.dstAccessMask = dstAccess;
+		return res;
+    }
+	
 	CommandBuffer::CommandBuffer(CommandPool& pool, VkCommandBuffer buffer)
 		: mPool(pool), mCmdBuf(buffer)
 	{
@@ -96,7 +107,16 @@ namespace im
 		vkCmdPipelineBarrier2(mCmdBuf, &depInfo);
 	}
 
-	void CommandBuffer::GenerateMipmaps(
+    void CommandBuffer::Barrier(const std::vector<VkMemoryBarrier2>& globalBarriers)
+    {
+		VkDependencyInfo depInfo{ VK_STRUCTURE_TYPE_DEPENDENCY_INFO };
+		depInfo.memoryBarrierCount = globalBarriers.size();
+		depInfo.pMemoryBarriers = globalBarriers.data();
+
+		vkCmdPipelineBarrier2(mCmdBuf, &depInfo);
+    }
+
+    void CommandBuffer::GenerateMipmaps(
 		Image& texture, VkImageLayout newLayout,
 		VkPipelineStageFlags2 dstStage, VkAccessFlags2 dstAccess,
 		VkImageAspectFlags aspect
@@ -278,4 +298,29 @@ namespace im
 	{
 		vkCmdDrawIndexedIndirect(mCmdBuf, buffer.Get(), offset, drawCount, stride);
 	}
+
+    void CommandBuffer::BindComputeDescriptorSets(PipelineLayout &layout, uint32_t firstSet, const std::vector<std::reference_wrapper<DescriptorSet>> &sets)
+    {
+		std::vector<VkDescriptorSet> vulkanSets;
+		vulkanSets.reserve(sets.size());
+		for (const auto& set : sets)
+			vulkanSets.emplace_back(set.get().Get());
+		
+		vkCmdBindDescriptorSets(
+			mCmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE,
+			layout.Get(),
+			firstSet,
+			vulkanSets.size(), vulkanSets.data(),
+			0, nullptr);
+    }
+
+    void CommandBuffer::BindComputePipeline(ComputePipeline& pipeline)
+    {
+		vkCmdBindPipeline(mCmdBuf, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline.Get());
+    }
+
+    void CommandBuffer::Dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ)
+    {
+		vkCmdDispatch(mCmdBuf, groupCountX, groupCountY, groupCountZ);
+    }
 }

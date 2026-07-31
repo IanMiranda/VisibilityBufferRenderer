@@ -3,6 +3,7 @@
 #include "Common.h"
 #include "API/PipelineLayout.h"
 #include "API/GraphicsPipeline.h"
+#include "API/ComputePipeline.h"
 #include "API/Image.h"
 #include "API/CommandBuffer.h"
 #include "API/ImageView.h"
@@ -85,6 +86,18 @@ namespace im
 		PipelineLayout mVisPipeLayout;
 		GraphicsPipeline mVisPipe;
 		BindlessSet mBindlessSet;
+
+		DescriptorSetLayout mWorkListDsl;
+		PipelineLayout mWorkListPipeLayout;
+		ComputePipeline mWorkListPipe;
+
+		DescriptorSetLayout mSortDsl;
+		PipelineLayout mSortPipeLayout;
+		ComputePipeline mSortPipe;
+
+		DescriptorSetLayout mShadeDsl;
+		PipelineLayout mShadePipeLayout;
+		ComputePipeline mShadePipe;
 		
 		std::vector<Texture2D> mVisBuffers;
 		std::vector<std::unique_ptr<Buffer>> mInstanceToShaderIdMaps;

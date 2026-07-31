@@ -1,5 +1,7 @@
 #pragma once
 
+#include <span>
+
 #include "Common.h"
 #include "PipelineLayout.h"
 
@@ -9,9 +11,17 @@ namespace im
 	class CommandPool;
 	class Image;
 	class GraphicsPipeline;
+	class ComputePipeline;
 	class PipelineLayout;
 	class DescriptorSet;
 	class Buffer;
+
+	VkMemoryBarrier2 MemoryBarrier(
+		VkPipelineStageFlags2 srcStage,
+		VkAccessFlags2 srcAccess,
+		VkPipelineStageFlags2 dstStage,
+		VkAccessFlags2 dstAccess
+	);
 
 	class CommandBuffer
 	{
@@ -40,6 +50,8 @@ namespace im
 			uint32_t firstLayer, uint32_t layerCount,
 			uint32_t firstLevel, uint32_t levelCount
 		);
+
+		void Barrier(const std::vector<VkMemoryBarrier2>& globalBarriers);
 
 		void GenerateMipmaps(
 			Image& texture, VkImageLayout newLayout,
@@ -94,6 +106,15 @@ namespace im
 			uint32_t firstInstance = 0);
 
 		void DrawIndexedIndirect(Buffer& buffer, uint32_t offset, uint32_t drawCount, uint32_t stride);
+
+		void BindComputeDescriptorSets(
+			PipelineLayout& layout,
+			uint32_t firstSet,
+			const std::vector<std::reference_wrapper<DescriptorSet>>& sets);
+
+		void BindComputePipeline(ComputePipeline& pipeline);
+
+		void Dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ);
 
 		VkCommandBuffer Get() { return mCmdBuf; }
 

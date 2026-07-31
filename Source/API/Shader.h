@@ -11,6 +11,7 @@ namespace im
 	class Shader
 	{
 		friend class GraphicsPipeline;
+		friend class ComputePipeline;
 
 	public:
 		Shader(Device& device, const std::vector<char>& code);

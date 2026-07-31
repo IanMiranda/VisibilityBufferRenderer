@@ -33,6 +33,57 @@ namespace im
 			)
 		)
 		, mBindlessSet(renderer.GetDevice())
+		, mWorkListDsl(
+			renderer.GetDevice(),
+			{ DescriptorSetLayout::Binding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT) }
+		)
+		, mWorkListPipeLayout(
+			renderer.GetDevice(),
+			{ std::ref(mWorkListDsl) },
+			{ PushConstantRange(VK_SHADER_STAGE_COMPUTE_BIT, sizeof(VbBuildData), 0) }
+		)
+		, mWorkListPipe(
+			renderer.GetDevice(),
+			ComputePipelineDesc(
+				mWorkListPipeLayout,
+				Shader(renderer.GetDevice(), "./Assets/Shaders/Bin/VisibilityWorklist.spv")
+					.AddStage(VK_SHADER_STAGE_COMPUTE_BIT, "CSBuildWorklist")
+			)
+		)
+		, mSortDsl(
+			renderer.GetDevice(),
+			{ DescriptorSetLayout::Binding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT) }
+		)
+		, mSortPipeLayout(
+			renderer.GetDevice(),
+			{ std::ref(mSortDsl) },
+			{ PushConstantRange(VK_SHADER_STAGE_COMPUTE_BIT, sizeof(VbSortData), 0) }
+		)
+		, mSortPipe(
+			renderer.GetDevice(),
+			ComputePipelineDesc(
+				mSortPipeLayout,
+				Shader(renderer.GetDevice(), "./Assets/Shaders/Bin/VisibilitySort.spv")
+					.AddStage(VK_SHADER_STAGE_COMPUTE_BIT, "CSSortWorkList")
+			)
+		)
+		, mShadeDsl(
+			renderer.GetDevice(),
+			{ DescriptorSetLayout::Binding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT) }
+		)
+		, mShadePipeLayout(
+			renderer.GetDevice(),
+			{ std::ref(mShadeDsl), std::ref(mBindlessSet.GetSetLayout()) },
+			{ PushConstantRange(VK_SHADER_STAGE_COMPUTE_BIT, sizeof(VbShadingData)) }
+		)
+		, mShadePipe(
+			renderer.GetDevice(),
+			ComputePipelineDesc(
+				mShadePipeLayout,
+				Shader(renderer.GetDevice(), "./Assets/Shaders/Bin/VisibilityShade.spv")
+					.AddStage(VK_SHADER_STAGE_COMPUTE_BIT, "CSVisibilityShading")
+			)
+		)
 		, mVisBuffers(InitVisBuffers(renderer, maxFramesInFlight))
 		, mInstanceToShaderIdMaps(InitBuffers(
 			renderer,
@@ -67,56 +118,7 @@ namespace im
 				VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT
 			)
 		))
-	{
-		DescriptorSetLayout buildDsl(renderer.GetDevice(), {
-			DescriptorSetLayout::Binding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT)
-		});
-
-		PipelineLayout buildLayout(renderer.GetDevice(), {
-			buildDsl	
-		}, {
-			PushConstantRange(VK_SHADER_STAGE_COMPUTE_BIT, sizeof(VbBuildData), 0)
-		});
-
-		Shader buildShader(renderer.GetDevice(), "./Assets/Shaders/Bin/VisibilityWorklist.spv");
-		buildShader.AddStage(VK_SHADER_STAGE_COMPUTE_BIT, "CSBuildWorklist");
-
-		VkComputePipelineCreateInfo buildPipeInfo{ VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO };
-		buildPipeInfo.basePipelineHandle = VK_NULL_HANDLE;
-		buildPipeInfo.layout = buildLayout.Get();
-		buildPipeInfo.stage = buildShader.GetStages()[0];
-
-		PipelineLayout sortLayout(renderer.GetDevice(), {}, {
-			PushConstantRange(VK_SHADER_STAGE_COMPUTE_BIT, sizeof(VbSortData)),
-		});
-
-		Shader sortShader(renderer.GetDevice(), "./Assets/Shaders/Bin/VisibilitySort.spv");
-		sortShader.AddStage(VK_SHADER_STAGE_COMPUTE_BIT, "CSSortWorkList");
-
-		VkComputePipelineCreateInfo sortPipeInfo{ VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO };
-		sortPipeInfo.basePipelineHandle = VK_NULL_HANDLE;
-		sortPipeInfo.layout = sortLayout.Get();
-		sortPipeInfo.stage = sortShader.GetStages()[0];
-
-		Shader shadeShader(renderer.GetDevice(), "./Assets/Shaders/Bin/VisibilityShading.spv");
-		shadeShader.AddStage(VK_SHADER_STAGE_COMPUTE_BIT, "CSVisibilityShading");
-
-		PipelineLayout shadeLayout(
-			renderer.GetDevice(),
-			{ std::ref(buildDsl), std::ref(mBindlessSet.GetSetLayout()) },
-			{ PushConstantRange(VK_SHADER_STAGE_COMPUTE_BIT, sizeof(VbShadingData)) }
-		);
-
-		VkComputePipelineCreateInfo shadePipeInfo{ VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO };
-		shadePipeInfo.basePipelineHandle = VK_NULL_HANDLE;
-		shadePipeInfo.layout = shadeLayout.Get();
-		shadePipeInfo.stage = shadeShader.GetStages()[0];
-
-		std::array<VkComputePipelineCreateInfo, 3> infos = { buildPipeInfo, sortPipeInfo, shadePipeInfo };
-		std::array<VkPipeline, 3> pipes;
-		VK_CHECK(vkCreateComputePipelines(renderer.GetDevice().Get(), renderer.GetDevice().GetPipelineCache(), infos.size(), infos.data(), nullptr, pipes.data()));
-		for (const auto& pipe : pipes)
-			vkDestroyPipeline(renderer.GetDevice().Get(), pipe, nullptr);		
+	{	
 	}
 
 	void VisibilityBufferBackend::BeginScene(CommandBuffer& cmd, ImageView& depthView, uint32_t frameIndex)
@@ -164,8 +166,8 @@ namespace im
 		buildData.workList = mWorkLists[frameIndex]->GetAddress();
 		buildData.shaderIdToTileCount = mShaderIdToTileCounts[frameIndex]->GetAddress();
 
-		vkCmdDispatch(
-			cmd.Get(),
+		cmd.PushConstants(mWorkListPipeLayout, VK_SHADER_STAGE_COMPUTE_BIT, buildData);
+		cmd.Dispatch(
 			(buildData.windowSize.x + TileSize.x - 1) / TileSize.x, // Ceiling
 			(buildData.windowSize.y + TileSize.y - 1) / TileSize.y,
 			1
@@ -179,12 +181,17 @@ namespace im
 		sortData.tileBuffer = ...
 		sortData.windowSize = buildData.windowSize;
 
-		cmd.Barrier()
+		cmd.PushConstants(mSortPipeLayout, VK_SHADER_STAGE_COMPUTE_BIT, sortData);
+		cmd.Barrier({
+			MemoryBarrier(
+				VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+				VK_ACCESS_2_SHADER_WRITE_BIT,
+				VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+				VK_ACCESS_2_SHADER_READ_BIT
+			)
+		});
 
-		vkCmdDispatch(
-			cmd.Get(),
-			GroupSize, 1, 1
-		);
+		cmd.Dispatch(GroupSize, 1, 1);
 
 	}
 
