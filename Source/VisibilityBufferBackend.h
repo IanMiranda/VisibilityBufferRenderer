@@ -6,6 +6,8 @@
 #include "API/Image.h"
 #include "API/CommandBuffer.h"
 #include "API/ImageView.h"
+#include "API/Buffer.h"
+#include "BindlessSet.h"
 
 namespace im
 {
@@ -18,6 +20,12 @@ namespace im
 	{
 		glm::mat4 modelViewProj;
 		VkDeviceAddress vertexData;
+	};
+
+	struct VbWorkItem
+	{
+		uint32_t tileId;
+		uint32_t shaderId;
 	};
 
 	struct VbBuildData
@@ -37,7 +45,18 @@ namespace im
 		VkDeviceAddress offsetTable;
 		VkDeviceAddress tileBuffer;
 		glm::uvec2 windowSize;
-		uint32_t workListSize;
+	};
+
+	struct VbShadingData
+	{
+		VkDeviceAddress instanceToShaderIdMap;
+		VkDeviceAddress vertexBuffers;
+		VkDeviceAddress indexBuffers;
+		VkDeviceAddress transforms;
+		VkDeviceAddress offsetTable;
+		VkDeviceAddress tiles;
+		VkDeviceAddress materials;
+		uint32_t shaderId;
 	};
 
 	class VisibilityBufferBackend
@@ -47,20 +66,31 @@ namespace im
 
 		void BeginScene(CommandBuffer& cmd, ImageView& depthView, uint32_t frameIndex);
 		void DrawBatch(Scene& scene, CommandBuffer& cmd, const std::vector<VbObject>& objects);
-		void End(Renderer& renderer, CommandBuffer& cmd);
+		void End(Renderer& renderer, CommandBuffer& cmd, uint32_t frameIndex);
 
 		void ResizeBuffers(Renderer& renderer, size_t maxFramesInFlight);
 
 	private:
 		std::vector<Texture2D> InitVisBuffers(Renderer& renderer, size_t count);
-	
+		std::vector<std::unique_ptr<Buffer>> InitBuffers(Renderer& renderer, size_t count, const BufferDesc& desc);
+
+		static uint32_t GetTileCount(VkExtent2D extent);
+
 	private:
-		static constexpr uint32_t MaxDrawCalls = 0x40000;
+		static constexpr uint32_t MaxDrawCalls{ 0x40000 };
+		static constexpr uint32_t MaxShaders{ 64 };
+		static constexpr glm::uvec2 TileSize{ 16, 16 };
+		static constexpr uint32_t GroupSize{ 256 };
 
 		PipelineLayout mVisPipeLayout;
 		GraphicsPipeline mVisPipe;
-
+		BindlessSet mBindlessSet;
+		
 		std::vector<Texture2D> mVisBuffers;
+		std::vector<std::unique_ptr<Buffer>> mInstanceToShaderIdMaps;
+		std::vector<std::unique_ptr<Buffer>> mWorkListCounters;
+		std::vector<std::unique_ptr<Buffer>> mWorkLists;
+		std::vector<std::unique_ptr<Buffer>> mShaderIdToTileCounts;
 		uint32_t currentInstance{ 0 };
 	};
 }

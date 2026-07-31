@@ -3,7 +3,7 @@ static const uint TILE_SIZE_Y = 16;
 static const uint PIXELS_PER_TILE = TILE_SIZE_X * TILE_SIZE_Y;
 static const uint MAX_SHADERS = 64;
 
-struct WorkItem
+struct VbWorkItem
 {
     uint tileId;
     uint shaderId;
@@ -12,9 +12,9 @@ struct WorkItem
 struct VbBuildData
 {
     uint *instanceToShaderIdMap;
-    uint *workListCounter;
-    WorkItem *workList;
-    uint *shaderIdToTileCount;
+    Atomic<uint> *workListCounter;
+    VbWorkItem *workList;
+    Atomic<uint> *shaderIdToTileCount;
     uint2 windowSize;
 }
 
@@ -32,6 +32,15 @@ groupshared uint gShaderActiveInTile[MAX_SHADERS];
 void CSBuildWorklist(uint3 localId : SV_GroupThreadID, uint3 globalId : SV_DispatchThreadID, uint localIndex : SV_GroupIndex)
 {
     const uint2 pixelId = globalId.xy;
+
+    if (globalId.x == 0 && globalId.y == 0)
+        {
+        gBuildData.workListCounter.store(0);
+        for (uint i = 0; i < MAX_SHADERS; ++i)
+        {
+            gBuildData.shaderIdToTileCount[i].store(0);
+        }
+    }
     
     if (pixelId.x < gBuildData.windowSize.x && pixelId.y < gBuildData.windowSize.y)
     {
@@ -65,10 +74,10 @@ void CSBuildWorklist(uint3 localId : SV_GroupThreadID, uint3 globalId : SV_Dispa
                 uint originalTilesActive;
 
                 // Increment the worklist size and move our data into it
-                uint itemIndex;
-                InterlockedAdd(*gBuildData.workListCounter, 1, itemIndex);
+                uint itemIndex = gBuildData.workListCounter.increment();
                 gBuildData.workList[itemIndex].shaderId = currentShaderId;
                 gBuildData.workList[itemIndex].tileId = tileId;
+                gBuildData.shaderIdToTileCount[currentShaderId].increment();
             }
 
             currentShaderId += PIXELS_PER_TILE;

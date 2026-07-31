@@ -7,7 +7,7 @@
 #include "API/Buffer.h"
 #include "API/RenderPass.h"
 #include "API/Shader.h"
-#include "vulkan/vulkan_core.h"
+#include "API/Swapchain.h"
 
 namespace im
 {
@@ -32,7 +32,41 @@ namespace im
 				{ DepthStencil(depthImage.GetFormat()) }
 			)
 		)
+		, mBindlessSet(renderer.GetDevice())
 		, mVisBuffers(InitVisBuffers(renderer, maxFramesInFlight))
+		, mInstanceToShaderIdMaps(InitBuffers(
+			renderer,
+			maxFramesInFlight,
+			BufferDesc(
+				sizeof(uint32_t) * MaxDrawCalls,
+				VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT,
+				VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT
+			)
+		))
+		, mWorkListCounters(InitBuffers(
+			renderer,
+			maxFramesInFlight,
+			BufferDesc(
+				sizeof(uint32_t),
+				VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT
+			)
+		))
+		, mWorkLists(InitBuffers(
+			renderer,
+			maxFramesInFlight,
+			BufferDesc(
+				MaxShaders * GetTileCount(renderer.GetDevice().GetSwapchain().GetExtent()) * sizeof(VbWorkItem),
+				VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT
+			)
+		))
+		, mShaderIdToTileCounts(InitBuffers(
+			renderer,
+			maxFramesInFlight,
+			BufferDesc(
+				MaxShaders * sizeof(uint32_t),
+				VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT
+			)
+		))
 	{
 		DescriptorSetLayout buildDsl(renderer.GetDevice(), {
 			DescriptorSetLayout::Binding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT)
@@ -64,11 +98,25 @@ namespace im
 		sortPipeInfo.layout = sortLayout.Get();
 		sortPipeInfo.stage = sortShader.GetStages()[0];
 
-		VkComputePipelineCreateInfo infos[] = { buildPipeInfo, sortPipeInfo };
-		VkPipeline pipes[2];
-		VK_CHECK(vkCreateComputePipelines(renderer.GetDevice().Get(), renderer.GetDevice().GetPipelineCache(), 1, infos, nullptr, pipes));
-		vkDestroyPipeline(renderer.GetDevice().Get(), pipes[0], nullptr);
-		vkDestroyPipeline(renderer.GetDevice().Get(), pipes[1], nullptr);
+		Shader shadeShader(renderer.GetDevice(), "./Assets/Shaders/Bin/VisibilityShading.spv");
+		shadeShader.AddStage(VK_SHADER_STAGE_COMPUTE_BIT, "CSVisibilityShading");
+
+		PipelineLayout shadeLayout(
+			renderer.GetDevice(),
+			{ std::ref(buildDsl), std::ref(mBindlessSet.GetSetLayout()) },
+			{ PushConstantRange(VK_SHADER_STAGE_COMPUTE_BIT, sizeof(VbShadingData)) }
+		);
+
+		VkComputePipelineCreateInfo shadePipeInfo{ VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO };
+		shadePipeInfo.basePipelineHandle = VK_NULL_HANDLE;
+		shadePipeInfo.layout = shadeLayout.Get();
+		shadePipeInfo.stage = shadeShader.GetStages()[0];
+
+		std::array<VkComputePipelineCreateInfo, 3> infos = { buildPipeInfo, sortPipeInfo, shadePipeInfo };
+		std::array<VkPipeline, 3> pipes;
+		VK_CHECK(vkCreateComputePipelines(renderer.GetDevice().Get(), renderer.GetDevice().GetPipelineCache(), infos.size(), infos.data(), nullptr, pipes.data()));
+		for (const auto& pipe : pipes)
+			vkDestroyPipeline(renderer.GetDevice().Get(), pipe, nullptr);		
 	}
 
 	void VisibilityBufferBackend::BeginScene(CommandBuffer& cmd, ImageView& depthView, uint32_t frameIndex)
@@ -101,9 +149,43 @@ namespace im
 		}
 	}
 
-	void VisibilityBufferBackend::End(Renderer& renderer, CommandBuffer& cmd)
+	void VisibilityBufferBackend::End(Renderer& renderer, CommandBuffer& cmd, uint32_t frameIndex)
 	{
 		cmd.EndRendering();
+
+		// Now, build the worklist and sort it
+		VbBuildData buildData{};
+		buildData.windowSize = glm::uvec2(
+			renderer.GetDevice().GetSwapchain().GetExtent().width,
+			renderer.GetDevice().GetSwapchain().GetExtent().height
+		);
+		buildData.instanceToShaderIdMap = mInstanceToShaderIdMaps[frameIndex]->GetAddress();
+		buildData.workListCounter = mWorkListCounters[frameIndex]->GetAddress();
+		buildData.workList = mWorkLists[frameIndex]->GetAddress();
+		buildData.shaderIdToTileCount = mShaderIdToTileCounts[frameIndex]->GetAddress();
+
+		vkCmdDispatch(
+			cmd.Get(),
+			(buildData.windowSize.x + TileSize.x - 1) / TileSize.x, // Ceiling
+			(buildData.windowSize.y + TileSize.y - 1) / TileSize.y,
+			1
+		);
+
+		VbSortData sortData{};
+		sortData.worklistCounter = mWorkListCounters[frameIndex]->GetAddress();
+		sortData.workList = mWorkLists[frameIndex]->GetAddress();
+		sortData.shaderIdToTileCount = mShaderIdToTileCounts[frameIndex]->GetAddress();
+		sortData.offsetTable = ...;
+		sortData.tileBuffer = ...
+		sortData.windowSize = buildData.windowSize;
+
+		cmd.Barrier()
+
+		vkCmdDispatch(
+			cmd.Get(),
+			GroupSize, 1, 1
+		);
+
 	}
 
 	void VisibilityBufferBackend::ResizeBuffers(Renderer& renderer, size_t maxFramesInFlight)
@@ -148,4 +230,17 @@ namespace im
 
 		return res;
 	}
+
+    std::vector<std::unique_ptr<Buffer>> VisibilityBufferBackend::InitBuffers(Renderer& renderer, size_t count, const BufferDesc& desc)
+    {
+        std::vector<std::unique_ptr<Buffer>> res;
+		res.reserve(count);
+
+		for (size_t i = 0; i < count; ++i)
+		{
+			res.emplace_back(std::make_unique<Buffer>(renderer.GetDevice(), desc));
+		}
+
+		return res;
+    }
 }

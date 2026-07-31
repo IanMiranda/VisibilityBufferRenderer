@@ -4,11 +4,27 @@
 
 namespace im
 {
-	Buffer::Buffer(Device& device, VkDeviceSize size, VkBufferUsageFlags2 usage, VmaAllocationCreateFlags allocationFlags)
-		: mDevice(device), mSize(size)
+	BufferDesc::BufferDesc(
+		VkDeviceSize size,
+		VkBufferUsageFlags2 usage,
+		VmaAllocationCreateFlags allocationFlags)
+	: size(size), usage(usage), allocationFlags(allocationFlags)
+    {
+    }
+
+    BufferDesc BufferDesc::Upload(
+		VkDeviceSize size,
+		VkBufferUsageFlags2 flags,
+		VmaAllocationCreateFlags allocationFlags)
+    {
+		return BufferDesc(size, flags, allocationFlags);
+    }
+
+    Buffer::Buffer(Device& device, const BufferDesc& desc)
+		: mDevice(device), mSize(desc.size)
 	{
 		VkBufferUsageFlags2CreateInfo bufferFlags{ VK_STRUCTURE_TYPE_BUFFER_USAGE_FLAGS_2_CREATE_INFO };
-		bufferFlags.usage = usage;
+		bufferFlags.usage = desc.usage;
 
 		VkBufferCreateInfo bufferInfo{ VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
 		bufferInfo.pNext = &bufferFlags;
@@ -17,15 +33,15 @@ namespace im
 
 		VmaAllocationCreateInfo allocInfo{};
 		allocInfo.usage = VMA_MEMORY_USAGE_AUTO;
-		allocInfo.flags = allocationFlags;
+		allocInfo.flags = desc.allocationFlags;
 
 		VK_CHECK(vmaCreateBuffer(mDevice.GetAllocator(), &bufferInfo, &allocInfo, &mBuffer, &mAllocation, nullptr));
 	}
 
-	Buffer::Buffer(Device& device, VkDeviceSize size, const void* data, VkBufferUsageFlags2 usage)
-		: Buffer(device, size, usage, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT)
+	Buffer::Buffer(Device& device, const BufferDesc& desc, const void* data)
+		: Buffer(device, desc)
 	{
-		SetData(data, size);
+		SetData(data, desc.size);
 	}
 
 	Buffer::~Buffer()

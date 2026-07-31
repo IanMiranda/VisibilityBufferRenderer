@@ -9,13 +9,12 @@ struct WorkItem
 
 struct VbSortData
 {
-    uint *workListCounter;
+    Atomic<uint> *workListCounter;
     WorkItem *workList;
-    uint *shaderIdToTileCount;
-    uint *offsetTable;
+    Atomic<uint> *shaderIdToTileCount;
+    Atomic<uint> *offsetTable;
     uint *tileBuffer;
     uint2 windowSize;
-    uint workListSize;
 }
 
 [vk_push_constant] ConstantBuffer<VbSortData> gSortData;
@@ -30,25 +29,22 @@ void CSSortWorkList(uint3 globalId : SV_DispatchThreadID)
         gSortData.offsetTable[1] = 0;
         for (int i = 2; i < MAX_SHADERS + 1; ++i)
         {
-            gSortData.offsetTable[i] = gSortData.offsetTable[i - 1] + gSortData.shaderIdToTileCount[i - 1];
+            gSortData.offsetTable[i].store(gSortData.offsetTable[i - 1].add(gSortData.shaderIdToTileCount[i - 1].load()));
         }
     }
 
+    let workListSize = gSortData.workListCounter.load();
     DeviceMemoryBarrierWithGroupSync();
 
     uint localId = globalId.x;
 
-    while (localId < gSortData.workListSize)
+    while (localId < workListSize)
     {
-        uint workItemIdx;
-        InterlockedAdd(*gSortData.workListCounter, -1, workItemIdx);
-        workItemIdx -= 1;
+        uint workItemIdx = gSortData.workListCounter.decrement();
 
-        WorkItem item = gSortData.workList[workItemIdx];
-        uint tileBufferIdx;
-        InterlockedAdd(gSortData.offsetTable[item.shaderId + 1], 1, tileBufferIdx);
+        WorkItem item = gSortData.workList[workItemIdx - 1];
+        uint tileBufferIdx = gSortData.offsetTable[item.shaderId + 1].increment();
         gSortData.tileBuffer[tileBufferIdx] = item.tileId;
-
 
         localId += GROUP_SIZE;
     }

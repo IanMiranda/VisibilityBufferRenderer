@@ -5,12 +5,31 @@
 namespace im
 {
 	class Device;
+	
+	struct BufferDesc
+	{
+		VkDeviceSize size;
+		VkBufferUsageFlags2 usage;
+		VmaAllocationCreateFlags allocationFlags;
+
+		BufferDesc(
+			VkDeviceSize size,
+			VkBufferUsageFlags2 usage = 0,
+			VmaAllocationCreateFlags allocationFlags = 0
+		);
+
+		static BufferDesc Upload(
+			VkDeviceSize size,
+			VkBufferUsageFlags2 flags = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+			VmaAllocationCreateFlags allocationFlags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT
+		);
+	};
 
 	class Buffer
 	{
 	public:
-		Buffer(Device& device, VkDeviceSize size, VkBufferUsageFlags2 usage, VmaAllocationCreateFlags allocationFlags);
-		Buffer(Device& device, VkDeviceSize size, const void* data, VkBufferUsageFlags2 usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+		Buffer(Device& device, const BufferDesc& desc);
+		Buffer(Device& device, const BufferDesc& desc, const void* data);
 		~Buffer();
 
 		Buffer(const Buffer& other) = delete;
