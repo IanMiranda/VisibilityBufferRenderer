@@ -13,7 +13,7 @@ struct VbBuildData
 {
     uint *instanceToShaderIdMap;
     Atomic<uint> *workListCounter;
-    VbWorkItem *workList;
+    uint2 *workList;
     Atomic<uint> *shaderIdToTileCount;
     uint2 windowSize;
 }
@@ -59,8 +59,8 @@ void CSBuildWorklist(
         {
             // Increment the worklist size and move our data into it
             let itemIndex = gBuildData.workListCounter->increment();
-            gBuildData.workList[itemIndex].tileId = tileId;
-            gBuildData.workList[itemIndex].shaderId = currentShaderId;
+            gBuildData.workList[itemIndex].x = tileId;
+            gBuildData.workList[itemIndex].y = currentShaderId;
             gBuildData.shaderIdToTileCount[currentShaderId].increment();
         }
 

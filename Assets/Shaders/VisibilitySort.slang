@@ -10,26 +10,26 @@ struct WorkItem
 struct VbSortData
 {
     Atomic<uint> *workListCounter;
-    WorkItem *workList;
-    Atomic<uint> *shaderIdToTileCount;
+    uint2 *workList;
+    uint *shaderIdToTileCount;
     Atomic<uint> *offsetTable;
-    uint *tileBuffer;
+    Atomic<uint> *tileBuffer;
     uint2 windowSize;
 }
 
 [vk_push_constant] ConstantBuffer<VbSortData> gSortData;
 
-[numthreads(GROUP_SIZE, 1, 1)]
 [shader("compute")]
+[numthreads(GROUP_SIZE, 1, 1)]
 void CSSortWorkList(uint3 globalId : SV_DispatchThreadID)
 {
     if (globalId.x == 0)
     {
-        gSortData.offsetTable[0] = 0;
-        gSortData.offsetTable[1] = 0;
+        gSortData.offsetTable[0].store(0);
+        gSortData.offsetTable[1].store(0);
         for (int i = 2; i < MAX_SHADERS + 1; ++i)
         {
-            gSortData.offsetTable[i].store(gSortData.offsetTable[i - 1].add(gSortData.shaderIdToTileCount[i - 1].load()));
+            gSortData.offsetTable[i].store(gSortData.offsetTable[i - 1].load() + gSortData.shaderIdToTileCount[i - 2]);
         }
     }
 
@@ -42,9 +42,9 @@ void CSSortWorkList(uint3 globalId : SV_DispatchThreadID)
     {
         uint workItemIdx = gSortData.workListCounter.decrement();
 
-        WorkItem item = gSortData.workList[workItemIdx - 1];
-        uint tileBufferIdx = gSortData.offsetTable[item.shaderId + 1].increment();
-        gSortData.tileBuffer[tileBufferIdx] = item.tileId;
+        uint2 item = gSortData.workList[workItemIdx - 1];
+        uint tileBufferIdx = gSortData.offsetTable[item.y + 1].increment();
+        gSortData.tileBuffer[tileBufferIdx] = item.x;
 
         localId += GROUP_SIZE;
     }

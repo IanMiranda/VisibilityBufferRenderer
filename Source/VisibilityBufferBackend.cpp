@@ -148,6 +148,10 @@ namespace im
                                  VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE,
                                  VK_PIPELINE_STAGE_2_CLEAR_BIT,
                                  VK_ACCESS_2_TRANSFER_WRITE_BIT),
+             BufferMemoryBarrier(*mWorkLists[frameIndex],
+                                 VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE,
+                                 VK_PIPELINE_STAGE_2_CLEAR_BIT,
+                                 VK_ACCESS_2_TRANSFER_WRITE_BIT),
              BufferMemoryBarrier(*mShaderIdToTileCounts[frameIndex],
                                  VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE,
                                  VK_PIPELINE_STAGE_2_CLEAR_BIT,
@@ -155,12 +159,18 @@ namespace im
 
         vkCmdFillBuffer(cmd.Get(), mWorkListCounters[frameIndex]->Get(), 0,
                         VK_WHOLE_SIZE, 0);
+        vkCmdFillBuffer(cmd.Get(), mWorkLists[frameIndex]->Get(), 0,
+                        VK_WHOLE_SIZE, 0); // Not needed, but nice for debugging
         vkCmdFillBuffer(cmd.Get(), mShaderIdToTileCounts[frameIndex]->Get(), 0,
                         VK_WHOLE_SIZE, 0);
 
         cmd.Barrier(
             {}, {},
             {BufferMemoryBarrier(*mWorkListCounters[frameIndex],
+                                 VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE,
+                                 VK_PIPELINE_STAGE_2_CLEAR_BIT,
+                                 VK_ACCESS_2_TRANSFER_WRITE_BIT),
+             BufferMemoryBarrier(*mWorkLists[frameIndex],
                                  VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE,
                                  VK_PIPELINE_STAGE_2_CLEAR_BIT,
                                  VK_ACCESS_2_TRANSFER_WRITE_BIT),
@@ -226,6 +236,14 @@ namespace im
                 VK_ACCESS_2_SHADER_READ_BIT, VK_IMAGE_ASPECT_COLOR_BIT)},
             {});
 
+        cmd.Barrier(
+            {MemoryBarrier(
+                VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT,
+                VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT)},
+            {}, {});
+
         mInstanceToShaderIdMaps[frameIndex]->Unmap();
         mInstanceToShaderIdMapPtr = nullptr;
 
@@ -249,41 +267,47 @@ namespace im
         cmd.Dispatch((buildData.windowSize.x + TileSize.x - 1) /
                          TileSize.x, // Ceiling
                      (buildData.windowSize.y + TileSize.y - 1) / TileSize.y, 1);
-        /*
+
+        // Sort pass
+        cmd.Barrier({}, {},
+                    {BufferMemoryBarrier(*mWorkListCounters[frameIndex],
+                                         VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                                         VK_ACCESS_2_SHADER_WRITE_BIT,
+                                         VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                                         VK_ACCESS_2_SHADER_READ_BIT),
+                     BufferMemoryBarrier(*mWorkLists[frameIndex],
+                                         VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                                         VK_ACCESS_2_SHADER_WRITE_BIT,
+                                         VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                                         VK_ACCESS_2_SHADER_READ_BIT),
+                     BufferMemoryBarrier(*mShaderIdToTileCounts[frameIndex],
+                                         VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                                         VK_ACCESS_2_SHADER_WRITE_BIT,
+                                         VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                                         VK_ACCESS_2_SHADER_READ_BIT)});
+
+        cmd.Barrier(
+            {MemoryBarrier(
+                VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT,
+                VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT)},
+            {}, {});
+
         VbSortData sortData{};
         sortData.worklistCounter = mWorkListCounters[frameIndex]->GetAddress();
         sortData.workList = mWorkLists[frameIndex]->GetAddress();
         sortData.shaderIdToTileCount =
-        mShaderIdToTileCounts[frameIndex]->GetAddress(); sortData.offsetTable =
-        mOffsetTables[frameIndex]->GetAddress(); sortData.tileBuffer =
-        mTileBuffers[frameIndex]->GetAddress(); sortData.windowSize =
-        buildData.windowSize;
+            mShaderIdToTileCounts[frameIndex]->GetAddress();
+        sortData.offsetTable = mOffsetTables[frameIndex]->GetAddress();
+        sortData.tileBuffer = mTileBuffers[frameIndex]->GetAddress();
+        sortData.windowSize = buildData.windowSize;
 
         cmd.BindComputePipeline(mSortPipe);
         cmd.PushConstants(mSortPipeLayout, VK_SHADER_STAGE_COMPUTE_BIT,
-        sortData); cmd.Barrier({ MemoryBarrier(
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_READ_BIT
-            )
-        }, {});
+                          sortData);
 
-        cmd.Dispatch(GroupSize, 1, 1);
-        */
-
-        /*cmd.Barrier({}, {
-            ImageMemoryBarrier(
-                *mVisBuffers[frameIndex].image,
-                VK_IMAGE_LAYOUT_GENERAL,
-                VK_PIPELINE_STAGE_2_NONE,
-                VK_ACCESS_2_NONE,
-                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-                VK_IMAGE_ASPECT_COLOR_BIT
-            )
-        });*/
+        cmd.Dispatch(1, 1, 1);
 
         cmd.Barrier(
             {MemoryBarrier(
