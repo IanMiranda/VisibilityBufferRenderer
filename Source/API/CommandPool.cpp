@@ -1,51 +1,53 @@
 #include "CommandPool.h"
 
-#include "Device.h"
 #include "CommandBuffer.h"
+#include "Device.h"
 
 namespace im
 {
-	CommandPool::CommandPool(Device& device, uint32_t queueFamilyIndex, VkCommandPoolCreateFlags flags)
-		: mDevice(device),
-		mQueueFamilyIndex(queueFamilyIndex)
-	{
-		VkCommandPoolCreateInfo poolInfo{ VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
-		poolInfo.queueFamilyIndex = mQueueFamilyIndex;
-		poolInfo.flags = flags;
+    CommandPool::CommandPool(Device &device, uint32_t queueFamilyIndex,
+                             VkCommandPoolCreateFlags flags)
+        : mDevice(device), mQueueFamilyIndex(queueFamilyIndex)
+    {
+        VkCommandPoolCreateInfo poolInfo{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
+        poolInfo.queueFamilyIndex = mQueueFamilyIndex;
+        poolInfo.flags = flags;
 
-		VK_CHECK(vkCreateCommandPool(mDevice.Get(), &poolInfo, nullptr, &mPool));
-	}
+        VK_CHECK(vkCreateCommandPool(mDevice.Get(), &poolInfo, nullptr, &mPool));
+    }
 
-	CommandPool::~CommandPool()
-	{
-		mDevice.WaitIdle();
-		vkDestroyCommandPool(mDevice.Get(), mPool, nullptr);
-	}
+    CommandPool::~CommandPool()
+    {
+        mDevice.WaitIdle();
+        vkDestroyCommandPool(mDevice.Get(), mPool, nullptr);
+    }
 
-	std::unique_ptr<CommandBuffer> CommandPool::Allocate()
-	{
-		return std::move(Allocate(1).back());
-	}
+    std::unique_ptr<CommandBuffer> CommandPool::Allocate()
+    {
+        return std::move(Allocate(1).back());
+    }
 
-	std::vector<std::unique_ptr<CommandBuffer>> CommandPool::Allocate(size_t count)
-	{
-		VkCommandBufferAllocateInfo allocInfo{ VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO };
-		allocInfo.commandBufferCount = count;
-		allocInfo.commandPool = mPool;
-		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    std::vector<std::unique_ptr<CommandBuffer>> CommandPool::Allocate(size_t count)
+    {
+        VkCommandBufferAllocateInfo allocInfo{
+            VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
+        allocInfo.commandBufferCount = count;
+        allocInfo.commandPool = mPool;
+        allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 
-		std::vector<VkCommandBuffer> commandBuffers(count);
-		VK_CHECK(vkAllocateCommandBuffers(mDevice.Get(), &allocInfo, commandBuffers.data()));
-		
-		std::vector<std::unique_ptr<CommandBuffer>> res;
-		res.reserve(count);
-		for (auto cmdBuf : commandBuffers)
-			res.emplace_back(std::make_unique<CommandBuffer>(*this, cmdBuf));
-		return res;
-	}
+        std::vector<VkCommandBuffer> commandBuffers(count);
+        VK_CHECK(
+            vkAllocateCommandBuffers(mDevice.Get(), &allocInfo, commandBuffers.data()));
 
-	Device& CommandPool::GetDevice()
-	{
-		return mDevice;
-	}
-}
+        std::vector<std::unique_ptr<CommandBuffer>> res;
+        res.reserve(count);
+        for (auto cmdBuf : commandBuffers)
+            res.emplace_back(std::make_unique<CommandBuffer>(*this, cmdBuf));
+        return res;
+    }
+
+    Device &CommandPool::GetDevice()
+    {
+        return mDevice;
+    }
+} // namespace im

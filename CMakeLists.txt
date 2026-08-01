@@ -6,9 +6,7 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # set(CMAKE_CXX_EXTENSIONS OFF)
 
-if (LINUX)
-    set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-endif ()
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(Vulkan REQUIRED)
 
@@ -38,7 +36,7 @@ FetchContent_Declare(
 FetchContent_Declare(
     tinygltf
     GIT_REPOSITORY https://github.com/syoyo/tinygltf
-    GIT_TAG 81bd50c1062fdb956e878efa2a9234b2b9ec91ec
+    GIT_TAG 488a70a
 )
 
 FetchContent_Declare(

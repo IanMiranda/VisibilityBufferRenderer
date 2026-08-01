@@ -40,7 +40,7 @@ VSOutput VSVisibilityPass(uint vertex : SV_VulkanVertexID, uint instance : SV_Vu
 
 struct FSOutput
 {
-    uint32_t2 triangleInstanceIdx;
+    uint2 triangleInstanceIdx;
 }
 
 [shader("fragment")]

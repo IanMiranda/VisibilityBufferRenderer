@@ -15,7 +15,8 @@ namespace im
 		constexpr static uint32_t SetsPerPool{ 500 };
 		constexpr static uint32_t UniformBuffersPerSet{ 8 };
 		constexpr static uint32_t CombinedImageSamplersPerSet{ 4 };
-		constexpr static uint32_t ImagesPerSet{ 6 };
+		constexpr static uint32_t StorageImagesPerSet{ 4 };
+		constexpr static uint32_t SampledImagesPerSet{ 6 };
 		constexpr static uint32_t SamplersPerSet{ 1 };
 
 	public:

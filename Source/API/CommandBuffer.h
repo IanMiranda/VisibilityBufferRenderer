@@ -1,7 +1,5 @@
 #pragma once
 
-#include <span>
-
 #include "Common.h"
 #include "PipelineLayout.h"
 
@@ -23,6 +21,46 @@ namespace im
 		VkAccessFlags2 dstAccess
 	);
 
+	VkImageMemoryBarrier2 ImageMemoryBarrier(
+		VkImage image,
+		VkImageLayout oldLayout,
+		VkPipelineStageFlags2 srcStage,
+		VkAccessFlags2 srcAccess,
+		VkImageLayout newLayout,
+		VkPipelineStageFlags2 dstStage,
+		VkAccessFlags2 dstAccess,
+		VkImageAspectFlags aspect,
+		uint32_t firstLayer = 0,
+		uint32_t layerCount = 1,
+		uint32_t firstLevel = 0,
+		uint32_t levelCount = 1
+	);
+
+	VkImageMemoryBarrier2 ImageMemoryBarrier(
+		Image& image,
+		VkImageLayout oldLayout,
+		VkPipelineStageFlags2 srcStage,
+		VkAccessFlags2 srcAccess,
+		VkImageLayout newLayout,
+		VkPipelineStageFlags2 dstStage,
+		VkAccessFlags2 dstAccess,
+		VkImageAspectFlags aspect,
+		uint32_t firstLayer = 0,
+		uint32_t layerCount = 1,
+		uint32_t firstLevel = 0,
+		uint32_t levelCount = 1
+	);
+
+	VkBufferMemoryBarrier2 BufferMemoryBarrier(
+		Buffer& buffer,
+		VkPipelineStageFlags2 srcStage,
+		VkAccessFlags2 srcAccess,
+		VkPipelineStageFlags2 dstStage,
+		VkAccessFlags2 dstAccess,
+		VkDeviceSize offset = 0,
+		VkDeviceSize size = VK_WHOLE_SIZE
+	);
+
 	class CommandBuffer
 	{
 	public:
@@ -35,23 +73,11 @@ namespace im
 		void Begin(VkCommandBufferUsageFlags usage = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 		void End();
 
-		void BarrierSwapchainImage(
-			VkImage image,
-			VkImageLayout oldLayout, VkImageLayout newLayout,
-			VkPipelineStageFlags2 srcStage, VkAccessFlags2 srcAccess,
-			VkPipelineStageFlags2 dstStage, VkAccessFlags2 dstAccess);
-
 		void Barrier(
-			Image& texture,
-			VkImageLayout oldLayout, VkImageLayout newLayout,
-			VkPipelineStageFlags2 srcStage, VkAccessFlags2 srcAccess,
-			VkPipelineStageFlags2 dstStage, VkAccessFlags2 dstAccess,
-			VkImageAspectFlags aspect,
-			uint32_t firstLayer, uint32_t layerCount,
-			uint32_t firstLevel, uint32_t levelCount
+			const std::vector<VkMemoryBarrier2>& globalBarriers,
+			const std::vector<VkImageMemoryBarrier2>& imageBarriers,
+			const std::vector<VkBufferMemoryBarrier2>& bufferBarriers
 		);
-
-		void Barrier(const std::vector<VkMemoryBarrier2>& globalBarriers);
 
 		void GenerateMipmaps(
 			Image& texture, VkImageLayout newLayout,

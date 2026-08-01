@@ -2,7 +2,7 @@ from pathlib import Path
 import subprocess
 import os
 
-COMPILE_CMD = "slangc -target spirv -profile spirv_1_4 -matrix-layout-column-major -fvk-use-entrypoint-name -lang glsl -o"
+COMPILE_CMD = "slangc -target spirv -profile spirv_1_4 -g -matrix-layout-column-major -fvk-use-entrypoint-name -force-glsl-scalar-layout -lang glsl -o"
 IGNORE_LIST = ["Lighting.slang", "Common.slang", "Math.slang"]
 
 for path in Path('.').glob("*.slang"):

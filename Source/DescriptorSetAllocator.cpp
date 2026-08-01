@@ -63,7 +63,8 @@ namespace im
 			std::initializer_list<VkDescriptorPoolSize>{
 				{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, CombinedImageSamplersPerSet * SetsPerPool },
 				{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, UniformBuffersPerSet * SetsPerPool },
-				{ VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, ImagesPerSet * SetsPerPool },
+				{ VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, SampledImagesPerSet * SetsPerPool },
+				{ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, StorageImagesPerSet * SetsPerPool },
 				{ VK_DESCRIPTOR_TYPE_SAMPLER, SamplersPerSet * SetsPerPool }
 			},
 			SetsPerPool
@@ -71,7 +72,8 @@ namespace im
 		res.remainingBindings = {
 			{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, CombinedImageSamplersPerSet * SetsPerPool },
 			{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, UniformBuffersPerSet * SetsPerPool },
-			{ VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, ImagesPerSet * SetsPerPool },
+			{ VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, SampledImagesPerSet * SetsPerPool },
+				{ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, StorageImagesPerSet * SetsPerPool },
 			{ VK_DESCRIPTOR_TYPE_SAMPLER, SamplersPerSet * SetsPerPool }
 		};
 		res.remainingSets = SetsPerPool;

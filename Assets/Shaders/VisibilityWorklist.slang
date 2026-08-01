@@ -25,62 +25,45 @@ struct VbBuildData
 // a storage image.
 [vk_binding(0, 0)] RWTexture2D<uint2> gVisBuf;
 
-groupshared uint gShaderActiveInTile[MAX_SHADERS];
+groupshared Atomic<uint> gShaderActiveInTile[MAX_SHADERS];
 
 [shader("compute")]
-[numthreads(TILE_SIZE_X, TILE_SIZE_Y)]
-void CSBuildWorklist(uint3 localId : SV_GroupThreadID, uint3 globalId : SV_DispatchThreadID, uint localIndex : SV_GroupIndex)
+[numthreads(TILE_SIZE_X, TILE_SIZE_Y, 1)]
+void CSBuildWorklist(
+    uint3 localId : SV_GroupThreadID,
+    uint3 globalId : SV_DispatchThreadID,
+    uint localIndex : SV_GroupIndex)
 {
-    const uint2 pixelId = globalId.xy;
+    let pixelId = globalId.xy;
 
-    if (globalId.x == 0 && globalId.y == 0)
-        {
-        gBuildData.workListCounter.store(0);
+    if (localIndex == 0)
+    {
         for (uint i = 0; i < MAX_SHADERS; ++i)
         {
-            gBuildData.shaderIdToTileCount[i].store(0);
+            gShaderActiveInTile[i].store(0);
         }
     }
+
+    GroupMemoryBarrierWithGroupSync();
+
+    const uint2 triangleInstanceIdx = gVisBuf.Load(pixelId);
+    gShaderActiveInTile[gBuildData.instanceToShaderIdMap[triangleInstanceIdx.y]].store(1);
+
+    GroupMemoryBarrierWithGroupSync();
     
-    if (pixelId.x < gBuildData.windowSize.x && pixelId.y < gBuildData.windowSize.y)
+    const uint tileId = ((pixelId.y / TILE_SIZE_Y) << 16) | (pixelId.x / TILE_SIZE_X);
+    uint currentShaderId = localIndex;
+    while (currentShaderId < MAX_SHADERS)
     {
-        if (localIndex == 0)
+        if (gShaderActiveInTile[currentShaderId].load() > 0)
         {
-            for (uint i = 0; i < MAX_SHADERS; ++i)
-            {
-                gShaderActiveInTile[i] = 0;
-            }
+            // Increment the worklist size and move our data into it
+            let itemIndex = gBuildData.workListCounter->increment();
+            gBuildData.workList[itemIndex].tileId = tileId;
+            gBuildData.workList[itemIndex].shaderId = currentShaderId;
+            gBuildData.shaderIdToTileCount[currentShaderId].increment();
         }
-    }
 
-    GroupMemoryBarrierWithGroupSync();
-
-    if (pixelId.x < gBuildData.windowSize.x && pixelId.y < gBuildData.windowSize.y)
-    {
-        const uint2 triangleInstanceIdx = gVisBuf.Load(pixelId);
-        gShaderActiveInTile[gBuildData.instanceToShaderIdMap[triangleInstanceIdx.y]] = 1;
-    }
-
-    GroupMemoryBarrierWithGroupSync();
-
-    if (pixelId.x < gBuildData.windowSize.x && pixelId.y < gBuildData.windowSize.y)
-    {
-        const uint tileId = ((pixelId.x / TILE_SIZE_X) << 16) | (pixelId.y / TILE_SIZE_Y);
-        uint currentShaderId = localIndex;
-        while (currentShaderId < MAX_SHADERS)
-        {
-            if (gShaderActiveInTile[currentShaderId] == 1)
-            {
-                uint originalTilesActive;
-
-                // Increment the worklist size and move our data into it
-                uint itemIndex = gBuildData.workListCounter.increment();
-                gBuildData.workList[itemIndex].shaderId = currentShaderId;
-                gBuildData.workList[itemIndex].tileId = tileId;
-                gBuildData.shaderIdToTileCount[currentShaderId].increment();
-            }
-
-            currentShaderId += PIXELS_PER_TILE;
-        }
+        currentShaderId += PIXELS_PER_TILE;
     }
 }

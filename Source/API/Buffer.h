@@ -12,9 +12,9 @@ namespace im
 		VkBufferUsageFlags2 usage;
 		VmaAllocationCreateFlags allocationFlags;
 
-		BufferDesc(
+		explicit BufferDesc(
 			VkDeviceSize size,
-			VkBufferUsageFlags2 usage = 0,
+			VkBufferUsageFlags2 usage,
 			VmaAllocationCreateFlags allocationFlags = 0
 		);
 

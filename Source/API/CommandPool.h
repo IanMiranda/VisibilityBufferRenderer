@@ -4,28 +4,32 @@
 
 namespace im
 {
-	class Device;
-	class CommandBuffer;
+    class Device;
+    class CommandBuffer;
 
-	class CommandPool
-	{
-	public:
-		CommandPool(Device& device, uint32_t queueFamilyIndex, VkCommandPoolCreateFlags flags);
-		~CommandPool();
+    class CommandPool
+    {
+      public:
+        CommandPool(Device &device, uint32_t queueFamilyIndex,
+                    VkCommandPoolCreateFlags flags);
+        ~CommandPool();
 
-		CommandPool(const CommandPool& other) = delete;
-		CommandPool& operator=(const CommandPool& other) = delete;
+        CommandPool(const CommandPool &other) = delete;
+        CommandPool &operator=(const CommandPool &other) = delete;
 
-		std::unique_ptr<CommandBuffer> Allocate();
-		std::vector<std::unique_ptr<CommandBuffer>> Allocate(size_t count);
+        std::unique_ptr<CommandBuffer> Allocate();
+        std::vector<std::unique_ptr<CommandBuffer>> Allocate(size_t count);
 
-		VkCommandPool Get() { return mPool; }
-		Device& GetDevice();
+        VkCommandPool Get()
+        {
+            return mPool;
+        }
+        Device &GetDevice();
 
-	private:
-		Device& mDevice;
-		const uint32_t mQueueFamilyIndex;
+      private:
+        Device &mDevice;
+        const uint32_t mQueueFamilyIndex;
 
-		VkCommandPool mPool{ VK_NULL_HANDLE };
-	};
-}
+        VkCommandPool mPool{VK_NULL_HANDLE};
+    };
+} // namespace im
