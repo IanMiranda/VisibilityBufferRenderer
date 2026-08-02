@@ -34,6 +34,9 @@ void CSSortWorkList(uint3 globalId : SV_DispatchThreadID)
     }
 
     let workListSize = gSortData.workListCounter.load();
+
+    // Normally this wouldn't be sufficient for a global write,
+    // but all our threads are in the same group.
     DeviceMemoryBarrierWithGroupSync();
 
     uint localId = globalId.x;
