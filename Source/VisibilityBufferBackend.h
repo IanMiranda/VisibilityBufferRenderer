@@ -11,6 +11,7 @@
 #include "BindlessSet.h"
 #include "Common.h"
 #include "DescriptorSetAllocator.h"
+#include "vulkan/vulkan_core.h"
 
 namespace im
 {
@@ -47,7 +48,13 @@ namespace im
         VkDeviceAddress shaderIdToTileCount;
         VkDeviceAddress offsetTable;
         VkDeviceAddress tileBuffer;
+        VkDeviceAddress indirectBuffer;
         glm::uvec2 windowSize;
+    };
+
+    struct VbMaterialData
+    {
+        uint32_t albedoMapIndex;
     };
 
     struct VbShadingData
@@ -60,6 +67,14 @@ namespace im
         VkDeviceAddress tiles;
         VkDeviceAddress materials;
         uint32_t shaderId;
+    };
+
+    struct VbDispatchIndirectCommand
+    {
+        uint32_t x;
+        uint32_t y;
+        uint32_t z;
+        uint32_t pad;
     };
 
     class VisibilityBufferBackend
@@ -116,9 +131,18 @@ namespace im
         std::vector<std::unique_ptr<Buffer>> mShaderIdToTileCounts;
         std::vector<std::unique_ptr<Buffer>> mOffsetTables;
         std::vector<std::unique_ptr<Buffer>> mTileBuffers;
+        std::vector<std::unique_ptr<Buffer>> mVertexBuffers;
+        std::vector<std::unique_ptr<Buffer>> mIndexBuffers;
+        std::vector<std::unique_ptr<Buffer>> mTransformBuffers;
+        std::vector<std::unique_ptr<Buffer>> mMaterialBuffers;
+        std::vector<std::unique_ptr<Buffer>> mIndirectBuffers;
         std::vector<std::unique_ptr<DescriptorSet>> mWorkListDescSets;
         uint32_t mCurrentInstance{1};
 
         uint32_t *mInstanceToShaderIdMapPtr{nullptr};
+        VkDeviceAddress *mVertexBuffersPtr{nullptr};
+        VkDeviceAddress *mIndexBuffersPtr{nullptr};
+        float *mTransformBufferPtr{nullptr};
+        VbMaterialData *mMaterialBufferPtr{nullptr};
     };
 } // namespace im

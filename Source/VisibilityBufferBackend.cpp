@@ -7,8 +7,11 @@
 #include "API/RenderPass.h"
 #include "API/Shader.h"
 #include "API/Swapchain.h"
+#include "Common.h"
 #include "Renderer.h"
 #include "Scene.h"
+#include "glm/gtc/type_ptr.hpp"
+#include "vulkan/vulkan_core.h"
 #include <memory>
 
 namespace im
@@ -125,6 +128,42 @@ namespace im
                       sizeof(VbWorkItem),
                   VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT |
                       VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT))),
+          mVertexBuffers(InitBuffers(
+              renderer, maxFramesInFlight,
+              BufferDesc(
+                  sizeof(VkDeviceAddress) * MaxDrawCalls,
+                  VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT |
+                      VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT,
+                  VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT))),
+          mIndexBuffers(InitBuffers(
+              renderer, maxFramesInFlight,
+              BufferDesc(
+                  sizeof(VkDeviceAddress) * MaxDrawCalls,
+                  VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT |
+                      VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT,
+                  VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT))),
+          mTransformBuffers(InitBuffers(
+              renderer, maxFramesInFlight,
+              BufferDesc(
+                  sizeof(glm::mat4) * MaxDrawCalls,
+                  VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT |
+                      VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT,
+                  VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT))),
+          mMaterialBuffers(InitBuffers(
+              renderer, maxFramesInFlight,
+              BufferDesc(
+                  sizeof(VbMaterialData) * MaxDrawCalls,
+                  VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT |
+                      VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT,
+                  VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT))),
+          mIndirectBuffers(InitBuffers(
+              renderer, maxFramesInFlight,
+              BufferDesc(
+                  sizeof(VbDispatchIndirectCommand) * (MaxShaders + 1),
+                  VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT |
+                      VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT |
+                      VK_BUFFER_USAGE_2_INDIRECT_BUFFER_BIT,
+                  VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT))),
           mWorkListDescSets(InitDescSets(renderer, maxFramesInFlight))
     {
     }
@@ -191,9 +230,21 @@ namespace im
 
         mInstanceToShaderIdMapPtr = reinterpret_cast<uint32_t *>(
             mInstanceToShaderIdMaps[frameIndex]->Map());
+        mVertexBuffersPtr = reinterpret_cast<VkDeviceAddress *>(
+            mVertexBuffers[frameIndex]->Map());
+        mIndexBuffersPtr = reinterpret_cast<VkDeviceAddress *>(
+            mIndexBuffers[frameIndex]->Map());
+        mTransformBufferPtr =
+            reinterpret_cast<float *>(mTransformBuffers[frameIndex]->Map());
+        mMaterialBufferPtr = reinterpret_cast<VbMaterialData *>(
+            mMaterialBuffers[frameIndex]->Map());
 
         *mInstanceToShaderIdMapPtr = 0;
         ++mInstanceToShaderIdMapPtr;
+        ++mVertexBuffersPtr;
+        ++mIndexBuffersPtr;
+        mTransformBufferPtr += sizeof(glm::mat4);
+        ++mMaterialBufferPtr;
     }
 
     void VisibilityBufferBackend::DrawBatch(
@@ -206,8 +257,10 @@ namespace im
 
         for (const auto &object : objects)
         {
+            const auto vboAddress = object.mesh->vertexBuffer->GetAddress();
+
             passData.modelViewProj = viewProj * object.transform;
-            passData.vertexData = object.mesh->vertexBuffer->GetAddress();
+            passData.vertexData = vboAddress;
 
             cmd.PushConstants(mVisPipeLayout, VK_SHADER_STAGE_VERTEX_BIT,
                               passData);
@@ -215,6 +268,24 @@ namespace im
             cmd.DrawIndexed(object.mesh->indexCount, 1, 0, 0, mCurrentInstance);
             *mInstanceToShaderIdMapPtr = 1; // TODO: support multiple materials?
             ++mInstanceToShaderIdMapPtr;
+
+            *mVertexBuffersPtr = vboAddress;
+            ++mVertexBuffersPtr;
+
+            *mIndexBuffersPtr = object.mesh->indexBuffer->GetAddress();
+            ++mIndexBuffersPtr;
+
+            std::memcpy(mTransformBufferPtr,
+                        glm::value_ptr(passData.modelViewProj),
+                        sizeof(passData.modelViewProj));
+            ++mTransformBufferPtr;
+
+            VbMaterialData material{};
+            material.albedoMapIndex =
+                mBindlessSet.GetOrCreateId(object.material.albedoMap);
+
+            std::memcpy(mMaterialBufferPtr, &material, sizeof(material));
+            ++mMaterialBufferPtr;
 
             ++mCurrentInstance;
         }
@@ -246,6 +317,18 @@ namespace im
 
         mInstanceToShaderIdMaps[frameIndex]->Unmap();
         mInstanceToShaderIdMapPtr = nullptr;
+
+        mVertexBuffers[frameIndex]->Unmap();
+        mVertexBuffersPtr = nullptr;
+
+        mIndexBuffers[frameIndex]->Unmap();
+        mIndexBuffersPtr = nullptr;
+
+        mTransformBuffers[frameIndex]->Unmap();
+        mTransformBufferPtr = nullptr;
+
+        mMaterialBuffers[frameIndex]->Unmap();
+        mMaterialBufferPtr = nullptr;
 
         // Now, build the worklist and sort it
         VbBuildData buildData{};
@@ -301,6 +384,7 @@ namespace im
             mShaderIdToTileCounts[frameIndex]->GetAddress();
         sortData.offsetTable = mOffsetTables[frameIndex]->GetAddress();
         sortData.tileBuffer = mTileBuffers[frameIndex]->GetAddress();
+        sortData.indirectBuffer = mIndirectBuffers[frameIndex]->GetAddress();
         sortData.windowSize = buildData.windowSize;
 
         cmd.BindComputePipeline(mSortPipe);
@@ -316,6 +400,28 @@ namespace im
                 VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
                 VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT)},
             {}, {});
+
+        // Finally, the shading pass
+        VbShadingData shadingData{};
+        shadingData.instanceToShaderIdMap =
+            mInstanceToShaderIdMaps[frameIndex]->GetAddress();
+        shadingData.vertexBuffers = mVertexBuffers[frameIndex]->GetAddress();
+        shadingData.indexBuffers = mIndexBuffers[frameIndex]->GetAddress();
+        shadingData.transforms = mTransformBuffers[frameIndex]->GetAddress();
+        shadingData.offsetTable = mOffsetTables[frameIndex]->GetAddress();
+        shadingData.tiles = mTileBuffers[frameIndex]->GetAddress();
+        shadingData.materials = mMaterialBuffers[frameIndex]->GetAddress();
+        shadingData.shaderId = 1;
+
+        cmd.BindComputePipeline(mShadePipe);
+        cmd.BindComputeDescriptorSets(mShadePipeLayout, 0,
+                                      {std::ref(*mWorkListDescSets[frameIndex]),
+                                       std::ref(mBindlessSet.Get())});
+        cmd.PushConstants(mShadePipeLayout, VK_SHADER_STAGE_COMPUTE_BIT,
+                          shadingData);
+
+        vkCmdDispatchIndirect(cmd.Get(), mIndirectBuffers[frameIndex]->Get(),
+                              0 * sizeof(VbDispatchIndirectCommand));
 
         mCurrentInstance = 1;
     }
