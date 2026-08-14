@@ -197,22 +197,23 @@ namespace im
 
     void Scene::DrawUI()
     {
-        if (ImGui::Begin("Vulkan Renderer"))
-        {
-            int lightNumber = 0;
-            for (auto &light : mPointLights)
-            {
-                float color[4] = {light.i.r, light.i.g, light.i.b, light.i.a};
-                const std::string label = fmt::format("Light {}", lightNumber);
-                ;
-                ImGui::ColorPicker4(label.c_str(), color, 0, color);
-                light.i = glm::vec4(color[0], color[1], color[2], color[3]);
+        // if (ImGui::Begin("Vulkan Renderer"))
+        // {
+        //     int lightNumber = 0;
+        //     for (auto &light : mPointLights)
+        //     {
+        //         float color[4] = {light.i.r, light.i.g, light.i.b,
+        //         light.i.a}; const std::string label = fmt::format("Light {}",
+        //         lightNumber);
+        //         ;
+        //         ImGui::ColorPicker4(label.c_str(), color, 0, color);
+        //         light.i = glm::vec4(color[0], color[1], color[2], color[3]);
 
-                lightNumber++;
-            }
-        }
+        //         lightNumber++;
+        //     }
+        // }
 
-        ImGui::End();
+        // ImGui::End();
     }
 
     void Scene::UpdateLightPositions()

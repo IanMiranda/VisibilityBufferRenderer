@@ -57,7 +57,7 @@ void CSSortWorkList(uint3 globalId : SV_DispatchThreadID)
 
     if (globalId.x == 0) {
         for (int i = 1; i < MAX_SHADERS + 1; ++i) {
-            gSortData.indirectBuffer[i] = uint4(gSortData.offsetTable[i].load(), 1, 1, 1);
+            gSortData.indirectBuffer[i] = uint4(gSortData.shaderIdToTileCount[i], 1, 1, 1);
         }
     }
     

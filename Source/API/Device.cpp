@@ -12,9 +12,9 @@
 namespace im
 {
 #ifndef NDEBUG
-    constexpr bool gEnableValidationLayers = true;
+    extern constexpr bool gEnableValidationLayers = true;
 #else
-    constexpr bool gEnableValidationLayers = false;
+    extern constexpr bool gEnableValidationLayers = false;
 #endif
 
     Device::Device(GLFWwindow *window) : mWindow(window)
@@ -45,15 +45,33 @@ namespace im
 
         if constexpr (gEnableValidationLayers)
         {
-            vkDestroyDebugUtilsMessengerEXT(mInstance, mDebugMessenger, nullptr);
+            vkDestroyDebugUtilsMessengerEXT(mInstance, mDebugMessenger,
+                                            nullptr);
         }
 
         vkDestroyInstance(mInstance, nullptr);
     }
 
+    void Device::SetDebugName(VkObjectType objectType, uint64_t objectHandle,
+                              const std::string &objectName)
+    {
+        if constexpr (gEnableValidationLayers)
+        {
+            VkDebugUtilsObjectNameInfoEXT nameInfo{
+                VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT};
+            nameInfo.objectType = objectType;
+            nameInfo.objectHandle = objectHandle;
+            nameInfo.pObjectName = objectName.data();
+            nameInfo.pNext = nullptr;
+
+            VK_CHECK(vkSetDebugUtilsObjectNameEXT(mDevice, &nameInfo));
+        }
+    }
+
     void Device::Submit(std::vector<std::reference_wrapper<CommandBuffer>> cmds,
                         std::vector<SemaphoreSubmitInfo> waitSemaphores,
-                        std::vector<SemaphoreSubmitInfo> signalSemaphores, Fence *fence)
+                        std::vector<SemaphoreSubmitInfo> signalSemaphores,
+                        Fence *fence)
     {
         std::vector<VkCommandBufferSubmitInfo> cmdInfos;
         cmdInfos.reserve(cmds.size());
@@ -70,7 +88,8 @@ namespace im
         waitSems.reserve(waitSemaphores.size());
         for (const auto &semaphore : waitSemaphores)
         {
-            VkSemaphoreSubmitInfo waitSem{VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO};
+            VkSemaphoreSubmitInfo waitSem{
+                VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO};
             waitSem.deviceIndex = 0;
             waitSem.semaphore = semaphore.semaphore.get().Get();
             waitSem.stageMask = semaphore.stageMask;
@@ -82,7 +101,8 @@ namespace im
         signalSems.reserve(signalSemaphores.size());
         for (const auto &semaphore : signalSemaphores)
         {
-            VkSemaphoreSubmitInfo signalSem{VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO};
+            VkSemaphoreSubmitInfo signalSem{
+                VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO};
             signalSem.deviceIndex = 0;
             signalSem.semaphore = semaphore.semaphore.get().Get();
             signalSem.stageMask = semaphore.stageMask;
@@ -113,9 +133,9 @@ namespace im
         VK_CHECK(vkDeviceWaitIdle(mDevice));
     }
 
-    VkFormat Device::GetSupportedFormat(const std::initializer_list<VkFormat> &formats,
-                                        VkImageTiling tiling,
-                                        VkFormatFeatureFlags flags) const
+    VkFormat Device::GetSupportedFormat(
+        const std::initializer_list<VkFormat> &formats, VkImageTiling tiling,
+        VkFormatFeatureFlags flags) const
     {
         for (const auto fmt : formats)
         {
@@ -136,13 +156,15 @@ namespace im
 
     VkFormat Device::GetDepthFormat() const
     {
-        return GetSupportedFormat({VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT,
-                                   VK_FORMAT_D24_UNORM_S8_UINT},
-                                  VK_IMAGE_TILING_OPTIMAL,
-                                  VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
+        return GetSupportedFormat(
+            {VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT,
+             VK_FORMAT_D24_UNORM_S8_UINT},
+            VK_IMAGE_TILING_OPTIMAL,
+            VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
     }
 
-    void Device::RunImmediateCommands(const std::function<void(CommandBuffer &)> &cmds)
+    void Device::RunImmediateCommands(
+        const std::function<void(CommandBuffer &)> &cmds)
     {
         auto cmdBuf = mImmediatePool->Allocate();
         cmdBuf->Begin();
@@ -163,9 +185,10 @@ namespace im
         appInfo.pEngineName = "N/A";
 
         uint32_t wsiExtensionCount;
-        auto *wsiExtensions = glfwGetRequiredInstanceExtensions(&wsiExtensionCount);
-        std::vector<const char *> instanceExtensions(wsiExtensions,
-                                                     wsiExtensions + wsiExtensionCount);
+        auto *wsiExtensions =
+            glfwGetRequiredInstanceExtensions(&wsiExtensionCount);
+        std::vector<const char *> instanceExtensions(
+            wsiExtensions, wsiExtensions + wsiExtensionCount);
         if constexpr (gEnableValidationLayers)
         {
             instanceExtensions.emplace_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
@@ -175,12 +198,14 @@ namespace im
         {
             if (!InstanceExtensionSupported(extension))
             {
-                fmt::println(stderr, "Error: Extension {} not supported", extension);
+                fmt::println(stderr, "Error: Extension {} not supported",
+                             extension);
                 return;
             }
         }
 
-        if (InstanceExtensionSupported(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME))
+        if (InstanceExtensionSupported(
+                VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME))
         {
             instanceExtensions.emplace_back(
                 VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
@@ -195,18 +220,22 @@ namespace im
 
         const auto debugInfo = GetDebugInfo();
 
-        VkInstanceCreateInfo instanceInfo{VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
-        if (InstanceExtensionSupported(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME))
+        VkInstanceCreateInfo instanceInfo{
+            VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
+        if (InstanceExtensionSupported(
+                VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME))
         {
             instanceExtensions.emplace_back(
                 VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
-            instanceInfo.flags = VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+            instanceInfo.flags =
+                VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
         }
         instanceInfo.pApplicationInfo = &appInfo;
         instanceInfo.enabledExtensionCount =
             static_cast<uint32_t>(instanceExtensions.size());
         instanceInfo.ppEnabledExtensionNames = instanceExtensions.data();
-        instanceInfo.enabledLayerCount = static_cast<uint32_t>(instanceLayers.size());
+        instanceInfo.enabledLayerCount =
+            static_cast<uint32_t>(instanceLayers.size());
         instanceInfo.ppEnabledLayerNames = instanceLayers.data();
         if constexpr (gEnableValidationLayers)
         {
@@ -218,14 +247,15 @@ namespace im
 
         if constexpr (gEnableValidationLayers)
         {
-            VK_CHECK(vkCreateDebugUtilsMessengerEXT(mInstance, &debugInfo, nullptr,
-                                                    &mDebugMessenger));
+            VK_CHECK(vkCreateDebugUtilsMessengerEXT(mInstance, &debugInfo,
+                                                    nullptr, &mDebugMessenger));
         }
     }
 
     void Device::InitSurface()
     {
-        VK_CHECK(glfwCreateWindowSurface(mInstance, mWindow, nullptr, &mSurface));
+        VK_CHECK(
+            glfwCreateWindowSurface(mInstance, mWindow, nullptr, &mSurface));
     }
 
     void Device::InitDevice()
@@ -244,7 +274,8 @@ namespace im
 
             // Check for graphics/present queues
             uint32_t queueFamCount{};
-            vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queueFamCount, nullptr);
+            vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queueFamCount,
+                                                     nullptr);
             std::vector<VkQueueFamilyProperties> queueFams(queueFamCount);
             vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queueFamCount,
                                                      queueFams.data());
@@ -289,8 +320,8 @@ namespace im
             if (!supportsExtensions)
                 continue;
 
-            // Assume graphics and present queue fam index are the same, as per the Vulkan
-            // Tutorial
+            // Assume graphics and present queue fam index are the same, as per
+            // the Vulkan Tutorial
             constexpr float queuePriority = 1.0f;
             std::vector<VkDeviceQueueCreateInfo> queueInfos;
             queueInfos.reserve(1);
@@ -318,18 +349,26 @@ namespace im
             vulkan12Features.pNext = &vulkan11Features;
             vulkan12Features.descriptorIndexing = VK_TRUE;
             vulkan12Features.descriptorBindingPartiallyBound = VK_TRUE;
-            vulkan12Features.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
-            vulkan12Features.descriptorBindingUpdateUnusedWhilePending = VK_TRUE;
+            vulkan12Features.descriptorBindingSampledImageUpdateAfterBind =
+                VK_TRUE;
+            vulkan12Features.descriptorBindingUpdateUnusedWhilePending =
+                VK_TRUE;
             vulkan12Features.descriptorBindingVariableDescriptorCount = VK_TRUE;
-            vulkan12Features.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
+            vulkan12Features.shaderSampledImageArrayNonUniformIndexing =
+                VK_TRUE;
             vulkan12Features.runtimeDescriptorArray = VK_TRUE;
             vulkan12Features.bufferDeviceAddress = VK_TRUE;
             vulkan12Features.scalarBlockLayout = VK_TRUE;
             vulkan12Features.timelineSemaphore = VK_TRUE;
 
+            VkPhysicalDeviceVulkan14Features vulkan14Features{
+                VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES};
+            vulkan14Features.pushDescriptor = VK_TRUE;
+            vulkan14Features.pNext = &vulkan12Features;
+
             VkPhysicalDeviceSynchronization2Features syncFeatures{
                 VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES};
-            syncFeatures.pNext = &vulkan12Features;
+            syncFeatures.pNext = &vulkan14Features;
             syncFeatures.synchronization2 = VK_TRUE;
 
             VkPhysicalDeviceDynamicRenderingFeatures dynamicRenderFeatures{
@@ -350,7 +389,8 @@ namespace im
 
             VkDeviceCreateInfo deviceInfo{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
             deviceInfo.pNext = &features;
-            deviceInfo.queueCreateInfoCount = static_cast<uint32_t>(queueInfos.size());
+            deviceInfo.queueCreateInfoCount =
+                static_cast<uint32_t>(queueInfos.size());
             deviceInfo.pQueueCreateInfos = queueInfos.data();
             deviceInfo.enabledExtensionCount =
                 static_cast<uint32_t>(deviceExtensions.size());
@@ -374,19 +414,23 @@ namespace im
             vulkanFunctions.vkCreateImage = vkCreateImage;
             vulkanFunctions.vkDestroyBuffer = vkDestroyBuffer;
             vulkanFunctions.vkDestroyImage = vkDestroyImage;
-            vulkanFunctions.vkFlushMappedMemoryRanges = vkFlushMappedMemoryRanges;
+            vulkanFunctions.vkFlushMappedMemoryRanges =
+                vkFlushMappedMemoryRanges;
             vulkanFunctions.vkFreeMemory = vkFreeMemory;
-            vulkanFunctions.vkGetBufferMemoryRequirements = vkGetBufferMemoryRequirements;
+            vulkanFunctions.vkGetBufferMemoryRequirements =
+                vkGetBufferMemoryRequirements;
             vulkanFunctions.vkGetDeviceBufferMemoryRequirements =
                 vkGetDeviceBufferMemoryRequirements;
             vulkanFunctions.vkGetDeviceImageMemoryRequirements =
                 vkGetDeviceImageMemoryRequirements;
             vulkanFunctions.vkGetDeviceProcAddr = vkGetDeviceProcAddr;
-            vulkanFunctions.vkGetImageMemoryRequirements = vkGetImageMemoryRequirements;
+            vulkanFunctions.vkGetImageMemoryRequirements =
+                vkGetImageMemoryRequirements;
             vulkanFunctions.vkGetInstanceProcAddr = vkGetInstanceProcAddr;
             vulkanFunctions.vkGetPhysicalDeviceMemoryProperties =
                 vkGetPhysicalDeviceMemoryProperties;
-            vulkanFunctions.vkGetPhysicalDeviceProperties = vkGetPhysicalDeviceProperties;
+            vulkanFunctions.vkGetPhysicalDeviceProperties =
+                vkGetPhysicalDeviceProperties;
             vulkanFunctions.vkInvalidateMappedMemoryRanges =
                 vkInvalidateMappedMemoryRanges;
             vulkanFunctions.vkMapMemory = vkMapMemory;
@@ -396,8 +440,9 @@ namespace im
             allocatorInfo.instance = mInstance;
             allocatorInfo.physicalDevice = mGpu;
             allocatorInfo.device = mDevice;
-            allocatorInfo.flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT |
-                                  VMA_ALLOCATOR_CREATE_KHR_MAINTENANCE5_BIT;
+            allocatorInfo.flags =
+                VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT |
+                VMA_ALLOCATOR_CREATE_KHR_MAINTENANCE5_BIT;
             allocatorInfo.pVulkanFunctions = &vulkanFunctions;
             VK_CHECK(vmaCreateAllocator(&allocatorInfo, &mAllocator));
 
@@ -409,40 +454,45 @@ namespace im
 
     void Device::InitPipelineCache()
     {
-        VkPipelineCacheCreateInfo cacheInfo{VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO};
-        VK_CHECK(vkCreatePipelineCache(mDevice, &cacheInfo, nullptr, &mPipelineCache));
+        VkPipelineCacheCreateInfo cacheInfo{
+            VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO};
+        VK_CHECK(vkCreatePipelineCache(mDevice, &cacheInfo, nullptr,
+                                       &mPipelineCache));
     }
 
     bool Device::InstanceExtensionSupported(const char *name)
     {
         uint32_t extensionCount{};
-        VK_CHECK(
-            vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr));
+        VK_CHECK(vkEnumerateInstanceExtensionProperties(
+            nullptr, &extensionCount, nullptr));
         std::vector<VkExtensionProperties> extensions(extensionCount);
-        VK_CHECK(vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount,
-                                                        extensions.data()));
+        VK_CHECK(vkEnumerateInstanceExtensionProperties(
+            nullptr, &extensionCount, extensions.data()));
 
-        const auto it = std::find_if(extensions.cbegin(), extensions.cend(),
-                                     [name](const VkExtensionProperties &ext) {
-                                         return std::strcmp(name, ext.extensionName) == 0;
-                                     });
+        const auto it =
+            std::find_if(extensions.cbegin(), extensions.cend(),
+                         [name](const VkExtensionProperties &ext) {
+                             return std::strcmp(name, ext.extensionName) == 0;
+                         });
 
         return it != extensions.end();
     }
 
-    bool Device::DeviceExtensionSupported(VkPhysicalDevice gpu, const char *name)
+    bool Device::DeviceExtensionSupported(VkPhysicalDevice gpu,
+                                          const char *name)
     {
         uint32_t extensionCount{};
-        VK_CHECK(
-            vkEnumerateDeviceExtensionProperties(gpu, nullptr, &extensionCount, nullptr));
+        VK_CHECK(vkEnumerateDeviceExtensionProperties(
+            gpu, nullptr, &extensionCount, nullptr));
         std::vector<VkExtensionProperties> extensions(extensionCount);
-        VK_CHECK(vkEnumerateDeviceExtensionProperties(gpu, nullptr, &extensionCount,
-                                                      extensions.data()));
+        VK_CHECK(vkEnumerateDeviceExtensionProperties(
+            gpu, nullptr, &extensionCount, extensions.data()));
 
-        const auto it = std::find_if(extensions.cbegin(), extensions.cend(),
-                                     [name](const VkExtensionProperties &ext) {
-                                         return std::strcmp(name, ext.extensionName) == 0;
-                                     });
+        const auto it =
+            std::find_if(extensions.cbegin(), extensions.cend(),
+                         [name](const VkExtensionProperties &ext) {
+                             return std::strcmp(name, ext.extensionName) == 0;
+                         });
 
         return it != extensions.end();
     }
@@ -451,11 +501,13 @@ namespace im
     {
         VkDebugUtilsMessengerCreateInfoEXT debugInfo{
             VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT};
-        debugInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
-                                VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT |
-                                VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT;
-        debugInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
-                                    VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+        debugInfo.messageType =
+            VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+            VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT |
+            VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT;
+        debugInfo.messageSeverity =
+            VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+            VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
         debugInfo.pfnUserCallback = &DebugMessengerCallback;
         return debugInfo;
     }

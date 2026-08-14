@@ -4,64 +4,72 @@
 
 namespace im
 {
-	DescriptorSetLayout::DescriptorSetLayout(Device& device, std::initializer_list<VkDescriptorSetLayoutBinding> bindings)
-		: mDevice(device)
-	{
-		VkDescriptorSetLayoutCreateInfo setLayoutInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
-		setLayoutInfo.bindingCount = bindings.size();
-		setLayoutInfo.pBindings = bindings.begin();
+    DescriptorSetLayout::DescriptorSetLayout(
+        Device &device,
+        std::initializer_list<VkDescriptorSetLayoutBinding> bindings,
+        VkDescriptorSetLayoutCreateFlags flags)
+        : mDevice(device)
+    {
+        VkDescriptorSetLayoutCreateInfo setLayoutInfo{
+            VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+        setLayoutInfo.bindingCount = bindings.size();
+        setLayoutInfo.pBindings = bindings.begin();
+        setLayoutInfo.flags = flags;
 
-		VK_CHECK(vkCreateDescriptorSetLayout(mDevice.Get(), &setLayoutInfo, nullptr, &mLayout));
+        VK_CHECK(vkCreateDescriptorSetLayout(mDevice.Get(), &setLayoutInfo,
+                                             nullptr, &mLayout));
 
-		for (const auto& binding : bindings)
-		{
-			mBindingMap[binding.descriptorType] += binding.descriptorCount;
-		}
-	}
+        for (const auto &binding : bindings)
+        {
+            mBindingMap[binding.descriptorType] += binding.descriptorCount;
+        }
+    }
 
     DescriptorSetLayout::DescriptorSetLayout(
-		Device& device,
-		std::initializer_list<VkDescriptorSetLayoutBinding> bindings,
-		std::initializer_list<VkDescriptorBindingFlags> flags)
-		: mDevice(device)
+        Device &device,
+        std::initializer_list<VkDescriptorSetLayoutBinding> bindings,
+        std::initializer_list<VkDescriptorBindingFlags> flags)
+        : mDevice(device)
     {
-		VkDescriptorSetLayoutBindingFlagsCreateInfo flagsInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO };
-		flagsInfo.bindingCount = flags.size();
-		flagsInfo.pBindingFlags = flags.begin();
-		
-		VkDescriptorSetLayoutCreateInfo setLayoutInfo{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
-		setLayoutInfo.pNext = &flagsInfo;
-		setLayoutInfo.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT; // Assume UAB
-		setLayoutInfo.bindingCount = bindings.size();
-		setLayoutInfo.pBindings = bindings.begin();
+        VkDescriptorSetLayoutBindingFlagsCreateInfo flagsInfo{
+            VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO};
+        flagsInfo.bindingCount = flags.size();
+        flagsInfo.pBindingFlags = flags.begin();
 
-		VK_CHECK(vkCreateDescriptorSetLayout(mDevice.Get(), &setLayoutInfo, nullptr, &mLayout));
+        VkDescriptorSetLayoutCreateInfo setLayoutInfo{
+            VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+        setLayoutInfo.pNext = &flagsInfo;
+        setLayoutInfo.flags =
+            VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT; // Assume
+                                                                        // UAB
+        setLayoutInfo.bindingCount = bindings.size();
+        setLayoutInfo.pBindings = bindings.begin();
 
-		for (const auto& binding : bindings)
-		{
-			mBindingMap[binding.descriptorType] += binding.descriptorCount;
-		}
+        VK_CHECK(vkCreateDescriptorSetLayout(mDevice.Get(), &setLayoutInfo,
+                                             nullptr, &mLayout));
+
+        for (const auto &binding : bindings)
+        {
+            mBindingMap[binding.descriptorType] += binding.descriptorCount;
+        }
     }
 
     DescriptorSetLayout::~DescriptorSetLayout()
-	{
-		mDevice.WaitIdle();
-		vkDestroyDescriptorSetLayout(mDevice.Get(), mLayout, nullptr);
-	}
+    {
+        mDevice.WaitIdle();
+        vkDestroyDescriptorSetLayout(mDevice.Get(), mLayout, nullptr);
+    }
 
-	VkDescriptorSetLayoutBinding DescriptorSetLayout::Binding(
-		uint32_t index,
-		VkDescriptorType type,
-		VkShaderStageFlags stages,
-		uint32_t count,
-		VkSampler* immutableSampler)
-	{
-		VkDescriptorSetLayoutBinding binding{};
-		binding.binding = index;
-		binding.descriptorCount = count;
-		binding.descriptorType = type;
-		binding.stageFlags = stages;
-		binding.pImmutableSamplers = immutableSampler;
-		return binding;
-	}
-}
+    VkDescriptorSetLayoutBinding DescriptorSetLayout::Binding(
+        uint32_t index, VkDescriptorType type, VkShaderStageFlags stages,
+        uint32_t count, VkSampler *immutableSampler)
+    {
+        VkDescriptorSetLayoutBinding binding{};
+        binding.binding = index;
+        binding.descriptorCount = count;
+        binding.descriptorType = type;
+        binding.stageFlags = stages;
+        binding.pImmutableSamplers = immutableSampler;
+        return binding;
+    }
+} // namespace im

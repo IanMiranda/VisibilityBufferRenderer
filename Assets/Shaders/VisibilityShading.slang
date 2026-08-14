@@ -24,14 +24,14 @@ struct VbShadingData
     Vertex **vertexBuffers;
     uint **indexBuffers;
     float4x4 *transforms;
-    uint *offsetTable;
-    uint *tiles;
+    Atomic<uint> *offsetTable;
+    Atomic<uint> *tiles;
     VbMaterialData *materials;
     uint shaderId;
 }
 
-[vk_push_constant] ConstantBuffer<VbShadingData> gShadingData;
 [vk_binding(0, 0)] RWTexture2D<uint2> gVisBuf;
+[vk_binding(1, 0)] RWTexture2D<float4> gFrameBuf;
 [vk_binding(0, 1)] SamplerState gTrilinearColor;
 [vk_binding(1, 1)] Texture2D gTextures[];
 
@@ -58,11 +58,21 @@ float3 ComputeBarycentrics(float2 pixelCoord, float4 p0, float4 p1, float4 p2)
 
 [numthreads(TILE_SIZE_X, TILE_SIZE_Y, 1)]
 [shader("compute")]
-void CSVisibilityShading(uint3 groupId : SV_GroupID, uint3 tileOffset : SV_GroupThreadID)
+void CSVisibilityShading(uniform VbShadingData gShadingData, uint3 groupId : SV_GroupID, uint3 tileOffset : SV_GroupThreadID)
 {
-    uint tileId = gShadingData.tiles[gShadingData.offsetTable[gShadingData.shaderId] + groupId.x];
-    const uint2 pixelCoord = uint2((tileId >> 16) * TILE_SIZE_X + tileOffset.x,
-                                   (tileId & 0xffff) * TILE_SIZE_Y + tileOffset.y);
+    uint tileId = gShadingData.tiles[gShadingData.offsetTable[gShadingData.shaderId].load() + groupId.x].load();
+    if (gShadingData.offsetTable[gShadingData.shaderId].load() + groupId.x > gShadingData.offsetTable[2].load())
+        printf("What? %d", gShadingData.offsetTable[gShadingData.shaderId].load() + groupId.x);
+
+    const uint2 pixelCoord = uint2((tileId & 0xffff) * TILE_SIZE_X + tileOffset.x,
+                                   (tileId >> 16) * TILE_SIZE_Y + tileOffset.y);
+    if (gShadingData.shaderId == 0)
+    {
+        gFrameBuf.Store(pixelCoord, float4(0, 0, 1, 1));
+        return;
+    }
+    else
+        gFrameBuf.Store(pixelCoord, float4(1, 0, 0, 1));
 
     uint2 triangleInstanceIdx = gVisBuf.Load(pixelCoord);
     uint triangleIdx = triangleInstanceIdx.x;
@@ -91,6 +101,7 @@ void CSVisibilityShading(uint3 groupId : SV_GroupID, uint3 tileOffset : SV_Group
         v0.uv.x * barys.x + v1.uv.x * barys.y + v2.uv.x * barys.z,
         v0.uv.y * barys.x + v1.uv.y * barys.y + v2.uv.y * barys.z,
     );
-    
-    gTextures[gShadingData.materials[instanceIdx].albedoMapIndex].SampleLevel(gTrilinearColor, uv, 0);
+
+    let albedo = gTextures[gShadingData.materials[instanceIdx].albedoMapIndex].SampleLevel(gTrilinearColor, uv, 0);
+    gFrameBuf.Store(pixelCoord, albedo);
 }

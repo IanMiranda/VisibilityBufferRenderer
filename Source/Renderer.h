@@ -42,7 +42,7 @@ namespace im
         {
             return mWindow;
         }
-        Device &GetDevice()
+        constexpr Device &GetDevice()
         {
             return mDevice;
         }

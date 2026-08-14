@@ -49,7 +49,8 @@ namespace im
     {
         Swapchain &swapchain = mDevice.GetSwapchain();
 
-        mTimelineSemaphore.WaitForTime(mFrames[mFrameIndex].timestampOfCompletion);
+        mTimelineSemaphore.WaitForTime(
+            mFrames[mFrameIndex].timestampOfCompletion);
 
         auto [res, imageIndex] =
             swapchain.AcquireNextImage(*mFrames[mFrameIndex].acquireSemaphore);
@@ -63,27 +64,15 @@ namespace im
             VK_CHECK(res);
         }
 
-        ImGui_ImplVulkan_NewFrame();
-        ImGui_ImplGlfw_NewFrame();
-        ImGui::NewFrame();
+        // ImGui_ImplVulkan_NewFrame();
+        // ImGui_ImplGlfw_NewFrame();
+        // ImGui::NewFrame();
 
-        ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(),
-                                     ImGuiDockNodeFlags_PassthruCentralNode);
+        // ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(),
+        //                              ImGuiDockNodeFlags_PassthruCentralNode);
 
         auto &commandBuffer = *mFrames[mFrameIndex].commandBuffer;
         commandBuffer.Begin();
-
-        commandBuffer.Barrier(
-            {},
-            {ImageMemoryBarrier(
-                mDevice.GetSwapchain()
-                    .GetImages()[mDevice.GetSwapchain().GetImageIndex()],
-                VK_IMAGE_LAYOUT_UNDEFINED,
-                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_NONE,
-                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, VK_IMAGE_ASPECT_COLOR_BIT)},
-            {});
 
         return true;
     }
@@ -95,40 +84,79 @@ namespace im
         // mBackend.End(commandBuffer, mFrameIndex);
         mBackend.End(*this, commandBuffer, mFrameIndex);
 
-        commandBuffer.BeginRendering(
-            {ColorAttachment(
-                mDevice.GetSwapchain().GetViews()[mDevice.GetSwapchain().GetImageIndex()],
-                VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE)},
-            Scissor(mDevice.GetSwapchain().GetExtent()));
-
-        ImGui::Render();
-        ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer.Get());
-
-        commandBuffer.EndRendering();
+        // commandBuffer.Barrier(
+        //     {},
+        //     {ImageMemoryBarrier(
+        //         mDevice.GetSwapchain()
+        //             .GetImages()[mDevice.GetSwapchain().GetImageIndex()],
+        //         VK_IMAGE_LAYOUT_GENERAL,
+        //         VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        //         VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT,
+        //         VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        //         VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+        //         VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT |
+        //             VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT,
+        //         VK_IMAGE_ASPECT_COLOR_BIT)},
+        //     {});
 
         commandBuffer.Barrier(
             {},
-            {ImageMemoryBarrier(mDevice.GetSwapchain()
-                                    .GetImages()[mDevice.GetSwapchain().GetImageIndex()],
-                                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                                VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-                                VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_PIPELINE_STAGE_2_NONE,
-                                VK_ACCESS_2_NONE, VK_IMAGE_ASPECT_COLOR_BIT)},
+            {ImageMemoryBarrier(
+                mDevice.GetSwapchain()
+                    .GetImages()[mDevice.GetSwapchain().GetImageIndex()],
+                VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT,
+                VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_PIPELINE_STAGE_2_NONE,
+                VK_ACCESS_2_NONE, VK_IMAGE_ASPECT_COLOR_BIT)},
             {});
+
+        commandBuffer.Barrier(
+            {MemoryBarrier(
+                VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT,
+                VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT)},
+            {}, {});
+
+        // commandBuffer.BeginRendering(
+        //     {ColorAttachment(
+        //         mDevice.GetSwapchain()
+        //             .GetViews()[mDevice.GetSwapchain().GetImageIndex()],
+        //         VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE)},
+        //     Scissor(mDevice.GetSwapchain().GetExtent()));
+
+        // ImGui::Render();
+        // ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(),
+        //                                 commandBuffer.Get());
+
+        // commandBuffer.EndRendering();
+
+        // commandBuffer.Barrier(
+        //     {},
+        //     {ImageMemoryBarrier(
+        //         mDevice.GetSwapchain()
+        //             .GetImages()[mDevice.GetSwapchain().GetImageIndex()],
+        //         VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        //         VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+        //         VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT |
+        //             VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT,
+        //         VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_PIPELINE_STAGE_2_NONE,
+        //         VK_ACCESS_2_NONE, VK_IMAGE_ASPECT_COLOR_BIT)},
+        //     {});
 
         commandBuffer.End();
 
-        mDevice.Submit({commandBuffer},
-                       {{*mFrames[mFrameIndex].acquireSemaphore,
-                         VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT}},
-                       {{mTimelineSemaphore, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-                         mNextTimestampOfCompletion},
-                        {*mRenderSemaphores[mDevice.GetSwapchain().GetImageIndex()],
-                         VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT}});
+        mDevice.Submit(
+            {commandBuffer},
+            {{*mFrames[mFrameIndex].acquireSemaphore,
+              VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT}},
+            {{mTimelineSemaphore, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+              mNextTimestampOfCompletion},
+             {*mRenderSemaphores[mDevice.GetSwapchain().GetImageIndex()],
+              VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT}});
 
-        ImGui::UpdatePlatformWindows();
-        ImGui::RenderPlatformWindowsDefault();
+        // ImGui::UpdatePlatformWindows();
+        // ImGui::RenderPlatformWindowsDefault();
 
         VkResult res = mDevice.GetSwapchain().Present(
             *mRenderSemaphores[mDevice.GetSwapchain().GetImageIndex()]);
@@ -150,8 +178,8 @@ namespace im
 
     void Renderer::BeginScene(Scene &scene)
     {
-        mBackend.BeginScene(*mFrames[mFrameIndex].commandBuffer, *mDepthImage.view,
-                            mFrameIndex);
+        mBackend.BeginScene(*mFrames[mFrameIndex].commandBuffer,
+                            *mDepthImage.view, mFrameIndex);
     }
 
     void Renderer::DrawBatch(Scene &scene, const std::vector<VbObject> &batch)
@@ -172,25 +200,26 @@ namespace im
     {
         const auto swapExtent = mDevice.GetSwapchain().GetExtent();
         Texture2D res;
-        res.image = std::make_unique<Image>(mDevice, mDevice.GetDepthFormat(),
-                                            VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-                                            swapExtent.width, swapExtent.height, 1, 1,
-                                            VK_IMAGE_TYPE_2D, 1);
-        res.view = std::make_unique<ImageView>(mDevice, *res.image, VK_IMAGE_VIEW_TYPE_2D,
-                                               VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1);
+        res.image = std::make_unique<Image>(
+            mDevice, mDevice.GetDepthFormat(),
+            VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, swapExtent.width,
+            swapExtent.height, 1, 1, VK_IMAGE_TYPE_2D, 1);
+        res.view = std::make_unique<ImageView>(
+            mDevice, *res.image, VK_IMAGE_VIEW_TYPE_2D,
+            VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1);
 
         mDevice.RunImmediateCommands([&res](CommandBuffer &cmds) {
-            cmds.Barrier(
-                {},
-                {ImageMemoryBarrier(*res.image, VK_IMAGE_LAYOUT_UNDEFINED,
-                                    VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE,
-                                    VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-                                    VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT |
-                                        VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
-                                    VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
-                                        VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-                                    VK_IMAGE_ASPECT_DEPTH_BIT)},
-                {});
+            cmds.Barrier({},
+                         {ImageMemoryBarrier(
+                             *res.image, VK_IMAGE_LAYOUT_UNDEFINED,
+                             VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE,
+                             VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+                             VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT |
+                                 VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+                             VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+                                 VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+                             VK_IMAGE_ASPECT_DEPTH_BIT)},
+                         {});
         });
         return res;
     }
@@ -212,7 +241,8 @@ namespace im
 
         for (size_t i = 0; i < mDevice.GetSwapchain().GetViews().size(); ++i)
         {
-            mRenderSemaphores.emplace_back(std::make_unique<Semaphore>(mDevice));
+            mRenderSemaphores.emplace_back(
+                std::make_unique<Semaphore>(mDevice));
         }
 
         for (size_t i = 0; i < MaxFramesInFlight; ++i)
@@ -253,7 +283,8 @@ namespace im
         imguiVulkanInfo.Queue = mDevice.GetGraphicsQueue();
         imguiVulkanInfo.QueueFamily = mDevice.GetGraphicsIndex();
         imguiVulkanInfo.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
-        imguiVulkanInfo.PipelineInfoMain.PipelineRenderingCreateInfo = renderingInfo;
+        imguiVulkanInfo.PipelineInfoMain.PipelineRenderingCreateInfo =
+            renderingInfo;
 
         ImGui_ImplVulkan_Init(&imguiVulkanInfo);
     }

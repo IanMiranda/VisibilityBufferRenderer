@@ -3,6 +3,7 @@
 #include "API/Buffer.h"
 #include "API/CommandBuffer.h"
 #include "API/DescriptorSet.h"
+#include "API/Device.h"
 #include "API/PipelineLayout.h"
 #include "API/RenderPass.h"
 #include "API/Shader.h"
@@ -72,7 +73,10 @@ namespace im
           mShadeDsl(
               renderer.GetDevice(),
               {DescriptorSetLayout::Binding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-                                            VK_SHADER_STAGE_COMPUTE_BIT)}),
+                                            VK_SHADER_STAGE_COMPUTE_BIT),
+               DescriptorSetLayout::Binding(1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                                            VK_SHADER_STAGE_COMPUTE_BIT)},
+              VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT),
           mShadePipeLayout(
               renderer.GetDevice(),
               {std::ref(mShadeDsl), std::ref(mBindlessSet.GetSetLayout())},
@@ -106,7 +110,8 @@ namespace im
                       GetTileCount(
                           renderer.GetDevice().GetSwapchain().GetExtent()) *
                       sizeof(VbWorkItem),
-                  VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT |
+                  VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+                      VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT |
                       VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT))),
           mShaderIdToTileCounts(InitBuffers(
               renderer, maxFramesInFlight,
@@ -181,7 +186,8 @@ namespace im
                                 VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE,
                                 VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                                 VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                                VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+                                VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT |
+                                    VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT,
                                 VK_IMAGE_ASPECT_COLOR_BIT)},
             {BufferMemoryBarrier(*mWorkListCounters[frameIndex],
                                  VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE,
@@ -205,25 +211,28 @@ namespace im
 
         cmd.Barrier(
             {}, {},
-            {BufferMemoryBarrier(*mWorkListCounters[frameIndex],
-                                 VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE,
-                                 VK_PIPELINE_STAGE_2_CLEAR_BIT,
-                                 VK_ACCESS_2_TRANSFER_WRITE_BIT),
-             BufferMemoryBarrier(*mWorkLists[frameIndex],
-                                 VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE,
-                                 VK_PIPELINE_STAGE_2_CLEAR_BIT,
-                                 VK_ACCESS_2_TRANSFER_WRITE_BIT),
-             BufferMemoryBarrier(*mShaderIdToTileCounts[frameIndex],
-                                 VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE,
-                                 VK_PIPELINE_STAGE_2_CLEAR_BIT,
-                                 VK_ACCESS_2_TRANSFER_WRITE_BIT)});
+            {BufferMemoryBarrier(
+                 *mWorkListCounters[frameIndex], VK_PIPELINE_STAGE_2_CLEAR_BIT,
+                 VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                 VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                 VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT),
+             BufferMemoryBarrier(
+                 *mWorkLists[frameIndex], VK_PIPELINE_STAGE_2_CLEAR_BIT,
+                 VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                 VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                 VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT),
+             BufferMemoryBarrier(
+                 *mShaderIdToTileCounts[frameIndex],
+                 VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                 VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                 VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT)});
 
         cmd.BeginRendering({ColorAttachment(mVisBuffers[frameIndex].view->Get(),
                                             VK_ATTACHMENT_LOAD_OP_CLEAR,
                                             VK_ATTACHMENT_STORE_OP_STORE)},
                            DepthAttachment(depthView.Get(),
                                            VK_ATTACHMENT_LOAD_OP_CLEAR,
-                                           VK_ATTACHMENT_STORE_OP_DONT_CARE),
+                                           VK_ATTACHMENT_STORE_OP_STORE),
                            Scissor(mVisBuffers[frameIndex].image->GetExtent()));
 
         cmd.BindGraphicsPipeline(mVisPipe);
@@ -243,7 +252,7 @@ namespace im
         ++mInstanceToShaderIdMapPtr;
         ++mVertexBuffersPtr;
         ++mIndexBuffersPtr;
-        mTransformBufferPtr += sizeof(glm::mat4);
+        mTransformBufferPtr += 16;
         ++mMaterialBufferPtr;
     }
 
@@ -269,7 +278,7 @@ namespace im
             *mInstanceToShaderIdMapPtr = 1; // TODO: support multiple materials?
             ++mInstanceToShaderIdMapPtr;
 
-            *mVertexBuffersPtr = vboAddress;
+            *mVertexBuffersPtr = object.mesh->vertexBuffer->GetAddress();
             ++mVertexBuffersPtr;
 
             *mIndexBuffersPtr = object.mesh->indexBuffer->GetAddress();
@@ -278,7 +287,7 @@ namespace im
             std::memcpy(mTransformBufferPtr,
                         glm::value_ptr(passData.modelViewProj),
                         sizeof(passData.modelViewProj));
-            ++mTransformBufferPtr;
+            mTransformBufferPtr += 16;
 
             VbMaterialData material{};
             material.albedoMapIndex =
@@ -302,8 +311,9 @@ namespace im
                 *mVisBuffers[frameIndex].image,
                 VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                 VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT |
+                    VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT,
+                VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
                 VK_ACCESS_2_SHADER_READ_BIT, VK_IMAGE_ASPECT_COLOR_BIT)},
             {});
 
@@ -352,22 +362,24 @@ namespace im
                      (buildData.windowSize.y + TileSize.y - 1) / TileSize.y, 1);
 
         // Sort pass
-        cmd.Barrier({}, {},
-                    {BufferMemoryBarrier(*mWorkListCounters[frameIndex],
-                                         VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                                         VK_ACCESS_2_SHADER_WRITE_BIT,
-                                         VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                                         VK_ACCESS_2_SHADER_READ_BIT),
-                     BufferMemoryBarrier(*mWorkLists[frameIndex],
-                                         VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                                         VK_ACCESS_2_SHADER_WRITE_BIT,
-                                         VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                                         VK_ACCESS_2_SHADER_READ_BIT),
-                     BufferMemoryBarrier(*mShaderIdToTileCounts[frameIndex],
-                                         VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                                         VK_ACCESS_2_SHADER_WRITE_BIT,
-                                         VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                                         VK_ACCESS_2_SHADER_READ_BIT)});
+        cmd.Barrier(
+            {}, {},
+            {BufferMemoryBarrier(
+                 *mWorkListCounters[frameIndex],
+                 VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                 VK_ACCESS_2_SHADER_WRITE_BIT | VK_ACCESS_2_SHADER_READ_BIT,
+                 VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                 VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT),
+             BufferMemoryBarrier(*mWorkLists[frameIndex],
+                                 VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                                 VK_ACCESS_2_SHADER_WRITE_BIT,
+                                 VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                                 VK_ACCESS_2_SHADER_READ_BIT),
+             BufferMemoryBarrier(*mShaderIdToTileCounts[frameIndex],
+                                 VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                                 VK_ACCESS_2_SHADER_WRITE_BIT,
+                                 VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                                 VK_ACCESS_2_SHADER_READ_BIT)});
 
         cmd.Barrier(
             {MemoryBarrier(
@@ -402,6 +414,46 @@ namespace im
             {}, {});
 
         // Finally, the shading pass
+
+        cmd.Barrier(
+            {},
+            {ImageMemoryBarrier(
+                renderer.GetDevice().GetSwapchain().GetImages()
+                    [renderer.GetDevice().GetSwapchain().GetImageIndex()],
+                VK_IMAGE_LAYOUT_UNDEFINED,
+                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_GENERAL,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT |
+                    VK_PIPELINE_STAGE_2_CLEAR_BIT,
+                VK_ACCESS_2_SHADER_STORAGE_READ_BIT |
+                    VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT |
+                    VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                VK_IMAGE_ASPECT_COLOR_BIT)},
+            {});
+
+        // TODO: maybe just transfer DST?
+        VkClearColorValue color = {0.0f, 0.0f, 0.0f, 1.0f};
+        VkImageSubresourceRange subres{};
+        subres.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        subres.baseArrayLayer = 0;
+        subres.layerCount = 1;
+        subres.baseMipLevel = 0;
+        subres.levelCount = 1;
+
+        vkCmdClearColorImage(
+            cmd.Get(),
+            renderer.GetDevice().GetSwapchain().GetImages()
+                [renderer.GetDevice().GetSwapchain().GetImageIndex()],
+            VK_IMAGE_LAYOUT_GENERAL, &color, 1, &subres);
+
+        cmd.Barrier(
+            {MemoryBarrier(
+                VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT,
+                VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT)},
+            {}, {});
+
         VbShadingData shadingData{};
         shadingData.instanceToShaderIdMap =
             mInstanceToShaderIdMaps[frameIndex]->GetAddress();
@@ -414,14 +466,69 @@ namespace im
         shadingData.shaderId = 1;
 
         cmd.BindComputePipeline(mShadePipe);
-        cmd.BindComputeDescriptorSets(mShadePipeLayout, 0,
-                                      {std::ref(*mWorkListDescSets[frameIndex]),
-                                       std::ref(mBindlessSet.Get())});
+
+        VkDescriptorImageInfo visBufDesc{};
+        visBufDesc.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+        visBufDesc.imageView = mVisBuffers[frameIndex].view->Get();
+
+        VkDescriptorImageInfo frameBufDesc{};
+        frameBufDesc.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+        frameBufDesc.imageView =
+            renderer.GetDevice().GetSwapchain().GetViews()
+                [renderer.GetDevice().GetSwapchain().GetImageIndex()];
+
+        std::array<VkWriteDescriptorSet, 2> bufferWrites{};
+        bufferWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        bufferWrites[0].pImageInfo = &visBufDesc;
+        bufferWrites[0].pTexelBufferView = nullptr;
+        bufferWrites[0].pBufferInfo = nullptr;
+        bufferWrites[0].descriptorCount = 1;
+        bufferWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        bufferWrites[0].dstArrayElement = 0;
+        bufferWrites[0].dstBinding = 0;
+        bufferWrites[0].pNext = nullptr;
+        bufferWrites[0].dstSet = 0;
+        bufferWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        bufferWrites[1].pImageInfo = &frameBufDesc;
+        bufferWrites[1].pTexelBufferView = nullptr;
+        bufferWrites[1].pBufferInfo = nullptr;
+        bufferWrites[1].descriptorCount = 1;
+        bufferWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        bufferWrites[1].dstArrayElement = 0;
+        bufferWrites[1].dstBinding = 1;
+        bufferWrites[1].pNext = nullptr;
+        bufferWrites[1].dstSet = 0;
+
+        vkCmdPushDescriptorSet(cmd.Get(), VK_PIPELINE_BIND_POINT_COMPUTE,
+                               mShadePipeLayout.Get(), 0, bufferWrites.size(),
+                               bufferWrites.data());
+
+        cmd.BindComputeDescriptorSets(mShadePipeLayout, 1,
+                                      {std::ref(mBindlessSet.Get())});
         cmd.PushConstants(mShadePipeLayout, VK_SHADER_STAGE_COMPUTE_BIT,
                           shadingData);
 
         vkCmdDispatchIndirect(cmd.Get(), mIndirectBuffers[frameIndex]->Get(),
                               0 * sizeof(VbDispatchIndirectCommand));
+
+        cmd.Barrier(
+            {MemoryBarrier(
+                VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT,
+                VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT)},
+            {}, {});
+
+        vkCmdDispatchIndirect(cmd.Get(), mIndirectBuffers[frameIndex]->Get(),
+                              1 * sizeof(VbDispatchIndirectCommand));
+
+        cmd.Barrier(
+            {MemoryBarrier(
+                VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT,
+                VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT)},
+            {}, {});
 
         mCurrentInstance = 1;
     }
@@ -468,6 +575,15 @@ namespace im
             visBuf.view = std::make_unique<ImageView>(
                 renderer.GetDevice(), *visBuf.image, VK_IMAGE_VIEW_TYPE_2D,
                 VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1);
+
+            renderer.GetDevice().SetDebugName(
+                VK_OBJECT_TYPE_IMAGE, (uint64_t)visBuf.image->Get(),
+                fmt::format("Visibility Image {}", i));
+
+            renderer.GetDevice().SetDebugName(
+                VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)visBuf.view->Get(),
+                fmt::format("Visibility ImageView {}", i));
+
             res.emplace_back(std::move(visBuf));
         }
 
