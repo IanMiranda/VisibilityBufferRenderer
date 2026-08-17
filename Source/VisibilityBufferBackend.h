@@ -66,6 +66,7 @@ namespace im
         VkDeviceAddress offsetTable;
         VkDeviceAddress tiles;
         VkDeviceAddress materials;
+        glm::uvec2 screenSize;
         uint32_t shaderId;
     };
 

@@ -27,6 +27,7 @@ struct VbShadingData
     Atomic<uint> *offsetTable;
     Atomic<uint> *tiles;
     VbMaterialData *materials;
+    uint2 screenSize;
     uint shaderId;
 }
 
@@ -41,17 +42,26 @@ float EdgeFunction(float2 pixelCoord, float2 edgeNormal, float2 pointOnEdge)
     return dot(edgeNormal, pixelCoord - pointOnEdge);
 }
 
+float2 rotate90Ccw(float2 toRotate)
+{
+    return float2(-toRotate.y, toRotate.x);
+}
+
 // Perspective-correct interpolation for vertices, as discussed in
 // Real-time Rendering Ch. 23
 float3 ComputeBarycentrics(float2 pixelCoord, float4 p0, float4 p1, float4 p2)
 {
-    float e0 = EdgeFunction(pixelCoord, p2.xy - p1.xy, p1.xy);
-    float e1 = EdgeFunction(pixelCoord, p0.xy - p2.xy, p2.xy);
-    float e2 = EdgeFunction(pixelCoord, p1.xy - p0.xy, p0.xy);
+    let p0xy = p0.xy / p0.w;
+    let p1xy = p1.xy / p1.w;
+    let p2xy = p2.xy / p2.w;
+    
+    float e0 = EdgeFunction(pixelCoord, rotate90Ccw(p2xy - p1xy), p1xy);
+    float e1 = EdgeFunction(pixelCoord, rotate90Ccw(p0xy - p2xy), p2xy);
+    float e2 = EdgeFunction(pixelCoord, rotate90Ccw(p1xy - p0xy), p0xy);
 
-    float f0 = e0 / p0.w;
-    float f1 = e1 / p1.w;
-    float f2 = e2 / p2.w;
+    float f0 = e0 * p0.w;
+    float f1 = e1 * p1.w;
+    float f2 = e2 * p2.w;
 
     return float3(f0, f1, f2) * rcp(f0 + f1 + f2);
 }
@@ -61,19 +71,12 @@ float3 ComputeBarycentrics(float2 pixelCoord, float4 p0, float4 p1, float4 p2)
 void CSVisibilityShading(uniform VbShadingData gShadingData, uint3 groupId : SV_GroupID, uint3 tileOffset : SV_GroupThreadID)
 {
     uint tileId = gShadingData.tiles[gShadingData.offsetTable[gShadingData.shaderId].load() + groupId.x].load();
-    if (gShadingData.offsetTable[gShadingData.shaderId].load() + groupId.x > gShadingData.offsetTable[2].load())
-        printf("What? %d", gShadingData.offsetTable[gShadingData.shaderId].load() + groupId.x);
 
-    const uint2 pixelCoord = uint2((tileId & 0xffff) * TILE_SIZE_X + tileOffset.x,
+    let pixelCoord = uint2((tileId & 0xffff) * TILE_SIZE_X + tileOffset.x,
                                    (tileId >> 16) * TILE_SIZE_Y + tileOffset.y);
-    if (gShadingData.shaderId == 0)
-    {
-        gFrameBuf.Store(pixelCoord, float4(0, 0, 1, 1));
-        return;
-    }
-    else
-        gFrameBuf.Store(pixelCoord, float4(1, 0, 0, 1));
+    let pixelClipSpace = ((pixelCoord + float2(0.5, 0.5)) / gShadingData.screenSize * 2.0) - 1.0;
 
+    // Fetch relevant geometry info
     uint2 triangleInstanceIdx = gVisBuf.Load(pixelCoord);
     uint triangleIdx = triangleInstanceIdx.x;
     uint instanceIdx = triangleInstanceIdx.y;
@@ -94,7 +97,7 @@ void CSVisibilityShading(uniform VbShadingData gShadingData, uint3 groupId : SV_
     let p2 = mul(gShadingData.transforms[instanceIdx], float4(v2.position, 1.0));
 
     // Finally, compute bary coords and interpolate
-    let barys = ComputeBarycentrics(pixelCoord, p0, p1, p2);
+    let barys = ComputeBarycentrics(pixelClipSpace, p0, p1, p2);
 
     // Use this to sample from the appropriate material
     float2 uv = float2(

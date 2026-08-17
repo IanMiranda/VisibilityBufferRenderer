@@ -463,6 +463,7 @@ namespace im
         shadingData.offsetTable = mOffsetTables[frameIndex]->GetAddress();
         shadingData.tiles = mTileBuffers[frameIndex]->GetAddress();
         shadingData.materials = mMaterialBuffers[frameIndex]->GetAddress();
+        shadingData.screenSize = buildData.windowSize;
         shadingData.shaderId = 1;
 
         cmd.BindComputePipeline(mShadePipe);
