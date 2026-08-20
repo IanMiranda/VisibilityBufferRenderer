@@ -55,12 +55,12 @@ namespace im
 
     struct VbMaterialData
     {
-        uint albedoMapIndex;
-        uint metallicMapIndex;
-        uint roughnessMapIndex;
-        uint normalMapIndex;
-        uint aoMapIndex;
-        uint emissiveMapIndex;
+        uint32_t albedoMapIndex;
+        uint32_t metallicMapIndex;
+        uint32_t roughnessMapIndex;
+        uint32_t normalMapIndex;
+        uint32_t aoMapIndex;
+        uint32_t emissiveMapIndex;
     };
 
     struct VbShadingData
@@ -97,7 +97,7 @@ namespace im
     struct VbLightData
     {
         PointLight lights[NumLights];
-        uint lightCount{0};
+        uint32_t lightCount{0};
     };
 
     class VisibilityBufferBackend
