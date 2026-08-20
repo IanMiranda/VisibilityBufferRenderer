@@ -379,7 +379,7 @@ namespace im
             VkPhysicalDeviceFeatures2 features{
                 VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
             features.pNext = &dynamicRenderFeatures;
-            // features.features.geometryShader = VK_TRUE;
+            features.features.geometryShader = VK_TRUE;
             features.features.multiDrawIndirect = VK_TRUE;
 
             if (DeviceExtensionSupported(gpu, "VK_KHR_portability_subset"))

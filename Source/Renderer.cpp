@@ -178,13 +178,14 @@ namespace im
 
     void Renderer::BeginScene(Scene &scene)
     {
-        mBackend.BeginScene(*mFrames[mFrameIndex].commandBuffer,
+        mBackend.BeginScene(scene, *mFrames[mFrameIndex].commandBuffer,
                             *mDepthImage.view, mFrameIndex);
     }
 
     void Renderer::DrawBatch(Scene &scene, const std::vector<VbObject> &batch)
     {
-        mBackend.DrawBatch(scene, *mFrames[mFrameIndex].commandBuffer, batch);
+        mBackend.DrawBatch(scene, *mFrames[mFrameIndex].commandBuffer, batch,
+                           mFrameIndex);
     }
 
     void Renderer::RecreateSwapchain()

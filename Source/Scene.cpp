@@ -42,18 +42,14 @@ namespace im
         const auto [helmetVertices, helmetIndices] =
             utils::LoadGltfModel("./Assets/Models/Helmet/DamagedHelmet2.gltf");
 
-        Buffer stagingVbo(
-            renderer.GetDevice(),
-            BufferDesc(helmetVertices.size() * sizeof(helmetVertices[0]),
-                       VK_BUFFER_USAGE_2_TRANSFER_SRC_BIT,
-                       VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT),
-            helmetVertices.data());
+        Buffer stagingVbo(renderer.GetDevice(),
+                          BufferDesc::Upload(helmetVertices.size() *
+                                             sizeof(helmetVertices[0])),
+                          helmetVertices.data());
 
         Buffer stagingIbo(
             renderer.GetDevice(),
-            BufferDesc(helmetIndices.size() * sizeof(helmetIndices[0]),
-                       VK_BUFFER_USAGE_2_TRANSFER_SRC_BIT,
-                       VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT),
+            BufferDesc::Upload(helmetIndices.size() * sizeof(helmetIndices[0])),
             helmetIndices.data());
         auto vertexBuffer = std::make_unique<Buffer>(
             renderer.GetDevice(),
@@ -76,7 +72,8 @@ namespace im
 
         auto helmetMesh = std::make_shared<VbMesh>(
             std::move(vertexBuffer), std::move(indexBuffer),
-            static_cast<uint32_t>(helmetIndices.size()));
+            static_cast<uint32_t>(
+                helmetIndices.size())); // TODO: reset to indices.size()
 
         for (float z = -3.0f; z <= 3.0f; z += 1.0f)
         {

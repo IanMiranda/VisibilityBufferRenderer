@@ -11,6 +11,7 @@
 #include "BindlessSet.h"
 #include "Common.h"
 #include "DescriptorSetAllocator.h"
+#include "Light.h"
 #include "vulkan/vulkan_core.h"
 
 namespace im
@@ -54,7 +55,12 @@ namespace im
 
     struct VbMaterialData
     {
-        uint32_t albedoMapIndex;
+        uint albedoMapIndex;
+        uint metallicMapIndex;
+        uint roughnessMapIndex;
+        uint normalMapIndex;
+        uint aoMapIndex;
+        uint emissiveMapIndex;
     };
 
     struct VbShadingData
@@ -78,16 +84,33 @@ namespace im
         uint32_t pad;
     };
 
+    struct VbConstantData
+    {
+        glm::mat4 view;
+        glm::mat4 viewProj;
+        glm::mat4 viewProjLight;
+        glm::mat4 viewInverse;
+    };
+
+    inline constexpr int NumLights = 1024;
+
+    struct VbLightData
+    {
+        PointLight lights[NumLights];
+        uint lightCount{0};
+    };
+
     class VisibilityBufferBackend
     {
     public:
         VisibilityBufferBackend(Renderer &renderer, size_t maxFramesInFlight,
                                 Image &depthImage);
 
-        void BeginScene(CommandBuffer &cmd, ImageView &depthView,
+        void BeginScene(Scene &scene, CommandBuffer &cmd, ImageView &depthView,
                         uint32_t frameIndex);
         void DrawBatch(Scene &scene, CommandBuffer &cmd,
-                       const std::vector<VbObject> &objects);
+                       const std::vector<VbObject> &objects,
+                       uint32_t frameIndex);
         void End(Renderer &renderer, CommandBuffer &cmd, uint32_t frameIndex);
 
         void ResizeBuffers(Renderer &renderer, size_t maxFramesInFlight);
@@ -107,6 +130,20 @@ namespace im
         static constexpr glm::uvec2 TileSize{16, 16};
         static constexpr uint32_t GroupSize{256};
 
+    private:
+        TextureCube EquirectangularToCubemap(Renderer &renderer,
+                                             Image &depthImage,
+                                             ImageView &eqMap);
+        TextureCube CalculateDiffuseIrradiance(Renderer &renderer,
+                                               Image &depthImage,
+                                               ImageView &cubeMap);
+        TextureCube PrefilterEnvMap(Renderer &renderer, Image &depthImage,
+                                    ImageView &cubeMap);
+        Texture2D GenerateBrdfLut(Renderer &renderer, Image &depthImage);
+
+        Buffer CreateCubeVertexBuffer(Renderer &renderer);
+
+    private:
         DescriptorSetAllocator mSetAllocator;
 
         PipelineLayout mVisPipeLayout;
@@ -122,6 +159,7 @@ namespace im
         ComputePipeline mSortPipe;
 
         DescriptorSetLayout mShadeDsl;
+        DescriptorSetLayout mShadeLightDsl;
         PipelineLayout mShadePipeLayout;
         ComputePipeline mShadePipe;
 
@@ -137,7 +175,16 @@ namespace im
         std::vector<std::unique_ptr<Buffer>> mTransformBuffers;
         std::vector<std::unique_ptr<Buffer>> mMaterialBuffers;
         std::vector<std::unique_ptr<Buffer>> mIndirectBuffers;
+        std::vector<std::unique_ptr<Buffer>> mShadeConstants;
+        std::vector<std::unique_ptr<Buffer>> mLightData;
         std::vector<std::unique_ptr<DescriptorSet>> mWorkListDescSets;
+        std::vector<std::unique_ptr<DescriptorSet>> mLightDescSets;
+
+        TextureCube mEnvMap;
+        TextureCube mIrradianceMap;
+        TextureCube mPrefilteredEnvMap;
+        Texture2D mBrdfLut;
+
         uint32_t mCurrentInstance{1};
 
         uint32_t *mInstanceToShaderIdMapPtr{nullptr};
