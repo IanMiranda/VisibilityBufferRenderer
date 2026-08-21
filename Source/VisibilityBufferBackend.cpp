@@ -4,6 +4,7 @@
 #include "API/CommandBuffer.h"
 #include "API/DescriptorSet.h"
 #include "API/Device.h"
+#include "API/GraphicsPipeline.h"
 #include "API/PipelineLayout.h"
 #include "API/RenderPass.h"
 #include "API/Shader.h"
@@ -278,6 +279,43 @@ namespace im
                 .Update();
             mLightDescSets.emplace_back(std::move(set));
         }
+
+        // Create environment pipeline
+        mEnvMapSetLayout = std::make_unique<DescriptorSetLayout>(
+            renderer.GetDevice(),
+            std::initializer_list{DescriptorSetLayout::Binding(
+                0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                VK_SHADER_STAGE_FRAGMENT_BIT)});
+
+        mEnvMapPipeLayout = std::make_unique<PipelineLayout>(
+            renderer.GetDevice(),
+            std::initializer_list{std::ref(*mEnvMapSetLayout)},
+            std::initializer_list{PushConstantRange(VK_SHADER_STAGE_VERTEX_BIT,
+                                                    sizeof(CubemapData))});
+
+        mEnvMapPipe = std::make_unique<GraphicsPipeline>(
+            renderer.GetDevice(),
+            GraphicsPipelineDesc(
+                *mEnvMapPipeLayout,
+                Shader(renderer.GetDevice(), "./Assets/Shaders/Bin/Cubemap.spv")
+                    .AddStage(VK_SHADER_STAGE_VERTEX_BIT, "VSMain")
+                    .AddStage(VK_SHADER_STAGE_FRAGMENT_BIT, "FSMain"),
+                {}, InputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST),
+                Rasterizer(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE,
+                           VK_POLYGON_MODE_FILL),
+                Multisample(VK_SAMPLE_COUNT_1_BIT),
+                {ColorAttachment(
+                    renderer.GetDevice().GetSwapchain().GetFormat())},
+                {DepthStencil(renderer.GetDevice().GetDepthFormat(),
+                              VK_COMPARE_OP_EQUAL, false)}));
+
+        mEnvMapSet = mSetAllocator.Allocate(*mEnvMapSetLayout);
+        mEnvMapSet
+            ->PushWrite(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                        *mEnvMap.view,
+                        renderer.GetDevice().GetSamplers().TrilinearColor(),
+                        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+            .Update();
     }
 
     void VisibilityBufferBackend::BeginScene(Scene &scene, CommandBuffer &cmd,
@@ -410,9 +448,8 @@ namespace im
             *mIndexBuffersPtr = object.mesh->indexBuffer->GetAddress();
             ++mIndexBuffersPtr;
 
-            std::memcpy(mTransformBufferPtr,
-                        glm::value_ptr(passData.modelViewProj),
-                        sizeof(passData.modelViewProj));
+            std::memcpy(mTransformBufferPtr, glm::value_ptr(object.transform),
+                        sizeof(object.transform));
             mTransformBufferPtr += 16;
 
             VbMaterialData material{};
@@ -436,7 +473,8 @@ namespace im
         }
     }
 
-    void VisibilityBufferBackend::End(Renderer &renderer, CommandBuffer &cmd,
+    void VisibilityBufferBackend::End(Renderer &renderer, Scene &scene,
+                                      CommandBuffer &cmd, ImageView &depthView,
                                       uint32_t frameIndex)
     {
         cmd.EndRendering();
@@ -697,6 +735,23 @@ namespace im
                     VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
                 VK_IMAGE_ASPECT_COLOR_BIT)},
             {});
+
+        cmd.BeginRendering(
+            {ColorAttachment(
+                renderer.GetDevice().GetSwapchain().GetViews()
+                    [renderer.GetDevice().GetSwapchain().GetImageIndex()],
+                VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE)},
+            DepthAttachment(depthView.Get(), VK_ATTACHMENT_LOAD_OP_LOAD,
+                            VK_ATTACHMENT_STORE_OP_STORE),
+            Scissor(renderer.GetDevice().GetSwapchain().GetExtent()));
+
+        cmd.BindGraphicsPipeline(*mEnvMapPipe);
+        cmd.BindGraphicsDescriptorSets(*mEnvMapPipeLayout, 0, {*mEnvMapSet});
+        cmd.PushConstants(*mEnvMapPipeLayout, VK_SHADER_STAGE_VERTEX_BIT,
+                          CubemapData(scene.GetCamera().GetViewMatrix(),
+                                      scene.GetCamera().GetProjectionMatrix()));
+        cmd.Draw(3);
+        cmd.EndRendering();
 
         mCurrentInstance = 1;
     }

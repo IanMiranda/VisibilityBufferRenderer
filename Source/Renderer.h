@@ -49,7 +49,7 @@ namespace im
 
     private:
         bool Begin();
-        void End();
+        void End(Scene &scene);
 
         void BeginScene(Scene &scene);
 

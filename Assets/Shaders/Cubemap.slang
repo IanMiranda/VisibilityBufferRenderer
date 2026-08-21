@@ -16,7 +16,7 @@ struct CubemapData
 VSOutput VSMain(uint vertexIndex : SV_VertexID)
 {
 	VSOutput res = (VSOutput)0;
-	res.position = float4(-1.0 + ((vertexIndex & 0x2) * 4.0), -1.0 + (vertexIndex % 2) * 4.0, 0.01, 1.0);
+	res.position = float4(-1.0 + ((vertexIndex & 0x2) * 4.0), -1.0 + (vertexIndex % 2) * 4.0, 1.0, 1.0);
 	res.viewDir = mul(gCubemapData.viewProjInverse, res.position).xyz;
 	return res;
 }

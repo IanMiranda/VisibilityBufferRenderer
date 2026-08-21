@@ -6,105 +6,110 @@
 
 namespace im
 {
-	class Device;
-	class Shader;
-	class PipelineLayout;
+    class Device;
+    class Shader;
+    class PipelineLayout;
 
-	struct InputAttribute
-	{
-		uint32_t location;
-		VkFormat format;
-		uint32_t offset;
+    struct InputAttribute
+    {
+        uint32_t location;
+        VkFormat format;
+        uint32_t offset;
 
-		InputAttribute(uint32_t location, VkFormat format, uint32_t offset)
-			: location(location), format(format), offset(offset)
-		{}
-	};
+        InputAttribute(uint32_t location, VkFormat format, uint32_t offset)
+            : location(location), format(format), offset(offset)
+        {
+        }
+    };
 
-	struct InputBinding
-	{
-		std::vector<InputAttribute> attributes;
-		VkVertexInputRate inputRate;
-		uint32_t stride;
+    struct InputBinding
+    {
+        std::vector<InputAttribute> attributes;
+        VkVertexInputRate inputRate;
+        uint32_t stride;
 
-		InputBinding(
-			const std::vector<InputAttribute> attributes,
-			VkVertexInputRate inputRate,
-			uint32_t stride)
-			: attributes(attributes)
-			, inputRate(inputRate)
-			, stride(stride)
-		{}
-	};
+        InputBinding(const std::vector<InputAttribute> attributes,
+                     VkVertexInputRate inputRate, uint32_t stride)
+            : attributes(attributes), inputRate(inputRate), stride(stride)
+        {
+        }
+    };
 
-	VkPipelineInputAssemblyStateCreateInfo InputAssembly(
-		VkPrimitiveTopology topology,
-		bool enableRestart = false);
+    VkPipelineInputAssemblyStateCreateInfo InputAssembly(
+        VkPrimitiveTopology topology, bool enableRestart = false);
 
-	VkPipelineRasterizationStateCreateInfo Rasterizer(
-		VkCullModeFlags cull,
-		VkFrontFace frontFace,
-		VkPolygonMode polygonMode);
+    VkPipelineRasterizationStateCreateInfo Rasterizer(
+        VkCullModeFlags cull, VkFrontFace frontFace, VkPolygonMode polygonMode);
 
-	VkPipelineMultisampleStateCreateInfo Multisample(
-		VkSampleCountFlagBits samples
-	);
+    VkPipelineMultisampleStateCreateInfo Multisample(
+        VkSampleCountFlagBits samples);
 
-	using ColorBlendAttachment = std::pair<VkFormat, VkPipelineColorBlendAttachmentState>;
-	ColorBlendAttachment ColorAttachment(VkFormat format);
+    using ColorBlendAttachment =
+        std::pair<VkFormat, VkPipelineColorBlendAttachmentState>;
+    ColorBlendAttachment ColorAttachment(VkFormat format);
 
-	using DepthStencilAttachment = std::pair<VkFormat, VkPipelineDepthStencilStateCreateInfo>;
-	DepthStencilAttachment DepthStencil(VkFormat format, bool depthWrite = true);
+    using DepthStencilAttachment =
+        std::pair<VkFormat, VkPipelineDepthStencilStateCreateInfo>;
+    DepthStencilAttachment DepthStencil(
+        VkFormat format, VkCompareOp compareOp = VK_COMPARE_OP_LESS,
+        bool depthWrite = true);
 
-	class GraphicsPipelineDesc
-	{
-		friend class GraphicsPipeline;
-	public:
-		GraphicsPipelineDesc(
-			const PipelineLayout& layout,
-			const Shader& shader,
-			const std::vector<InputBinding>& bindings,
-			const VkPipelineInputAssemblyStateCreateInfo& inputAssembly,
-			const VkPipelineRasterizationStateCreateInfo& rasterizer,
-			const VkPipelineMultisampleStateCreateInfo& multisample,
-			const std::vector<ColorBlendAttachment>& colorAttachments,
-			std::optional<std::pair<VkFormat, VkPipelineDepthStencilStateCreateInfo>> depthStencil = std::nullopt
-		);
+    class GraphicsPipelineDesc
+    {
+        friend class GraphicsPipeline;
 
-	private:
-		std::vector<VkVertexInputBindingDescription> GetVertexInputBindings(const std::vector<InputBinding>& bindings);
-		std::vector<VkVertexInputAttributeDescription> GetVertexInputAttribs(const std::vector<InputBinding>& bindings);
-	
-	private:
-		const PipelineLayout& mLayout;
-		const Shader& mShader;
+    public:
+        GraphicsPipelineDesc(
+            const PipelineLayout &layout, const Shader &shader,
+            const std::vector<InputBinding> &bindings,
+            const VkPipelineInputAssemblyStateCreateInfo &inputAssembly,
+            const VkPipelineRasterizationStateCreateInfo &rasterizer,
+            const VkPipelineMultisampleStateCreateInfo &multisample,
+            const std::vector<ColorBlendAttachment> &colorAttachments,
+            std::optional<
+                std::pair<VkFormat, VkPipelineDepthStencilStateCreateInfo>>
+                depthStencil = std::nullopt);
 
-		std::vector<VkVertexInputBindingDescription> mInputBindings;
-		std::vector<VkVertexInputAttributeDescription> mInputAttribs;
+    private:
+        std::vector<VkVertexInputBindingDescription> GetVertexInputBindings(
+            const std::vector<InputBinding> &bindings);
+        std::vector<VkVertexInputAttributeDescription> GetVertexInputAttribs(
+            const std::vector<InputBinding> &bindings);
 
-		VkPipelineVertexInputStateCreateInfo mVertexInput{ VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO };
-		VkPipelineInputAssemblyStateCreateInfo mInputAssembly;
-		VkPipelineRasterizationStateCreateInfo mRasterizer;
-		VkPipelineMultisampleStateCreateInfo mMultisample;
-		std::vector<VkFormat> mColorFormats;
-		std::vector<VkPipelineColorBlendAttachmentState> mColorBlendStates;
-		std::optional<DepthStencilAttachment> mDepthStencil;
-	};
+    private:
+        const PipelineLayout &mLayout;
+        const Shader &mShader;
 
-	class GraphicsPipeline
-	{
-	public:
-		GraphicsPipeline(Device& device, const GraphicsPipelineDesc& desc);
-		~GraphicsPipeline();
+        std::vector<VkVertexInputBindingDescription> mInputBindings;
+        std::vector<VkVertexInputAttributeDescription> mInputAttribs;
 
-		GraphicsPipeline(const GraphicsPipeline& other) = delete;
-		GraphicsPipeline& operator=(const GraphicsPipeline& other) = delete;
+        VkPipelineVertexInputStateCreateInfo mVertexInput{
+            VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
+        VkPipelineInputAssemblyStateCreateInfo mInputAssembly;
+        VkPipelineRasterizationStateCreateInfo mRasterizer;
+        VkPipelineMultisampleStateCreateInfo mMultisample;
+        std::vector<VkFormat> mColorFormats;
+        std::vector<VkPipelineColorBlendAttachmentState> mColorBlendStates;
+        std::optional<DepthStencilAttachment> mDepthStencil;
+    };
 
-		VkPipeline Get() const { return mPipeline; }
-	
-	private:
-		Device& mDevice;
+    class GraphicsPipeline
+    {
+    public:
+        GraphicsPipeline(Device &device, const GraphicsPipelineDesc &desc);
+        ~GraphicsPipeline();
 
-		VkPipeline mPipeline;
-	};
-}
+        GraphicsPipeline(const GraphicsPipeline &other) = delete;
+        GraphicsPipeline &operator=(const GraphicsPipeline &other) = delete;
+
+        VkPipeline Get() const
+        {
+            return mPipeline;
+        }
+
+    private:
+        Device &mDevice;
+
+        VkPipeline mPipeline;
+    };
+} // namespace im

@@ -195,7 +195,7 @@ void CSVisibilityShading(
     uint instanceIdx = triangleInstanceIdx.y;
 
     if (instanceIdx == 0) return;
-    
+
     Vertex *vbo = shadingData.vertexBuffers[instanceIdx];
     uint *ibo = shadingData.indexBuffers[instanceIdx];
     uint shaderId = shadingData.instanceToShaderIdMap[instanceIdx];
@@ -210,10 +210,11 @@ void CSVisibilityShading(
 
     let model = shadingData.transforms[instanceIdx];
     let mv = mul(gPushDesc.constants.view, model);
+    let mvp = mul(gPushDesc.constants.viewProj, model);
     
-    let p0 = mul(model, float4(v0.position, 1.0));
-    let p1 = mul(model, float4(v1.position, 1.0));
-    let p2 = mul(model, float4(v2.position, 1.0));
+    let p0 = mul(mvp, float4(v0.position, 1.0));
+    let p1 = mul(mvp, float4(v1.position, 1.0));
+    let p2 = mul(mvp, float4(v2.position, 1.0));
 
     // printf("o0 = (%v3f), o1 = (%v3f), o2 = (%v3f)", v0.position, v1.position, v2.position);
 

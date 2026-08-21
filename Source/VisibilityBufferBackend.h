@@ -4,6 +4,7 @@
 #include "API/CommandBuffer.h"
 #include "API/ComputePipeline.h"
 #include "API/DescriptorSet.h"
+#include "API/DescriptorSetLayout.h"
 #include "API/GraphicsPipeline.h"
 #include "API/Image.h"
 #include "API/ImageView.h"
@@ -111,7 +112,8 @@ namespace im
         void DrawBatch(Scene &scene, CommandBuffer &cmd,
                        const std::vector<VbObject> &objects,
                        uint32_t frameIndex);
-        void End(Renderer &renderer, CommandBuffer &cmd, uint32_t frameIndex);
+        void End(Renderer &renderer, Scene &scene, CommandBuffer &cmd,
+                 ImageView &depthView, uint32_t frameIndex);
 
         void ResizeBuffers(Renderer &renderer, size_t maxFramesInFlight);
 
@@ -184,6 +186,11 @@ namespace im
         TextureCube mIrradianceMap;
         TextureCube mPrefilteredEnvMap;
         Texture2D mBrdfLut;
+
+        std::unique_ptr<DescriptorSetLayout> mEnvMapSetLayout;
+        std::unique_ptr<PipelineLayout> mEnvMapPipeLayout;
+        std::unique_ptr<GraphicsPipeline> mEnvMapPipe;
+        std::unique_ptr<DescriptorSet> mEnvMapSet;
 
         uint32_t mCurrentInstance{1};
 

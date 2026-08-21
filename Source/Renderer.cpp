@@ -42,7 +42,7 @@ namespace im
         BeginScene(scene);
         scene.Render();
 
-        End();
+        End(scene);
     }
 
     bool Renderer::Begin()
@@ -77,11 +77,12 @@ namespace im
         return true;
     }
 
-    void Renderer::End()
+    void Renderer::End(Scene &scene)
     {
         auto &commandBuffer = *mFrames[mFrameIndex].commandBuffer;
 
-        mBackend.End(*this, commandBuffer, mFrameIndex);
+        mBackend.End(*this, scene, commandBuffer, *mDepthImage.view,
+                     mFrameIndex);
 
         commandBuffer.Barrier(
             {},
