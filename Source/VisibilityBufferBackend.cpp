@@ -453,14 +453,6 @@ namespace im
                 VK_ACCESS_2_SHADER_READ_BIT, VK_IMAGE_ASPECT_COLOR_BIT)},
             {});
 
-        cmd.Barrier(
-            {MemoryBarrier(
-                VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-                VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-                VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT)},
-            {}, {});
-
         mInstanceToShaderIdMaps[frameIndex]->Unmap();
         mInstanceToShaderIdMapPtr = nullptr;
 
@@ -517,14 +509,6 @@ namespace im
                                  VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
                                  VK_ACCESS_2_SHADER_READ_BIT)});
 
-        cmd.Barrier(
-            {MemoryBarrier(
-                VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-                VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-                VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT)},
-            {}, {});
-
         VbSortData sortData{};
         sortData.worklistCounter = mWorkListCounters[frameIndex]->GetAddress();
         sortData.workList = mWorkLists[frameIndex]->GetAddress();
@@ -541,14 +525,6 @@ namespace im
 
         cmd.Dispatch(1, 1, 1);
 
-        cmd.Barrier(
-            {MemoryBarrier(
-                VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-                VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-                VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT)},
-            {}, {});
-
         // Finally, the shading pass
 
         cmd.Barrier(
@@ -558,14 +534,28 @@ namespace im
                     [renderer.GetDevice().GetSwapchain().GetImageIndex()],
                 VK_IMAGE_LAYOUT_UNDEFINED,
                 VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_GENERAL,
-                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT |
-                    VK_PIPELINE_STAGE_2_CLEAR_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_READ_BIT |
-                    VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT |
-                    VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
                 VK_IMAGE_ASPECT_COLOR_BIT)},
-            {});
+            {BufferMemoryBarrier(*mOffsetTables[frameIndex],
+                                 VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                                 VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT |
+                                     VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
+                                 VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                                 VK_ACCESS_2_SHADER_STORAGE_READ_BIT |
+                                     VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT),
+             BufferMemoryBarrier(*mTileBuffers[frameIndex],
+                                 VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                                 VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT |
+                                     VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
+                                 VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                                 VK_ACCESS_2_SHADER_STORAGE_READ_BIT |
+                                     VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT),
+             BufferMemoryBarrier(*mIndirectBuffers[frameIndex],
+                                 VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                                 VK_ACCESS_2_SHADER_WRITE_BIT,
+                                 VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT,
+                                 VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT)});
 
         // TODO: maybe just transfer DST?
         VkClearColorValue color = {0.0f, 0.0f, 0.0f, 1.0f};
@@ -580,15 +570,20 @@ namespace im
             cmd.Get(),
             renderer.GetDevice().GetSwapchain().GetImages()
                 [renderer.GetDevice().GetSwapchain().GetImageIndex()],
-            VK_IMAGE_LAYOUT_GENERAL, &color, 1, &subres);
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &color, 1, &subres);
 
         cmd.Barrier(
-            {MemoryBarrier(
-                VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-                VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-                VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT)},
-            {}, {});
+            {},
+            {ImageMemoryBarrier(
+                renderer.GetDevice().GetSwapchain().GetImages()
+                    [renderer.GetDevice().GetSwapchain().GetImageIndex()],
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT |
+                    VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
+                VK_IMAGE_ASPECT_COLOR_BIT)},
+            {});
 
         VbShadingData shadingData{};
         shadingData.instanceToShaderIdMap =
@@ -665,27 +660,43 @@ namespace im
         cmd.PushConstants(mShadePipeLayout, VK_SHADER_STAGE_COMPUTE_BIT,
                           shadingData);
 
-        vkCmdDispatchIndirect(cmd.Get(), mIndirectBuffers[frameIndex]->Get(),
-                              0 * sizeof(VbDispatchIndirectCommand));
+        // TODO: add support for more shaders
+        for (size_t shader = 0; shader < 2; ++shader)
+        {
+            vkCmdDispatchIndirect(cmd.Get(),
+                                  mIndirectBuffers[frameIndex]->Get(),
+                                  shader * sizeof(VbDispatchIndirectCommand));
+            cmd.Barrier(
+                {},
+                {ImageMemoryBarrier(
+                    renderer.GetDevice().GetSwapchain().GetImages()
+                        [renderer.GetDevice().GetSwapchain().GetImageIndex()],
+                    VK_IMAGE_LAYOUT_GENERAL,
+                    VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                    VK_ACCESS_2_SHADER_STORAGE_READ_BIT |
+                        VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+                    VK_IMAGE_LAYOUT_GENERAL,
+                    VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                    VK_ACCESS_2_SHADER_STORAGE_READ_BIT |
+                        VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+                    VK_IMAGE_ASPECT_COLOR_BIT)},
+                {});
+        }
 
         cmd.Barrier(
-            {MemoryBarrier(
-                VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-                VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-                VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT)},
-            {}, {});
-
-        vkCmdDispatchIndirect(cmd.Get(), mIndirectBuffers[frameIndex]->Get(),
-                              1 * sizeof(VbDispatchIndirectCommand));
-
-        cmd.Barrier(
-            {MemoryBarrier(
-                VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-                VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-                VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT)},
-            {}, {});
+            {},
+            {ImageMemoryBarrier(
+                renderer.GetDevice().GetSwapchain().GetImages()
+                    [renderer.GetDevice().GetSwapchain().GetImageIndex()],
+                VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                VK_ACCESS_2_SHADER_STORAGE_READ_BIT |
+                    VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT |
+                    VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+                VK_IMAGE_ASPECT_COLOR_BIT)},
+            {});
 
         mCurrentInstance = 1;
     }

@@ -194,6 +194,8 @@ void CSVisibilityShading(
     uint triangleIdx = triangleInstanceIdx.x;
     uint instanceIdx = triangleInstanceIdx.y;
 
+    if (instanceIdx == 0) return;
+    
     Vertex *vbo = shadingData.vertexBuffers[instanceIdx];
     uint *ibo = shadingData.indexBuffers[instanceIdx];
     uint shaderId = shadingData.instanceToShaderIdMap[instanceIdx];

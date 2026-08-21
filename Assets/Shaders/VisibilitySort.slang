@@ -56,7 +56,7 @@ void CSSortWorkList(uint3 globalId : SV_DispatchThreadID)
     DeviceMemoryBarrierWithGroupSync();
 
     if (globalId.x == 0) {
-        for (int i = 1; i < MAX_SHADERS + 1; ++i) {
+        for (int i = 0; i < MAX_SHADERS; ++i) {
             gSortData.indirectBuffer[i] = uint4(gSortData.shaderIdToTileCount[i], 1, 1, 1);
         }
     }

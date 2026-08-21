@@ -81,31 +81,17 @@ namespace im
     {
         auto &commandBuffer = *mFrames[mFrameIndex].commandBuffer;
 
-        // mBackend.End(commandBuffer, mFrameIndex);
         mBackend.End(*this, commandBuffer, mFrameIndex);
-
-        // commandBuffer.Barrier(
-        //     {},
-        //     {ImageMemoryBarrier(
-        //         mDevice.GetSwapchain()
-        //             .GetImages()[mDevice.GetSwapchain().GetImageIndex()],
-        //         VK_IMAGE_LAYOUT_GENERAL,
-        //         VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-        //         VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT,
-        //         VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        //         VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-        //         VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT |
-        //             VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT,
-        //         VK_IMAGE_ASPECT_COLOR_BIT)},
-        //     {});
 
         commandBuffer.Barrier(
             {},
             {ImageMemoryBarrier(
                 mDevice.GetSwapchain()
                     .GetImages()[mDevice.GetSwapchain().GetImageIndex()],
-                VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT,
+                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT |
+                    VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
                 VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_PIPELINE_STAGE_2_NONE,
                 VK_ACCESS_2_NONE, VK_IMAGE_ASPECT_COLOR_BIT)},
             {});
