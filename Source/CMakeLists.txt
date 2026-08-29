@@ -18,6 +18,9 @@ target_sources(
             VisibilityBufferBackend.h
             VisibilityBufferBackend.cpp
 
+            ForwardBackend.h
+            ForwardBackend.cpp
+
             Camera.h
             Camera.cpp
 

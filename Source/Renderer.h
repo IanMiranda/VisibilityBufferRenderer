@@ -16,6 +16,7 @@
 #include "Camera.h"
 #include "Common.h"
 #include "DescriptorSetAllocator.h"
+#include "ForwardBackend.h"
 #include "Light.h"
 #include "VisibilityBufferBackend.h"
 #include "Window.h"
@@ -87,6 +88,14 @@ namespace im
         uint32_t mNextTimestampOfCompletion{10};
         bool mFramebufferResized{false};
 
-        VisibilityBufferBackend mBackend;
+        ForwardBackend mFwBackend;
+        VisibilityBufferBackend mVbBackend;
+
+        enum class Backend
+        {
+            Forward,
+            Visibility,
+        } mCurrentBackend{Backend::Forward};
+        inline static constexpr char *sBackends[2]{"Forward", "Visibility"};
     };
 } // namespace im

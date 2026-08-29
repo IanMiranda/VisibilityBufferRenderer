@@ -93,14 +93,6 @@ namespace im
         glm::mat4 viewInverse;
     };
 
-    inline constexpr int NumLights = 1024;
-
-    struct VbLightData
-    {
-        PointLight lights[NumLights];
-        uint32_t lightCount{0};
-    };
-
     class VisibilityBufferBackend
     {
     public:

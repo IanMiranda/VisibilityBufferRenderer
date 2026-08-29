@@ -3,13 +3,13 @@
 #include <backends/imgui_impl_glfw.h>
 #include <backends/imgui_impl_vulkan.h>
 #include <imgui.h>
+#include <iterator>
 #include <stb_image.h>
 
 #include "API/CommandBuffer.h"
 #include "API/RenderPass.h"
 #include "API/Shader.h"
 #include "Scene.h"
-#include "Utils.h"
 
 namespace im
 {
@@ -19,7 +19,8 @@ namespace im
                        VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT),
           mTimelineSemaphore(mDevice, SemaphoreType::Timeline),
           mDepthImage(InitDepthBuffer()),
-          mBackend(*this, MaxFramesInFlight, *mDepthImage.image)
+          mFwBackend(*this, MaxFramesInFlight, *mDepthImage.image),
+          mVbBackend(*this, MaxFramesInFlight, *mDepthImage.image)
     {
         InitSyncPrimitives();
         InitCommandBuffers();
@@ -64,12 +65,12 @@ namespace im
             VK_CHECK(res);
         }
 
-        // ImGui_ImplVulkan_NewFrame();
-        // ImGui_ImplGlfw_NewFrame();
-        // ImGui::NewFrame();
+        ImGui_ImplVulkan_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
 
-        // ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(),
-        //                              ImGuiDockNodeFlags_PassthruCentralNode);
+        ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(),
+                                     ImGuiDockNodeFlags_PassthruCentralNode);
 
         auto &commandBuffer = *mFrames[mFrameIndex].commandBuffer;
         commandBuffer.Begin();
@@ -81,8 +82,57 @@ namespace im
     {
         auto &commandBuffer = *mFrames[mFrameIndex].commandBuffer;
 
-        mBackend.End(*this, scene, commandBuffer, *mDepthImage.view,
-                     mFrameIndex);
+        switch (mCurrentBackend)
+        {
+        case Backend::Forward:
+            mFwBackend.End(commandBuffer, mFrameIndex);
+            break;
+
+        case Backend::Visibility:
+            mVbBackend.End(*this, scene, commandBuffer, *mDepthImage.view,
+                           mFrameIndex);
+            break;
+        }
+
+        commandBuffer.BeginRendering(
+            {ColorAttachment(
+                mDevice.GetSwapchain()
+                    .GetViews()[mDevice.GetSwapchain().GetImageIndex()],
+                VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE)},
+            Scissor(mDevice.GetSwapchain().GetExtent()));
+
+        // UI for the backend selection
+        if (ImGui::Begin("Vulkan Renderer"))
+        {
+            if (ImGui::BeginCombo("Select Backend",
+                                  sBackends[static_cast<int>(mCurrentBackend)]))
+            {
+                for (int i = 0; i < std::size(sBackends); ++i)
+                {
+                    bool selectedBackend =
+                        static_cast<int>(mCurrentBackend) == i;
+                    if (ImGui::Selectable(sBackends[i], selectedBackend))
+                    {
+                        mCurrentBackend = static_cast<Backend>(i);
+                    }
+
+                    if (selectedBackend)
+                    {
+                        ImGui::SetItemDefaultFocus();
+                    }
+                }
+
+                ImGui::EndCombo();
+            }
+        }
+
+        ImGui::End();
+
+        ImGui::Render();
+        ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(),
+                                        commandBuffer.Get());
+
+        commandBuffer.EndRendering();
 
         commandBuffer.Barrier(
             {},
@@ -97,40 +147,6 @@ namespace im
                 VK_ACCESS_2_NONE, VK_IMAGE_ASPECT_COLOR_BIT)},
             {});
 
-        commandBuffer.Barrier(
-            {MemoryBarrier(
-                VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-                VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT,
-                VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-                VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT)},
-            {}, {});
-
-        // commandBuffer.BeginRendering(
-        //     {ColorAttachment(
-        //         mDevice.GetSwapchain()
-        //             .GetViews()[mDevice.GetSwapchain().GetImageIndex()],
-        //         VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE)},
-        //     Scissor(mDevice.GetSwapchain().GetExtent()));
-
-        // ImGui::Render();
-        // ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(),
-        //                                 commandBuffer.Get());
-
-        // commandBuffer.EndRendering();
-
-        // commandBuffer.Barrier(
-        //     {},
-        //     {ImageMemoryBarrier(
-        //         mDevice.GetSwapchain()
-        //             .GetImages()[mDevice.GetSwapchain().GetImageIndex()],
-        //         VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        //         VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-        //         VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT |
-        //             VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT,
-        //         VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_PIPELINE_STAGE_2_NONE,
-        //         VK_ACCESS_2_NONE, VK_IMAGE_ASPECT_COLOR_BIT)},
-        //     {});
-
         commandBuffer.End();
 
         mDevice.Submit(
@@ -142,8 +158,8 @@ namespace im
              {*mRenderSemaphores[mDevice.GetSwapchain().GetImageIndex()],
               VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT}});
 
-        // ImGui::UpdatePlatformWindows();
-        // ImGui::RenderPlatformWindowsDefault();
+        ImGui::UpdatePlatformWindows();
+        ImGui::RenderPlatformWindowsDefault();
 
         VkResult res = mDevice.GetSwapchain().Present(
             *mRenderSemaphores[mDevice.GetSwapchain().GetImageIndex()]);
@@ -165,14 +181,33 @@ namespace im
 
     void Renderer::BeginScene(Scene &scene)
     {
-        mBackend.BeginScene(scene, *mFrames[mFrameIndex].commandBuffer,
-                            *mDepthImage.view, mFrameIndex);
+        switch (mCurrentBackend)
+        {
+        case Backend::Forward:
+            mFwBackend.BeginScene(*this, scene,
+                                  *mFrames[mFrameIndex].commandBuffer,
+                                  *mDepthImage.view, mFrameIndex);
+            break;
+
+        case Backend::Visibility:
+            mVbBackend.BeginScene(scene, *mFrames[mFrameIndex].commandBuffer,
+                                  *mDepthImage.view, mFrameIndex);
+            break;
+        }
     }
 
     void Renderer::DrawBatch(Scene &scene, const std::vector<VbObject> &batch)
     {
-        mBackend.DrawBatch(scene, *mFrames[mFrameIndex].commandBuffer, batch,
-                           mFrameIndex);
+        switch (mCurrentBackend)
+        {
+        case Backend::Forward:
+            mFwBackend.DrawBatch(*mFrames[mFrameIndex].commandBuffer, batch);
+            break;
+        case Backend::Visibility:
+            mVbBackend.DrawBatch(scene, *mFrames[mFrameIndex].commandBuffer,
+                                 batch, mFrameIndex);
+            break;
+        }
     }
 
     void Renderer::RecreateSwapchain()
@@ -182,6 +217,8 @@ namespace im
         mDevice.WaitIdle();
         mDevice.GetSwapchain().Recreate();
         InitDepthBuffer();
+
+        mVbBackend.ResizeBuffers(*this, MaxFramesInFlight);
     }
 
     Texture2D Renderer::InitDepthBuffer()

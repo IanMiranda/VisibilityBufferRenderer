@@ -196,7 +196,7 @@ namespace im
           mLightData(InitBuffers(
               renderer, maxFramesInFlight,
               BufferDesc(
-                  sizeof(VbLightData), VK_BUFFER_USAGE_2_UNIFORM_BUFFER_BIT,
+                  sizeof(LightData), VK_BUFFER_USAGE_2_UNIFORM_BUFFER_BIT,
                   VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT))),
 
           mWorkListDescSets(InitDescSets(renderer, maxFramesInFlight))
@@ -402,7 +402,7 @@ namespace im
         ++mMaterialBufferPtr;
 
         auto lightData =
-            reinterpret_cast<VbLightData *>(mLightData[frameIndex]->Map());
+            reinterpret_cast<LightData *>(mLightData[frameIndex]->Map());
         for (size_t i = 0; i < scene.GetPointLights().size(); ++i)
         {
             lightData->lights[i] = scene.GetPointLights()[i];
