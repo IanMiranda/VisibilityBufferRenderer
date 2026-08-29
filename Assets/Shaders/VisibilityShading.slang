@@ -105,32 +105,15 @@ float3 ComputeBarycentrics(float2 pixelCoord, float4 p0, float4 p1, float4 p2, u
     let s1 = toScreenSpace(p1, screenSize);
     let s2 = toScreenSpace(p2, screenSize);
 
-    let invDet = rcp(determinant(float2x2(s2 - s1, s0 - s1)));
+    float e0 = EdgeFunction(pixelCoord, rotate90Ccw(s2 - s1), s1);
+    float e1 = EdgeFunction(pixelCoord, rotate90Ccw(s0 - s2), s2);
+    float e2 = EdgeFunction(pixelCoord, rotate90Ccw(s1 - s0), s0);
 
-    let num0 = (s1.y - s2.y) * (pixelCoord.x - s2.x) + (s2.x - s1.x) * (pixelCoord.y - s2.y);
-    let num1 = (s2.y - s0.y) * (pixelCoord.x - s2.x) + (s0.x - s2.x) * (pixelCoord.y - s2.y);
+    float f0 = e0 / p0.w;
+    float f1 = e1 / p1.w;
+    float f2 = e2 / p2.w;
 
-    let bary0 = num0 * invDet;
-    let bary1 = num1 * invDet;
-    let bary2 = 1 - bary0 - bary1;
-
-    if (print)
-    {
-        printf("pixel: %v2f; v0 = (%v2f), v1 = (%v2f), v2 = (%v2f): (%v3f)", pixelCoord, s0, s1, s2, float3(bary0, bary1, bary2));
-    }
-
-    return float3(bary0, bary1, bary2);
-
-    /*
-    float e0 = EdgeFunction(pixelCoord, rotate90Ccw(p2screen - p1screen), p1screen);
-    float e1 = EdgeFunction(pixelCoord, rotate90Ccw(p0screen - p2screen), p2screen);
-    float e2 = EdgeFunction(pixelCoord, rotate90Ccw(p1screen - p0screen), p0screen);
-
-    float f0 = e0;
-    float f1 = e1;
-    float f2 = e2;
-
-    return float3(f0, f1, f2) * rcp(f0 + f1 + f2);*/
+    return float3(f0, f1, f2) * rcp(f0 + f1 + f2);
 }
 
 vector<float, N> InterpolateQuantity<let N: int>(

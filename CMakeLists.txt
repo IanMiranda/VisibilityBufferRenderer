@@ -131,8 +131,16 @@ target_link_libraries(
             fmt::fmt
 )
 
-add_custom_target(CopyAssets
-    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_LIST_DIR}/Assets ${CMAKE_CURRENT_BINARY_DIR}/Assets
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+
+add_custom_target(BuildShaders
+    COMMAND Python3::Interpreter "Compile.py"
+    WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}/Assets/Shaders
 )
 
-add_dependencies(VulkanApp CopyAssets)
+add_custom_target(AssetPipeline
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_LIST_DIR}/Assets ${CMAKE_CURRENT_BINARY_DIR}/Assets
+    DEPENDS BuildShaders
+)
+
+add_dependencies(VulkanApp AssetPipeline)

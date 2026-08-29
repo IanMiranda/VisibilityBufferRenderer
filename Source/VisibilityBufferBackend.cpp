@@ -699,7 +699,7 @@ namespace im
                           shadingData);
 
         // TODO: add support for more shaders
-        for (size_t shader = 0; shader < 2; ++shader)
+        for (size_t shader = 1; shader < 2; ++shader)
         {
             vkCmdDispatchIndirect(cmd.Get(),
                                   mIndirectBuffers[frameIndex]->Get(),
