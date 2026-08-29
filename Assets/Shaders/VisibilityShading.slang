@@ -203,7 +203,7 @@ void CSVisibilityShading(
 
     // Finally, compute bary coords and interpolate
     // printf("instance: %d, triangle: %d, pix: %d", instanceIdx, triangleIdx, pixelCoord);
-    let realPixelCoord = float2(pixelCoord.x + 0.5, shadingData.screenSize.y - pixelCoord.y + 0.5);
+    let realPixelCoord = float2(pixelCoord.x + 0.5, shadingData.screenSize.y - pixelCoord.y - 0.5);
     let barys = ComputeBarycentrics(realPixelCoord, p0, p1, p2, shadingData.screenSize, true);
 
     let input = InterpolateVertex(barys, v0, v1, v2);

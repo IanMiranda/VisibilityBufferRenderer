@@ -54,7 +54,8 @@ namespace im
                     .AddStage(VK_SHADER_STAGE_VERTEX_BIT, "VSMain")
                     .AddStage(VK_SHADER_STAGE_FRAGMENT_BIT, "FSMain"),
                 {}, InputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST),
-                Rasterizer(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE,
+                Rasterizer(VK_CULL_MODE_BACK_BIT,
+                           VK_FRONT_FACE_COUNTER_CLOCKWISE,
                            VK_POLYGON_MODE_FILL),
                 Multisample(VK_SAMPLE_COUNT_1_BIT),
                 {ColorAttachment(
