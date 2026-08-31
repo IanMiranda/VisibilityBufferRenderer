@@ -92,7 +92,7 @@ namespace im
             }
         }
 
-        mPointLights.resize(8);
+        mPointLights.resize(128);
         // CombineMeshBuffers();
 
         // Info to create the Blas

@@ -3,7 +3,7 @@ import subprocess
 import os
 
 COMPILE_CMD = "slangc -target spirv -profile spirv_1_4 -g -matrix-layout-column-major -fvk-use-entrypoint-name -force-glsl-scalar-layout -lang glsl -o"
-IGNORE_LIST = ["Lighting.slang", "Common.slang", "Math.slang"]
+IGNORE_LIST = ["Lighting.slang", "Common.slang", "Math.slang", "Deferred.slang"]
 
 print(f"Compiling command: {COMPILE_CMD}")
 for path in sorted(Path('.').glob("*.slang")):

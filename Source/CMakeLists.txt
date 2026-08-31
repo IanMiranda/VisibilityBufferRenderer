@@ -15,11 +15,14 @@ target_sources(
             Renderer.h
             Renderer.cpp
 
-            VisibilityBufferBackend.h
-            VisibilityBufferBackend.cpp
-
             ForwardBackend.h
             ForwardBackend.cpp
+
+            DeferredBackend.h
+            DeferredBackend.cpp
+
+            VisibilityBufferBackend.h
+            VisibilityBufferBackend.cpp            
 
             Camera.h
             Camera.cpp

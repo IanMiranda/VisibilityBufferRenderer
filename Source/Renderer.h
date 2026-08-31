@@ -15,6 +15,7 @@
 #include "BindlessSet.h"
 #include "Camera.h"
 #include "Common.h"
+#include "DeferredBackend.h"
 #include "DescriptorSetAllocator.h"
 #include "ForwardBackend.h"
 #include "Light.h"
@@ -89,13 +90,16 @@ namespace im
         bool mFramebufferResized{false};
 
         ForwardBackend mFwBackend;
+        DeferredBackend mDfBackend;
         VisibilityBufferBackend mVbBackend;
 
         enum class Backend
         {
             Forward,
+            Deferred,
             Visibility,
         } mCurrentBackend{Backend::Forward};
-        inline static constexpr char *sBackends[2]{"Forward", "Visibility"};
+        inline static constexpr std::string_view sBackends[3]{
+            "Forward", "Deferred", "Visibility"};
     };
 } // namespace im

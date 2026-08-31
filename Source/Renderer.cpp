@@ -20,6 +20,7 @@ namespace im
           mTimelineSemaphore(mDevice, SemaphoreType::Timeline),
           mDepthImage(InitDepthBuffer()),
           mFwBackend(*this, MaxFramesInFlight, *mDepthImage.image),
+          mDfBackend(*this, MaxFramesInFlight, *mDepthImage.image),
           mVbBackend(*this, MaxFramesInFlight, *mDepthImage.image)
     {
         InitSyncPrimitives();
@@ -88,6 +89,11 @@ namespace im
             mFwBackend.End(commandBuffer, mFrameIndex);
             break;
 
+        case Backend::Deferred:
+            mDfBackend.End(*this, scene, commandBuffer, *mDepthImage.view,
+                           mFrameIndex);
+            break;
+
         case Backend::Visibility:
             mVbBackend.End(*this, scene, commandBuffer, *mDepthImage.view,
                            mFrameIndex);
@@ -104,14 +110,15 @@ namespace im
         // UI for the backend selection
         if (ImGui::Begin("Vulkan Renderer"))
         {
-            if (ImGui::BeginCombo("Select Backend",
-                                  sBackends[static_cast<int>(mCurrentBackend)]))
+            if (ImGui::BeginCombo(
+                    "Select Backend",
+                    sBackends[static_cast<int>(mCurrentBackend)].data()))
             {
                 for (int i = 0; i < std::size(sBackends); ++i)
                 {
                     bool selectedBackend =
                         static_cast<int>(mCurrentBackend) == i;
-                    if (ImGui::Selectable(sBackends[i], selectedBackend))
+                    if (ImGui::Selectable(sBackends[i].data(), selectedBackend))
                     {
                         mCurrentBackend = static_cast<Backend>(i);
                     }
@@ -188,7 +195,11 @@ namespace im
                                   *mFrames[mFrameIndex].commandBuffer,
                                   *mDepthImage.view, mFrameIndex);
             break;
-
+        case Backend::Deferred:
+            mDfBackend.BeginScene(*this, scene,
+                                  *mFrames[mFrameIndex].commandBuffer,
+                                  *mDepthImage.view, mFrameIndex);
+            break;
         case Backend::Visibility:
             mVbBackend.BeginScene(scene, *mFrames[mFrameIndex].commandBuffer,
                                   *mDepthImage.view, mFrameIndex);
@@ -202,6 +213,10 @@ namespace im
         {
         case Backend::Forward:
             mFwBackend.DrawBatch(*mFrames[mFrameIndex].commandBuffer, batch);
+            break;
+        case Backend::Deferred:
+            mDfBackend.DrawBatch(scene, *mFrames[mFrameIndex].commandBuffer,
+                                 batch);
             break;
         case Backend::Visibility:
             mVbBackend.DrawBatch(scene, *mFrames[mFrameIndex].commandBuffer,
@@ -218,6 +233,7 @@ namespace im
         mDevice.GetSwapchain().Recreate();
         InitDepthBuffer();
 
+        mDfBackend.ResizeBuffers(*this, MaxFramesInFlight);
         mVbBackend.ResizeBuffers(*this, MaxFramesInFlight);
     }
 

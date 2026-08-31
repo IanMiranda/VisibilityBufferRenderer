@@ -405,7 +405,10 @@ namespace im
             reinterpret_cast<LightData *>(mLightData[frameIndex]->Map());
         for (size_t i = 0; i < scene.GetPointLights().size(); ++i)
         {
-            lightData->lights[i] = scene.GetPointLights()[i];
+            lightData->lights[i] = {
+                glm::vec3(scene.GetCamera().GetViewMatrix() *
+                          glm::vec4(scene.GetPointLights()[i].position, 1.0f)),
+                0, scene.GetPointLights()[i].i};
         }
         lightData->lightCount = scene.GetPointLights().size();
         mLightData[frameIndex]->Unmap();
