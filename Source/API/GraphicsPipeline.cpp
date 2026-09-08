@@ -3,6 +3,7 @@
 #include "Device.h"
 #include "PipelineLayout.h"
 #include "Shader.h"
+#include "vulkan/vulkan_core.h"
 
 namespace im
 {

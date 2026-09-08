@@ -38,12 +38,13 @@ namespace im
 
         void Render(Scene &scene);
 
-        void DrawBatch(Scene &scene, const std::vector<VbObject> &batch);
+        void DrawMeshes(Scene &scene, const std::vector<RenderCommand> &batch);
 
         Window &GetWindow()
         {
             return mWindow;
         }
+
         constexpr Device &GetDevice()
         {
             return mDevice;
@@ -65,7 +66,7 @@ namespace im
         void InitImGui();
 
     private:
-        static constexpr int MaxFramesInFlight = 2;
+        static constexpr int MaxFramesInFlight{2};
 
         struct FrameContext
         {
@@ -99,6 +100,7 @@ namespace im
             Deferred,
             Visibility,
         } mCurrentBackend{Backend::Forward};
+
         inline static constexpr std::string_view sBackends[3]{
             "Forward", "Deferred", "Visibility"};
     };

@@ -47,11 +47,13 @@ float3 FresnelSchlickRoughness(float3 F0, float3 W, float3 H, float roughness)
 float4 FSLightingPass(
     VSOutput input) : SV_Target0
 {
+    static const float gamma = 2.2;
+
     let positionMetallic = gPass.positionMetallic.Sample(input.uv);
     let albedoRoughness = gPass.albedoRoughness.Sample(input.uv);
     let normalAo = gPass.normalAo.Sample(input.uv);
 
-    let albedo = albedoRoughness.rgb;
+    let albedo = FromSrgb(albedoRoughness.rgb, gamma);
     float metallic = positionMetallic.a;
     float roughness = albedoRoughness.a;
     float ao = normalAo.w;
@@ -106,10 +108,10 @@ float4 FSLightingPass(
     float3 specular = prefilterColor * (F * brdfValue.x + brdfValue.y);
 
     float3 ambient = (diffuseAmbient * Kd + specular) * ao;
-    float3 emissive = gPass.emissive.Sample(input.uv).rgb;
+    float3 emissive = FromSrgb(gPass.emissive.Sample(input.uv).rgb, gamma);
 
     float3 color = ambient + finalColor + emissive;
     color = color / (color + float3(1.0));
-    color = pow(color, float3(1.0 / 2.2));
+    color = ToSrgb(color, gamma);
     return float4(color, 1.0);
 }

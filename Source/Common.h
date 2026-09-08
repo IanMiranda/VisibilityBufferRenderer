@@ -1,11 +1,8 @@
 #pragma once
 
-#include <array>
-#include <iostream>
+#include <ranges>
+
 #include <memory>
-#include <string>
-#include <unordered_map>
-#include <utility>
 #include <vector>
 
 #include <volk.h>
@@ -47,13 +44,6 @@ namespace im
                    uv == other.uv && normal == other.normal &&
                    tangent == other.tangent && bitangent == other.bitangent;
         }
-
-        static std::vector<InputBinding> GetInputBindings();
-    };
-
-    struct ShadowPassData
-    {
-        glm::mat4 mvp;
     };
 
     struct CubemapData
@@ -93,34 +83,42 @@ namespace im
     struct Material
     {
         std::shared_ptr<Texture2D> albedoMap;
-        std::shared_ptr<Texture2D> metallicMap;
-        std::shared_ptr<Texture2D> roughnessMap;
+        std::shared_ptr<Texture2D> metallicRoughnessMap;
         std::shared_ptr<Texture2D> normalMap;
         std::shared_ptr<Texture2D> aoMap;
         std::shared_ptr<Texture2D> emissiveMap;
     };
 
-    struct VbMesh
+    struct Submesh
     {
         std::unique_ptr<Buffer> vertexBuffer;
         std::unique_ptr<Buffer> indexBuffer;
         uint32_t indexCount;
-
-        VbMesh(std::unique_ptr<Buffer> vertexBuffer,
-               std::unique_ptr<Buffer> indexBuffer, uint32_t indexCount);
+        Material material;
     };
 
-    struct VbObject
+    struct Mesh
     {
-        std::shared_ptr<VbMesh> mesh;
-        Material material;
-        glm::mat4 transform;
+        std::vector<Submesh> submeshes;
+    };
 
-        VbObject(std::shared_ptr<VbMesh> mesh, Material material,
-                 const glm::mat4 &transform)
-            : mesh(mesh), material(material), transform(transform)
+    struct Node
+    {
+        std::shared_ptr<Mesh> mesh;
+        glm::mat4 transform;
+        std::vector<std::unique_ptr<Node>> children;
+
+        Node(std::shared_ptr<Mesh> mesh, const glm::mat4 &transform,
+             std::vector<std::unique_ptr<Node>> children)
+            : mesh(mesh), transform(transform), children(std::move(children))
         {
         }
+    };
+
+    struct RenderCommand
+    {
+        std::shared_ptr<Mesh> mesh;
+        glm::mat4 transform;
     };
 } // namespace im
 

@@ -415,8 +415,8 @@ namespace im
     }
 
     void VisibilityBufferBackend::DrawBatch(
-        Scene &scene, CommandBuffer &cmd, const std::vector<VbObject> &objects,
-        uint32_t frameIndex)
+        Scene &scene, CommandBuffer &cmd,
+        const std::vector<RenderCommand> &cmds, uint32_t frameIndex)
     {
         const auto &camera = scene.GetCamera();
         const auto viewProj =
@@ -431,48 +431,51 @@ namespace im
         constants->viewInverse = glm::inverse(constants->view);
         mShadeConstants[frameIndex]->Unmap();
 
-        for (const auto &object : objects)
+        for (const auto &draw : cmds)
         {
-            const auto vboAddress = object.mesh->vertexBuffer->GetAddress();
+            passData.modelViewProj = viewProj * draw.transform;
 
-            passData.modelViewProj = viewProj * object.transform;
-            passData.vertexData = vboAddress;
+            for (const auto &submesh : draw.mesh->submeshes)
+            {
+                const auto vboAddress = submesh.vertexBuffer->GetAddress();
 
-            cmd.PushConstants(mVisPipeLayout, VK_SHADER_STAGE_VERTEX_BIT,
-                              passData);
-            cmd.BindIndexBuffer(*object.mesh->indexBuffer);
-            cmd.DrawIndexed(object.mesh->indexCount, 1, 0, 0, mCurrentInstance);
-            *mInstanceToShaderIdMapPtr = 1; // TODO: support multiple materials?
-            ++mInstanceToShaderIdMapPtr;
+                passData.vertexData = vboAddress;
 
-            *mVertexBuffersPtr = object.mesh->vertexBuffer->GetAddress();
-            ++mVertexBuffersPtr;
+                cmd.PushConstants(mVisPipeLayout, VK_SHADER_STAGE_VERTEX_BIT,
+                                  passData);
+                cmd.BindIndexBuffer(*submesh.indexBuffer);
+                cmd.DrawIndexed(submesh.indexCount, 1, 0, 0, mCurrentInstance);
+                *mInstanceToShaderIdMapPtr =
+                    1; // TODO: support multiple materials?
+                ++mInstanceToShaderIdMapPtr;
 
-            *mIndexBuffersPtr = object.mesh->indexBuffer->GetAddress();
-            ++mIndexBuffersPtr;
+                *mVertexBuffersPtr = submesh.vertexBuffer->GetAddress();
+                ++mVertexBuffersPtr;
 
-            std::memcpy(mTransformBufferPtr, glm::value_ptr(object.transform),
-                        sizeof(object.transform));
-            mTransformBufferPtr += 16;
+                *mIndexBuffersPtr = submesh.indexBuffer->GetAddress();
+                ++mIndexBuffersPtr;
 
-            VbMaterialData material{};
-            material.albedoMapIndex =
-                mBindlessSet.GetOrCreateId(object.material.albedoMap);
-            material.metallicMapIndex =
-                mBindlessSet.GetOrCreateId(object.material.metallicMap);
-            material.roughnessMapIndex =
-                mBindlessSet.GetOrCreateId(object.material.roughnessMap);
-            material.normalMapIndex =
-                mBindlessSet.GetOrCreateId(object.material.normalMap);
-            material.aoMapIndex =
-                mBindlessSet.GetOrCreateId(object.material.aoMap);
-            material.emissiveMapIndex =
-                mBindlessSet.GetOrCreateId(object.material.emissiveMap);
+                std::memcpy(mTransformBufferPtr, glm::value_ptr(draw.transform),
+                            sizeof(draw.transform));
+                mTransformBufferPtr += 16;
 
-            std::memcpy(mMaterialBufferPtr, &material, sizeof(material));
-            ++mMaterialBufferPtr;
+                VbMaterialData material{};
+                material.albedoMapIndex =
+                    mBindlessSet.GetOrCreateId(submesh.material.albedoMap);
+                material.metallicRoughnessMapIndex = mBindlessSet.GetOrCreateId(
+                    submesh.material.metallicRoughnessMap);
+                material.normalMapIndex =
+                    mBindlessSet.GetOrCreateId(submesh.material.normalMap);
+                material.aoMapIndex =
+                    mBindlessSet.GetOrCreateId(submesh.material.aoMap);
+                material.emissiveMapIndex =
+                    mBindlessSet.GetOrCreateId(submesh.material.emissiveMap);
 
-            ++mCurrentInstance;
+                std::memcpy(mMaterialBufferPtr, &material, sizeof(material));
+                ++mMaterialBufferPtr;
+
+                ++mCurrentInstance;
+            }
         }
     }
 

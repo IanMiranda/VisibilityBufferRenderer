@@ -3,10 +3,12 @@
 #include <imgui.h>
 #include <numbers>
 #include <numeric>
+#include <random>
 #include <stb_image.h>
 #include <unordered_set>
 
 #include "API/CommandBuffer.h"
+#include "AssetManager.h"
 #include "Common.h"
 #include "Renderer.h"
 #include "Utils.h"
@@ -14,7 +16,7 @@
 
 namespace im
 {
-    Scene::Scene(Renderer &renderer)
+    Scene::Scene(AssetManager &assets, Renderer &renderer)
         : mRenderer(renderer),
           mCamera(75,
                   static_cast<float>(
@@ -22,77 +24,22 @@ namespace im
                       renderer.GetDevice().GetSwapchain().GetExtent().height,
                   0.1f, 100.0f)
     {
-        mMaterial = Material{
-            CreateAndStageTexture("./Assets/Models/Helmet/Default_albedo.jpg",
-                                  VK_FORMAT_R8G8B8A8_SRGB, false),
-            CreateAndStageTexture(
-                "./Assets/Models/Helmet/Default_metalRoughness.jpg",
-                VK_FORMAT_R8G8B8A8_UNORM, false),
-            CreateAndStageTexture(
-                "./Assets/Models/Helmet/Default_metalRoughness.jpg",
-                VK_FORMAT_R8G8B8A8_UNORM, false),
-            CreateAndStageTexture("./Assets/Models/Helmet/Default_normal.jpg",
-                                  VK_FORMAT_R8G8B8A8_UNORM, false),
-            CreateAndStageTexture("./Assets/Models/Helmet/Default_AO.jpg",
-                                  VK_FORMAT_R8G8B8A8_UNORM, false),
-            CreateAndStageTexture("./Assets/Models/Helmet/Default_emissive.jpg",
-                                  VK_FORMAT_R8G8B8A8_SRGB, false),
-        };
+        mNodes = assets.LoadGltfScene(
+            "Assets/Models/bistro-master/Bistro_Godot.glb");
+        fmt::println("{}", mNodes.size());
 
-        const auto [helmetVertices, helmetIndices] =
-            utils::LoadGltfModel("./Assets/Models/Helmet/DamagedHelmet2.gltf");
+        mPointLights.resize(1024);
 
-        Buffer stagingVbo(renderer.GetDevice(),
-                          BufferDesc::Upload(helmetVertices.size() *
-                                             sizeof(helmetVertices[0])),
-                          helmetVertices.data());
+        std::random_device randDevice;
+        std::mt19937 generator(randDevice());
+        std::uniform_real_distribution<float> distrib(-20.0f, 20.0f);
 
-        Buffer stagingIbo(
-            renderer.GetDevice(),
-            BufferDesc::Upload(helmetIndices.size() * sizeof(helmetIndices[0])),
-            helmetIndices.data());
-        auto vertexBuffer = std::make_unique<Buffer>(
-            renderer.GetDevice(),
-            BufferDesc(helmetVertices.size() * sizeof(helmetVertices[0]),
-                       VK_BUFFER_USAGE_2_TRANSFER_DST_BIT |
-                           VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT |
-                           VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT));
-        auto indexBuffer = std::make_unique<Buffer>(
-            renderer.GetDevice(),
-            BufferDesc(helmetIndices.size() * sizeof(helmetIndices[0]),
-                       VK_BUFFER_USAGE_2_TRANSFER_DST_BIT |
-                           VK_BUFFER_USAGE_2_INDEX_BUFFER_BIT |
-                           VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT |
-                           VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT));
-
-        mRenderer.GetDevice().RunImmediateCommands([&](CommandBuffer &cmd) {
-            cmd.Copy(stagingVbo, *vertexBuffer);
-            cmd.Copy(stagingIbo, *indexBuffer);
-        });
-
-        auto helmetMesh = std::make_shared<VbMesh>(
-            std::move(vertexBuffer), std::move(indexBuffer),
-            static_cast<uint32_t>(
-                helmetIndices.size())); // TODO: reset to indices.size()
-
-        for (float z = -3.0f; z <= 3.0f; z += 1.0f)
+        for (auto &light : mPointLights)
         {
-            for (float x = -3.0f; x <= 3.0f; x += 1.0f)
-            {
-                for (float y = -3.0f; y <= 3.0f; y += 1.0f)
-                {
-                    glm::mat4 model =
-                        glm::translate(glm::mat4(1.0f),
-                                       glm::vec3(x * 5.0f, y * 5.0f, z * 5.0f));
-                    model = glm::rotate(model, glm::radians(90.0f),
-                                        glm::vec3(1.0f, 0.0f, 0.0f));
-                    model = glm::scale(model, glm::vec3(2.0f));
-                    mObjects.emplace_back(helmetMesh, mMaterial, model);
-                }
-            }
+            light.position = glm::vec3(distrib(generator), distrib(generator),
+                                       distrib(generator));
+            light.i = glm::vec4(glm::vec3(3.0f), 1.0f);
         }
-
-        mPointLights.resize(128);
         // CombineMeshBuffers();
 
         // Info to create the Blas
@@ -185,161 +132,50 @@ namespace im
         UpdateLightPositions();
     }
 
-    void Scene::Render()
+    std::vector<RenderCommand> Scene::SerializeRenderCommands()
     {
-        mRenderer.DrawBatch(*this, mObjects);
+        std::vector<RenderCommand> res;
+        for (const auto &node : mNodes)
+        {
+            const auto &nodeCommands = GatherNodeRenderCommands(*node);
+            res.insert(res.end(), nodeCommands.begin(), nodeCommands.end());
+        }
 
-        DrawUI();
-    }
-
-    void Scene::DrawUI()
-    {
+        return res;
     }
 
     void Scene::UpdateLightPositions()
     {
-        float offset = 0.0f;
+        /*float offset = 0.0f;
         float distance = 20.0f * sin(glfwGetTime()) + 21.0f;
         for (auto &light : mPointLights)
         {
             light.position =
                 glm::vec3(distance * sin(glfwGetTime() + offset), 1.0f,
                           -distance * cos(glfwGetTime() + offset));
+            light.i = glm::vec4(10.0f, 10.0f, 10.0f, 1.0f);
             offset += (2 * std::numbers::pi) / mPointLights.size();
-        }
+        }*/
     }
 
-    std::unique_ptr<Texture2D> Scene::CreateAndStageTexture(
-        const std::filesystem::path &path, VkFormat format,
-        bool generateMipmaps)
+    std::vector<RenderCommand> Scene::GatherNodeRenderCommands(Node &node)
     {
-        stbi_set_flip_vertically_on_load(true);
+        std::vector<RenderCommand> res;
 
-        int width, height, channels;
-        stbi_uc *data = stbi_load(path.string().c_str(), &width, &height,
-                                  &channels, STBI_rgb_alpha);
-        if (!data)
+        if (node.mesh)
         {
-            fmt::println(stderr, "Failed to load image from {}!", path);
-            return nullptr;
+            RenderCommand current{};
+            current.mesh = node.mesh;
+            current.transform = node.transform;
+            res.emplace_back(current);
         }
 
-        VkDeviceSize size = width * height * 4; // 4 bytes per pixel (RGBA8)
-        Buffer stagingTex(
-            mRenderer.GetDevice(),
-            BufferDesc(size, VK_BUFFER_USAGE_2_TRANSFER_SRC_BIT,
-                       VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT),
-            data);
-
-        auto resTex = std::make_unique<Image>(
-            mRenderer.GetDevice(), format,
-            VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
-                VK_IMAGE_USAGE_SAMPLED_BIT,
-            width, height, 1, 1, VK_IMAGE_TYPE_2D,
-            generateMipmaps ? Image::GetMaxMipLevels(width, height) : 1);
-        auto resTexView = std::make_unique<ImageView>(
-            mRenderer.GetDevice(), *resTex, VK_IMAGE_VIEW_TYPE_2D,
-            VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, resTex->GetMipLevels());
-
-        mRenderer.GetDevice().RunImmediateCommands([&resTex, &stagingTex,
-                                                    generateMipmaps](
-                                                       CommandBuffer &cmds) {
-            cmds.Barrier(
-                {},
-                {ImageMemoryBarrier(*resTex, VK_IMAGE_LAYOUT_UNDEFINED,
-                                    VK_PIPELINE_STAGE_2_NONE, VK_ACCESS_2_NONE,
-                                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                    VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-                                    VK_ACCESS_2_TRANSFER_WRITE_BIT,
-                                    VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0,
-                                    resTex->GetMipLevels())},
-                {});
-
-            cmds.Copy(stagingTex, *resTex, VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0);
-
-            if (generateMipmaps)
-            {
-                cmds.GenerateMipmaps(
-                    *resTex, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                    VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                    VK_ACCESS_2_SHADER_READ_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
-            }
-            else
-            {
-                cmds.Barrier(
-                    {},
-                    {ImageMemoryBarrier(
-                        *resTex, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                        VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-                        VK_ACCESS_2_TRANSFER_WRITE_BIT,
-                        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                        VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-                        VK_ACCESS_2_SHADER_READ_BIT, VK_IMAGE_ASPECT_COLOR_BIT,
-                        0, 1, 0, resTex->GetMipLevels())},
-                    {});
-            }
-        });
-
-        return std::make_unique<Texture2D>(std::move(resTex),
-                                           std::move(resTexView));
-    }
-
-    void Scene::CombineMeshBuffers()
-    {
-        /*std::unordered_set<std::shared_ptr<Mesh>> meshes;
-        for (const auto& object : mObjects) {
-            meshes.insert(object.mesh);
-        }
-        auto totalVertices = std::accumulate(meshes.begin(), meshes.end(), 0z,
-        [](size_t res, const std::shared_ptr<Mesh>& mesh) { return res +
-        mesh->vertices.size(); }); auto totalIndices =
-        std::accumulate(meshes.begin(), meshes.end(), 0z, [](size_t res, const
-        std::shared_ptr<Mesh>& mesh) { return res
-        + mesh->indices.size(); });
-
-        Buffer stagingVtx(
-            mRenderer.GetDevice(),
-            totalVertices * sizeof(Vertex),
-            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
-        Buffer stagingIdx(
-            mRenderer.GetDevice(),
-            totalIndices * sizeof(uint32_t),
-            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
-
-        auto vertexData = reinterpret_cast<Vertex*>(stagingVtx.Map());
-        auto indexData = reinterpret_cast<uint32_t*>(stagingIdx.Map());
-        uint32_t sceneBufferIndex = 0;
-        for (const auto& mesh : meshes)
+        for (const auto &child : node.children)
         {
-            std::memcpy(vertexData, mesh->vertices.data(), mesh->vertices.size()
-        * sizeof(Vertex)); std::memcpy(indexData, mesh->indices.data(),
-        mesh->indices.size() * sizeof(uint32_t)); vertexData +=
-        mesh->vertices.size(); indexData += mesh->indices.size();
-            mesh->sceneBufferIndex = sceneBufferIndex;
-            sceneBufferIndex += mesh->vertices.size();
+            const auto &childCommands = GatherNodeRenderCommands(*child);
+            res.insert(res.end(), childCommands.begin(), childCommands.end());
         }
-        stagingVtx.Unmap();
-        stagingIdx.Unmap();
 
-        mRenderer.GetDevice().RunImmediateCommands([this, &stagingVtx,
-        &stagingIdx](CommandBuffer& commandBuffer)
-            {
-                mVertexBuffer = std::make_unique<Buffer>(
-                    mRenderer.GetDevice(),
-                    stagingVtx.GetSize(),
-                    VK_BUFFER_USAGE_TRANSFER_DST_BIT |
-        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
-        VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT |
-        VK_BUFFER_USAGE_2_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
-        0); mIndexBuffer = std::make_unique<Buffer>( mRenderer.GetDevice(),
-        stagingIdx.GetSize(), VK_BUFFER_USAGE_TRANSFER_DST_BIT |
-        VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
-        VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT |
-        VK_BUFFER_USAGE_2_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
-        0); commandBuffer.Copy(stagingVtx, *mVertexBuffer);
-        commandBuffer.Copy(stagingIdx, *mIndexBuffer);
-            });*/
+        return res;
     }
 } // namespace im

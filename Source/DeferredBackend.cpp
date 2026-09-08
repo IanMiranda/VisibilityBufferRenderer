@@ -351,36 +351,39 @@ namespace im
     }
 
     void DeferredBackend::DrawBatch(Scene &scene, CommandBuffer &cmd,
-                                    const std::vector<VbObject> &batch)
+                                    const std::vector<RenderCommand> &cmds)
     {
         const auto view = scene.GetCamera().GetViewMatrix();
         const auto proj = scene.GetCamera().GetProjectionMatrix();
 
-        for (const auto &object : batch)
+        for (const auto &draw : cmds)
         {
             DfObjectData objectData{};
-            objectData.modelView = view * object.transform;
+            objectData.modelView = view * draw.transform;
             objectData.modelViewProj = proj * objectData.modelView;
-            objectData.vertexBuffer = object.mesh->vertexBuffer->GetAddress();
-            objectData.albedoMapIndex =
-                mBindlessSet.GetOrCreateId(object.material.albedoMap);
-            objectData.metallicMapIndex =
-                mBindlessSet.GetOrCreateId(object.material.metallicMap);
-            objectData.roughnessMapIndex =
-                mBindlessSet.GetOrCreateId(object.material.roughnessMap);
-            objectData.normalMapIndex =
-                mBindlessSet.GetOrCreateId(object.material.normalMap);
-            objectData.aoMapIndex =
-                mBindlessSet.GetOrCreateId(object.material.aoMap);
-            objectData.emissiveMapIndex =
-                mBindlessSet.GetOrCreateId(object.material.emissiveMap);
 
-            cmd.PushConstants(*mGeomPipeLayout,
-                              VK_SHADER_STAGE_VERTEX_BIT |
-                                  VK_SHADER_STAGE_FRAGMENT_BIT,
-                              objectData);
-            cmd.BindIndexBuffer(*object.mesh->indexBuffer);
-            cmd.DrawIndexed(object.mesh->indexCount);
+            for (const auto &submesh : draw.mesh->submeshes)
+            {
+                objectData.vertexBuffer = submesh.vertexBuffer->GetAddress();
+                objectData.albedoMapIndex =
+                    mBindlessSet.GetOrCreateId(submesh.material.albedoMap);
+                objectData.metallicRoughnessMapIndex =
+                    mBindlessSet.GetOrCreateId(
+                        submesh.material.metallicRoughnessMap);
+                objectData.normalMapIndex =
+                    mBindlessSet.GetOrCreateId(submesh.material.normalMap);
+                objectData.aoMapIndex =
+                    mBindlessSet.GetOrCreateId(submesh.material.aoMap);
+                objectData.emissiveMapIndex =
+                    mBindlessSet.GetOrCreateId(submesh.material.emissiveMap);
+
+                cmd.PushConstants(*mGeomPipeLayout,
+                                  VK_SHADER_STAGE_VERTEX_BIT |
+                                      VK_SHADER_STAGE_FRAGMENT_BIT,
+                                  objectData);
+                cmd.BindIndexBuffer(*submesh.indexBuffer);
+                cmd.DrawIndexed(submesh.indexCount);
+            }
         }
     }
 

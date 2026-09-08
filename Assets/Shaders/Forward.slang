@@ -59,8 +59,7 @@ struct FwObjectData
     float4x4 model;
     Vertex *vertexBuffer;
     uint albedoMapIndex;
-    uint metallicMapIndex;
-    uint roughnessMapIndex;
+    uint metallicRoughnessMapIndex;
     uint normalMapIndex;
     uint aoMapIndex;
     uint emissiveMapIndex;
@@ -122,9 +121,11 @@ float4 FSMain(
     uniform FwObjectData object,
     VSOutput input) : SV_Target0
 {
-    float3 albedo = SampleMaterialTexture(object.albedoMapIndex, input.uv).rgb;
-    float metallic = SampleMaterialTexture(object.metallicMapIndex, input.uv).r;
-    float roughness = SampleMaterialTexture(object.roughnessMapIndex, input.uv).g;
+    static const float gamma = 2.2;
+
+    float3 albedo = FromSrgb(SampleMaterialTexture(object.albedoMapIndex, input.uv).rgb, gamma);
+    float metallic = SampleMaterialTexture(object.metallicRoughnessMapIndex, input.uv).r;
+    float roughness = SampleMaterialTexture(object.metallicRoughnessMapIndex, input.uv).g;
     float ao = SampleMaterialTexture(object.aoMapIndex, input.uv).r;
 
     float3 N = SampleMaterialTexture(object.normalMapIndex, input.uv).rgb;
@@ -178,10 +179,10 @@ float4 FSMain(
     float3 specular = prefilterColor * (F * brdfValue.x + brdfValue.y);
 
     float3 ambient = (diffuseAmbient * Kd + specular) * ao;
-    float3 emissive = SampleMaterialTexture(object.emissiveMapIndex, input.uv).rgb;
+    float3 emissive = FromSrgb(SampleMaterialTexture(object.emissiveMapIndex, input.uv).rgb, gamma);
 
     float3 color = ambient + finalColor + emissive;
     color = color / (color + float3(1.0));
-    color = pow(color, float3(1.0 / 2.2));
+    color = ToSrgb(color, gamma);
     return float4(color, 1.0);
 }

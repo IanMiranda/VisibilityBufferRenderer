@@ -42,7 +42,7 @@ namespace im
             return;
 
         BeginScene(scene);
-        scene.Render();
+        DrawMeshes(scene, scene.SerializeRenderCommands());
 
         End(scene);
     }
@@ -207,20 +207,21 @@ namespace im
         }
     }
 
-    void Renderer::DrawBatch(Scene &scene, const std::vector<VbObject> &batch)
+    void Renderer::DrawMeshes(Scene &scene,
+                              const std::vector<RenderCommand> &cmds)
     {
         switch (mCurrentBackend)
         {
         case Backend::Forward:
-            mFwBackend.DrawBatch(*mFrames[mFrameIndex].commandBuffer, batch);
+            mFwBackend.DrawBatch(*mFrames[mFrameIndex].commandBuffer, cmds);
             break;
         case Backend::Deferred:
             mDfBackend.DrawBatch(scene, *mFrames[mFrameIndex].commandBuffer,
-                                 batch);
+                                 cmds);
             break;
         case Backend::Visibility:
             mVbBackend.DrawBatch(scene, *mFrames[mFrameIndex].commandBuffer,
-                                 batch, mFrameIndex);
+                                 cmds, mFrameIndex);
             break;
         }
     }

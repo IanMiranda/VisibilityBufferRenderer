@@ -9,6 +9,9 @@ target_sources(
             Window.h
             Window.cpp
 
+            AssetManager.h
+            AssetManager.cpp
+
             Scene.h
             Scene.cpp
 

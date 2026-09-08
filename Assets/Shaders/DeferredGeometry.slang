@@ -27,8 +27,7 @@ struct DfObjectData
     float4x4 modelViewProj;
     Vertex *vertexBuffer;
     uint albedoMapIndex;
-    uint metallicMapIndex;
-    uint roughnessMapIndex;
+    uint metallicRoughnessMapIndex;
     uint normalMapIndex;
     uint aoMapIndex;
     uint emissiveMapIndex;
@@ -78,8 +77,8 @@ FSOutput FSGeometryPass(
     VSOutput input)
 {
     float3 albedo = SampleMaterialTexture(object.albedoMapIndex, input.uv).rgb;
-    float metallic = SampleMaterialTexture(object.metallicMapIndex, input.uv).r;
-    float roughness = SampleMaterialTexture(object.roughnessMapIndex, input.uv).g;
+    float metallic = SampleMaterialTexture(object.metallicRoughnessMapIndex, input.uv).r;
+    float roughness = SampleMaterialTexture(object.metallicRoughnessMapIndex, input.uv).g;
     float ao = SampleMaterialTexture(object.aoMapIndex, input.uv).r;
 
     float3 N = SampleMaterialTexture(object.normalMapIndex, input.uv).rgb;

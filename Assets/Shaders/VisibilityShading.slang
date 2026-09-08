@@ -16,8 +16,7 @@ struct Vertex
 struct VbMaterialData
 {
     uint albedoMapIndex;
-    uint metallicMapIndex;
-    uint roughnessMapIndex;
+    uint metallicRoughnessMapIndex;
     uint normalMapIndex;
     uint aoMapIndex;
     uint emissiveMapIndex;
@@ -167,6 +166,8 @@ void CSVisibilityShading(
     uint3 groupId : SV_GroupID,
     uint3 tileOffset : SV_GroupThreadID)
 {
+    static const float gamma = 2.2;
+
     uint tileId = shadingData.tiles[shadingData.offsetTable[shadingData.shaderId].load() + groupId.x].load();
 
     let pixelCoord = uint2((tileId & 0xffff) * TILE_SIZE_X + tileOffset.x,
@@ -215,9 +216,9 @@ void CSVisibilityShading(
     let tbn = transpose(float3x3(t, b, n));
 
     let material = shadingData.materials[instanceIdx];
-    float3 albedo = SampleMaterialTexture(material.albedoMapIndex, input.uv).rgb;
-    float metallic = SampleMaterialTexture(material.metallicMapIndex, input.uv).r;
-    float roughness = SampleMaterialTexture(material.roughnessMapIndex, input.uv).g;
+    float3 albedo = FromSrgb(SampleMaterialTexture(material.albedoMapIndex, input.uv).rgb, gamma);
+    float metallic = SampleMaterialTexture(material.metallicRoughnessMapIndex, input.uv).r;
+    float roughness = SampleMaterialTexture(material.metallicRoughnessMapIndex, input.uv).g;
     float ao = SampleMaterialTexture(material.aoMapIndex, input.uv).r;
 
     float3 N = SampleMaterialTexture(material.normalMapIndex, input.uv).rgb;
@@ -278,11 +279,11 @@ void CSVisibilityShading(
     float3 specular = prefilterColor * (F * brdfValue.x + brdfValue.y);
 
     float3 ambient = (diffuseAmbient * Kd + specular) * ao;
-    float3 emissive = SampleMaterialTexture(material.emissiveMapIndex, input.uv).rgb;
+    float3 emissive = FromSrgb(SampleMaterialTexture(material.emissiveMapIndex, input.uv).rgb, gamma);
 
     float3 color = ambient + finalColor + emissive;
     color = color / (color + float3(1.0));
-    color = pow(color, float3(1.0 / 2.2));
+    color = ToSrgb(color, gamma);
 
     gPushDesc.frameBuf.Store(pixelCoord, float4(color, 1.0));
 }

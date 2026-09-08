@@ -19,8 +19,7 @@ namespace im
         glm::mat4 modelViewProj;
         VkDeviceAddress vertexBuffer;
         uint32_t albedoMapIndex;
-        uint32_t metallicMapIndex;
-        uint32_t roughnessMapIndex;
+        uint32_t metallicRoughnessMapIndex;
         uint32_t normalMapIndex;
         uint32_t aoMapIndex;
         uint32_t emissiveMapIndex;
@@ -43,7 +42,7 @@ namespace im
         void BeginScene(Renderer &renderer, Scene &scene, CommandBuffer &cmd,
                         ImageView &depthView, uint32_t frameIndex);
         void DrawBatch(Scene &scene, CommandBuffer &cmd,
-                       const std::vector<VbObject> &batch);
+                       const std::vector<RenderCommand> &cmds);
         void End(Renderer &renderer, Scene &scene, CommandBuffer &cmd,
                  ImageView &depthView, uint32_t frameIndex);
 

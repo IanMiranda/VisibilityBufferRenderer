@@ -2,38 +2,44 @@
 
 #include <deque>
 
-#include "Common.h"
 #include "API/DescriptorPool.h"
-#include "API/DescriptorSetLayout.h"
 #include "API/DescriptorSet.h"
+#include "API/DescriptorSetLayout.h"
+#include "Common.h"
 
 namespace im
 {
-	class Device;
-	struct Texture2D;
-	
-	class BindlessSet
-	{
-	public:
-		static constexpr uint32_t MaxTextures{ 512 };
+    class Device;
+    struct Texture2D;
 
-	public:
-		BindlessSet(Device& device, uint32_t maxTextures = MaxTextures);
+    class BindlessSet
+    {
+    public:
+        static constexpr uint32_t MaxTextures{100'000};
 
-		DescriptorSetLayout& GetSetLayout() { return mBindlessSetLayout; }
-		DescriptorSet& Get() { return *mBindlessSet; }
+    public:
+        BindlessSet(Device &device, uint32_t maxTextures = MaxTextures);
 
-		uint32_t GetOrCreateId(std::shared_ptr<Texture2D> texture);
+        DescriptorSetLayout &GetSetLayout()
+        {
+            return mBindlessSetLayout;
+        }
+        DescriptorSet &Get()
+        {
+            return *mBindlessSet;
+        }
 
-	private:
-		Device& mDevice;
-		const uint32_t mMaxTextures;
+        uint32_t GetOrCreateId(std::shared_ptr<Texture2D> texture);
 
-		DescriptorPool mBindlessPool;
-		DescriptorSetLayout mBindlessSetLayout;
-		std::unique_ptr<DescriptorSet> mBindlessSet;
+    private:
+        Device &mDevice;
+        const uint32_t mMaxTextures;
 
-		std::deque<uint32_t> mTexFreeList;
-		std::unordered_map<std::shared_ptr<Texture2D>, uint32_t> mTexMap;
-	};
-}
+        DescriptorPool mBindlessPool;
+        DescriptorSetLayout mBindlessSetLayout;
+        std::unique_ptr<DescriptorSet> mBindlessSet;
+
+        std::deque<uint32_t> mTexFreeList;
+        std::unordered_map<std::shared_ptr<Texture2D>, uint32_t> mTexMap;
+    };
+} // namespace im
