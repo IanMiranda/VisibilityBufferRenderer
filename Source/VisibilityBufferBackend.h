@@ -118,9 +118,9 @@ namespace im
         static uint32_t GetTileCount(VkExtent2D extent);
 
     private:
-        static constexpr uint32_t MaxDrawCalls{0x40000};
+        static constexpr uint32_t MaxDrawCalls{0x3000};
         static constexpr uint32_t MaxShaders{64};
-        static constexpr glm::uvec2 TileSize{16, 16};
+        static constexpr glm::uvec2 TileSize{8, 8};
         static constexpr uint32_t GroupSize{256};
 
     private:

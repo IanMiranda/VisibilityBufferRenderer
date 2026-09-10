@@ -30,7 +30,7 @@ struct FwMatrixData
     float4x4 viewInverse;
 };
 
-static const int gNumLights = 1024;
+static const int gNumLights = 2000;
 
 struct FwLightData
 {

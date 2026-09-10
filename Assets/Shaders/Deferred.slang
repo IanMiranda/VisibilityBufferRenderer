@@ -10,7 +10,7 @@ public struct DfMatrixData
     public float4x4 viewInverse;
 };
 
-public static const int gNumLights = 1024;
+public static const int gNumLights = 2000;
 
 public struct DfLightData
 {

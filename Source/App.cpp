@@ -50,8 +50,15 @@ namespace im
 
     void App::Update(float deltaTime)
     {
-        if (glfwGetKey(mWindow.Get(), GLFW_KEY_ESCAPE) == GLFW_PRESS)
+        if (mWindow.IsKeyPressed(GLFW_KEY_ESCAPE))
             glfwSetWindowShouldClose(mWindow.Get(), GLFW_TRUE);
+
+        if (mWindow.IsKeyPressed(GLFW_KEY_F))
+            mRenderer.mCurrentBackend = Renderer::Backend::Forward;
+        if (mWindow.IsKeyPressed(GLFW_KEY_G))
+            mRenderer.mCurrentBackend = Renderer::Backend::Deferred;
+        if (mWindow.IsKeyPressed(GLFW_KEY_V))
+            mRenderer.mCurrentBackend = Renderer::Backend::Visibility;
 
         mScene.Update(deltaTime);
     }

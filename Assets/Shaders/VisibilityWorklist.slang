@@ -1,5 +1,5 @@
-static const uint TILE_SIZE_X = 16;
-static const uint TILE_SIZE_Y = 16;
+static const uint TILE_SIZE_X = 8;
+static const uint TILE_SIZE_Y = 8;
 static const uint PIXELS_PER_TILE = TILE_SIZE_X * TILE_SIZE_Y;
 static const uint MAX_SHADERS = 64;
 

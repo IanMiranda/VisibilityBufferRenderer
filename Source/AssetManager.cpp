@@ -6,10 +6,13 @@
 #include "API/ImageView.h"
 #include "Common.h"
 #include "fmt/base.h"
+#include "fmt/core.h"
 #include "tiny_gltf.h"
 #include "vulkan/vulkan_core.h"
+#include <cstdio>
 #include <glm/gtc/type_ptr.hpp>
 #include <memory>
+#include <unordered_map>
 #include <utility>
 
 namespace im
@@ -41,8 +44,18 @@ namespace im
         std::vector<Vertex> vertices;
         std::vector<uint32_t> indices;
 
-        bool loaded = loader.LoadBinaryFromFile(&model, &error, &warn,
-                                                path.string().c_str());
+        bool loaded = false;
+        if (path.extension().string() == ".glb")
+            loaded = loader.LoadBinaryFromFile(&model, &error, &warn,
+                                               path.string().c_str());
+        else if (path.extension().string() == ".gltf")
+            loaded = loader.LoadASCIIFromFile(&model, &error, &warn,
+                                              path.string().c_str());
+        else
+            fmt::println(
+                stderr,
+                "Failed to determine whether model is ASCII or binary!");
+
         if (!warn.empty())
             fmt::println(stderr, "GLTF warning: {}", warn);
 
@@ -57,14 +70,17 @@ namespace im
 
         // TODO: support loading more than just the default scene?
         std::unordered_map<int, std::shared_ptr<Mesh>> loadedMeshes;
+        std::unordered_map<int, Material> loadedMaterials;
+        std::unordered_map<int, std::shared_ptr<Texture2D>> loadedTextures;
         loadedMeshes[-1] = nullptr;
         std::vector<std::unique_ptr<Node>> res;
         for (const auto nodeIdx : model.scenes[0].nodes)
         {
             const auto &node = model.nodes[nodeIdx];
 
-            res.push_back(
-                TraverseGltfNode(model, node, glm::mat4(1.0f), loadedMeshes));
+            res.push_back(TraverseGltfNode(model, node, glm::mat4(1.0f),
+                                           loadedMeshes, loadedMaterials,
+                                           loadedTextures));
         }
 
         return res;
@@ -73,7 +89,9 @@ namespace im
     std::unique_ptr<Node> AssetManager::TraverseGltfNode(
         const tinygltf::Model &model, const tinygltf::Node &node,
         const glm::mat4 &globalTransform,
-        std::unordered_map<int, std::shared_ptr<Mesh>> &loadedMeshes)
+        std::unordered_map<int, std::shared_ptr<Mesh>> &loadedMeshes,
+        std::unordered_map<int, Material> &loadedMaterials,
+        std::unordered_map<int, std::shared_ptr<Texture2D>> &loadedTextures)
     {
         const auto localTransform = [&node]() {
             if (!node.matrix.empty())
@@ -104,7 +122,8 @@ namespace im
 
         if (!loadedMeshes.contains(node.mesh))
         {
-            loadedMeshes[node.mesh] = LoadMesh(model, model.meshes[node.mesh]);
+            loadedMeshes[node.mesh] = LoadMesh(model, model.meshes[node.mesh],
+                                               loadedMaterials, loadedTextures);
         }
 
         const auto currentTransform = globalTransform * localTransform;
@@ -114,15 +133,18 @@ namespace im
         for (const auto nodeIdx : node.children)
         {
             children.emplace_back(TraverseGltfNode(
-                model, model.nodes[nodeIdx], currentTransform, loadedMeshes));
+                model, model.nodes[nodeIdx], currentTransform, loadedMeshes,
+                loadedMaterials, loadedTextures));
         }
 
         return std::make_unique<Node>(loadedMeshes[node.mesh], currentTransform,
                                       std::move(children));
     }
 
-    std::shared_ptr<Mesh> AssetManager::LoadMesh(const tinygltf::Model &model,
-                                                 const tinygltf::Mesh &mesh)
+    std::shared_ptr<Mesh> AssetManager::LoadMesh(
+        const tinygltf::Model &model, const tinygltf::Mesh &mesh,
+        std::unordered_map<int, Material> &loadedMaterials,
+        std::unordered_map<int, std::shared_ptr<Texture2D>> &loadedTextures)
     {
         std::vector<Submesh> submeshes;
 
@@ -159,9 +181,9 @@ namespace im
 
             // Tangent
             const bool hasTangent = prim.attributes.contains("TANGENT");
-            tinygltf::Accessor *tangentAccessor = nullptr;
-            tinygltf::BufferView *tangentBufferView = nullptr;
-            tinygltf::Buffer *tangentBuffer = nullptr;
+            const tinygltf::Accessor *tangentAccessor = nullptr;
+            const tinygltf::BufferView *tangentBufferView = nullptr;
+            const tinygltf::Buffer *tangentBuffer = nullptr;
 
             if (hasTexCoord)
             {
@@ -174,11 +196,11 @@ namespace im
 
             if (hasTangent)
             {
-                *tangentAccessor =
-                    model.accessors[prim.attributes.at("TANGENT")];
-                *tangentBufferView =
-                    model.bufferViews[tangentAccessor->bufferView];
-                *tangentBuffer = model.buffers[tangentBufferView->buffer];
+                tangentAccessor =
+                    &model.accessors[prim.attributes.at("TANGENT")];
+                tangentBufferView =
+                    &model.bufferViews[tangentAccessor->bufferView];
+                tangentBuffer = &model.buffers[tangentBufferView->buffer];
             }
 
             std::vector<Vertex> vertices;
@@ -325,45 +347,57 @@ namespace im
             res.vertexBuffer = std::move(vbo);
             res.indexBuffer = std::move(ibo);
             res.indexCount = indices.size();
-            res.material = LoadMaterial(model, model.materials[prim.material]);
+
+            if (!loadedMaterials.contains(prim.material))
+                loadedMaterials[prim.material] = LoadMaterial(
+                    model, model.materials[prim.material], loadedTextures);
+            res.material = loadedMaterials[prim.material];
+
             submeshes.emplace_back(std::move(res));
         }
 
         return std::make_shared<Mesh>(std::move(submeshes));
     }
 
-    Material AssetManager::LoadMaterial(const tinygltf::Model &model,
-                                        const tinygltf::Material &material)
+    Material AssetManager::LoadMaterial(
+        const tinygltf::Model &model, const tinygltf::Material &material,
+        std::unordered_map<int, std::shared_ptr<Texture2D>> &loadedTextures)
     {
         // TODO: process factors?
         Material res;
         res.albedoMap = LoadTexture(
             model, material.pbrMetallicRoughness.baseColorTexture.index,
-            mDefaultTextures[static_cast<int>(DefaultTexture::BaseColor)]);
+            mDefaultTextures[static_cast<int>(DefaultTexture::BaseColor)],
+            loadedTextures);
 
         res.metallicRoughnessMap = LoadTexture(
             model, material.pbrMetallicRoughness.metallicRoughnessTexture.index,
             mDefaultTextures[static_cast<int>(
-                DefaultTexture::MetallicRoughness)]);
+                DefaultTexture::MetallicRoughness)],
+            loadedTextures);
 
         res.emissiveMap = LoadTexture(
             model, material.emissiveTexture.index,
-            mDefaultTextures[static_cast<int>(DefaultTexture::Emissive)]);
+            mDefaultTextures[static_cast<int>(DefaultTexture::Emissive)],
+            loadedTextures);
 
         res.normalMap = LoadTexture(model, material.normalTexture.index,
                                     mDefaultTextures[static_cast<int>(
-                                        AssetManager::DefaultTexture::Normal)]);
+                                        AssetManager::DefaultTexture::Normal)],
+                                    loadedTextures);
 
         res.aoMap = LoadTexture(model, material.occlusionTexture.index,
                                 mDefaultTextures[static_cast<int>(
-                                    AssetManager::DefaultTexture::Occlusion)]);
+                                    AssetManager::DefaultTexture::Occlusion)],
+                                loadedTextures);
 
         return res;
     }
 
     std::shared_ptr<Texture2D> AssetManager::LoadTexture(
         const tinygltf::Model &model, int idx,
-        std::shared_ptr<Texture2D> defaultTexture)
+        std::shared_ptr<Texture2D> defaultTexture,
+        std::unordered_map<int, std::shared_ptr<Texture2D>> &loadedTextures)
     {
         // Have to load a new texture
         // TODO: add support for other samplers
@@ -371,6 +405,9 @@ namespace im
         {
             return defaultTexture;
         }
+
+        if (loadedTextures.contains(idx))
+            return loadedTextures[idx];
 
         const auto &texture = model.textures[idx];
 
@@ -416,6 +453,8 @@ namespace im
         auto res = std::make_shared<Texture2D>();
         res->image = std::move(img);
         res->view = std::move(imgView);
+        loadedTextures[idx] = res;
+
         return res;
     }
 
