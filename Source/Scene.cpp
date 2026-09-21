@@ -25,9 +25,8 @@ namespace im
                   0.1f, 100.0f)
     {
         mNodes = assets.LoadGltfScene("Assets/Models/Sponza/glTF/Sponza.gltf");
-        fmt::println("{}", mNodes.size());
 
-        mPointLights.resize(2000);
+        mPointLights.resize(500);
 
         std::random_device randDevice;
         std::mt19937 generator(randDevice());
@@ -102,8 +101,7 @@ namespace im
         {
             RenderCommand current{};
             current.mesh = node.mesh;
-            current.transform =
-                node.transform * glm::scale(glm::mat4(1.0f), glm::vec3(0.1));
+            current.transform = node.transform;
             res.emplace_back(current);
         }
 

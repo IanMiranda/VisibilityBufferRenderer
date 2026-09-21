@@ -98,7 +98,7 @@ float2 toScreenSpace(float4 clipSpace, uint2 screenSize)
 
 // Perspective-correct interpolation for vertices, as discussed in
 // Real-time Rendering Ch. 23
-float3 ComputeBarycentrics(float2 pixelCoord, float4 p0, float4 p1, float4 p2, uint2 screenSize, bool print)
+float3 ComputeBarycentrics(float2 pixelCoord, float4 p0, float4 p1, float4 p2, uint2 screenSize)
 {
     let s0 = toScreenSpace(p0, screenSize);
     let s1 = toScreenSpace(p1, screenSize);
@@ -205,7 +205,7 @@ void CSVisibilityShading(
     // Finally, compute bary coords and interpolate
     // printf("instance: %d, triangle: %d, pix: %d", instanceIdx, triangleIdx, pixelCoord);
     let realPixelCoord = float2(pixelCoord.x + 0.5, shadingData.screenSize.y - pixelCoord.y - 0.5);
-    let barys = ComputeBarycentrics(realPixelCoord, p0, p1, p2, shadingData.screenSize, true);
+    let barys = ComputeBarycentrics(realPixelCoord, p0, p1, p2, shadingData.screenSize);
 
     let input = InterpolateVertex(barys, v0, v1, v2);
     

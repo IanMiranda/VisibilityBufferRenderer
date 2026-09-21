@@ -768,12 +768,14 @@ namespace im
         mVisBuffers = InitVisBuffers(renderer, maxFramesInFlight);
         mWorkLists = InitBuffers(
             renderer, maxFramesInFlight,
-            BufferDesc(MaxShaders * sizeof(VbWorkItem) *
-                           GetTileCount(
-                               renderer.GetDevice().GetSwapchain().GetExtent()),
-                       VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT |
-                           VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT));
-
+            BufferDesc(
+                MaxShaders *
+                    GetTileCount(
+                        renderer.GetDevice().GetSwapchain().GetExtent()) *
+                    sizeof(VbWorkItem),
+                VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+                    VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT |
+                    VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT));
         mTileBuffers = InitBuffers(
             renderer, maxFramesInFlight,
             BufferDesc(

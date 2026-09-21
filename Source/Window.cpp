@@ -1,12 +1,16 @@
 #include "Window.h"
+#include "GLFW/glfw3.h"
 
 namespace im
 {
     Window::Window(std::string_view title, uint32_t width, uint32_t height)
     {
         glfwInit();
+        glfwWindowHint(GLFW_RESIZABLE,
+                       GLFW_FALSE); // TODO: remove after fixing resize
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-        mWindow = glfwCreateWindow(width, height, title.data(), nullptr, nullptr);
+        mWindow =
+            glfwCreateWindow(width, height, title.data(), nullptr, nullptr);
         if (!mWindow)
         {
             fmt::println(stderr, "Failed to create window!");
